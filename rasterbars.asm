@@ -30,10 +30,10 @@
 .const SPR_PTRS     = BMP_SCREEN + $3f8   // last 8 bytes of bitmap-mode screen
 .const SPR_DATA     = $0a00        // sprite shape block $28 (free area; $1000-$1FFF is chargen ROM from VIC's view!)
 .const SPR_BLOCK    = SPR_DATA / 64
+.const FONT_BASE    = $4c00        // chargen ROM copy
+.const SCROLL_ROW_BMP = BITMAP + 0 * 40 * 8    // bitmap row 0: $2000..$213F
+                                                // Above FLD trigger ($43) so it doesn't bounce.
 
-.const SCROLL_ROW   = 4
-.const SCROLL_SCR   = SCREEN + SCROLL_ROW * 40
-.const SCROLL_COL   = COLOUR_RAM + SCROLL_ROW * 40
 
 .const BAR_TOP      = $80       // first line of bar zone (after FLD + music)
 .const BAR_BOT      = $ec       // first line PAST bar zone (in open bot border)
@@ -44,6 +44,12 @@
 .const zp_frame     = $fe
 .const zp_tmp       = $f9
 .const zp_msb       = $fa
+.const zp_intro     = $f8       // intro tick counter (ticks every 2 frames), saturates at $ff
+
+// Intro phase thresholds (in zp_intro ticks; 2 frames per tick @ 50 Hz so 1 tick = 40 ms)
+.const T_BARS      = 40          // bars enable (~1.6 sec)
+.const T_BALLS     = 120         // balls enable (~4.8 sec)
+.const T_SCROLLER  = 200         // scroller enable (~8 sec)
 
 .var logo  = LoadBinary("defeest.kla", BF_KOALA)
 
@@ -61,14 +67,18 @@ start:
         bit $dc0d
         bit $dd0d
 
+        jsr copy_chargen
         jsr clear_screen
         jsr init_sprites
-        jsr init_scroll
+        jsr init_bmp_scroll
 
         jsr my_music_init
 
-        // clear the VIC garbage byte
+        // Intro starts at frame 0.
         lda #0
+        sta zp_intro
+
+        // clear the VIC garbage byte
         sta $3fff
 
         lda #$00
@@ -171,48 +181,30 @@ init_sprites:
 
 
 //==================================================================
-init_scroll:
-        ldx #0
-!fill:  lda scroll_text,x
-        sta SCROLL_SCR,x
-        inx
-        cpx #40
-        bne !fill-
-
-        lda #<(scroll_text + 40)
-        sta zp_text_ptr
-        lda #>(scroll_text + 40)
-        sta zp_text_ptr+1
-
-        lda #7
-        sta zp_smooth
-        lda #0
-        sta zp_frame
-
-        ldx #0
-!col:   lda #$03                // cyan
-        sta SCROLL_COL,x
-        inx
-        cpx #40
-        bne !col-
-        rts
-
-
-//==================================================================
 // irq_close — line $f9. Toggle 24-row mode (border opens),
 // DISABLE sprites 0+1 (their Y-wraparound duplicates fire between
 // here and line $01 of next frame — keep them off).
 //==================================================================
 irq_close:
         pha
+        txa
+        pha
+        tya
+        pha
         lda #$ff
         sta $d019
         lda #$33                // 24-row, DEN, BMM (open border in bitmap mode)
         sta VIC_CTRL1
-        // Disable sprites 0,1,2 — their low Y causes the comparator
-        // to fire again at Y+256 (in the bottom of the rendered area).
-        // Sprites 3..7 don't have visible duplicates so stay on.
+        // Intro gate: balls off until T_BALLS. Sprites 0-2 always off
+        // here (their low Y wraps and would re-fire); 3-7 conditional.
+        lda zp_intro
+        cmp #T_BALLS
+        bcc !ballsoff_c+
         lda #%11111000          // sprites 3,4,5,6,7 enabled
+        bne !setspr_c+
+!ballsoff_c:
+        lda #0
+!setspr_c:
         sta SPR_EN
         lda #<irq_open
         sta $fffe
@@ -220,6 +212,17 @@ irq_close:
         sta $ffff
         lda #$01
         sta VIC_RASTER
+        // Intro gate: scroller off until T_SCROLLER.
+        // jsr update_bmp_scroll is ~2400 cy; in $f9..$01 ~4000-cy window.
+        lda zp_intro
+        cmp #T_SCROLLER
+        bcc !scrolloff+
+        jsr update_bmp_scroll
+!scrolloff:
+        pla
+        tay
+        pla
+        tax
         pla
         rti
 
@@ -241,24 +244,43 @@ irq_open:
         // modify yscroll per-line for FLD effect.
         lda #$3b
         sta VIC_CTRL1
+        // Sprite enable depends on intro phase.
+        lda zp_intro
+        cmp #T_BALLS
+        bcc !ballsoff+
         lda #%11111111          // all 8 sprites on
+        bne !setspr+
+!ballsoff:
+        lda #0                  // balls off during intro
+!setspr:
         sta SPR_EN
 
         inc zp_frame            // global animation tick (was in do_scroll)
+
+        // Intro counter ticks every 2 frames (bit 0 of zp_frame = 0).
+        // Saturates at $ff = ~10 sec total intro window.
+        lda zp_frame
+        and #$01
+        bne !intromax+
+        lda zp_intro
+        cmp #$ff
+        beq !intromax+
+        inc zp_intro
+!intromax:
 
         // Update sprite positions FIRST while raster is at line 1..~8.
         // Top sprites start at Y=14, bottom sprites finished previous
         // frame at raster ~282. This window is safe → no tearing.
         jsr move_sprites
 
-        // Chain to irq_fld at line $33 (top of display zone). irq_fld
-        // does the FLD per-line yscroll trick to multi-row bounce the
-        // logo, then plays SID, then chains to bars.
+        // Chain to irq_fld at line $43. Rows 0 (scroll) and 1 (empty)
+        // display normally before FLD kicks in — so the scroll at the
+        // top is stable while FLD bounces the logo below.
         lda #<irq_fld
         sta $fffe
         lda #>irq_fld
         sta $ffff
-        lda #$33
+        lda #$43
         sta VIC_RASTER
 
         pla
@@ -270,17 +292,11 @@ irq_open:
 
 
 //==================================================================
-// irq_fld — fires at line $33 (top of bitmap display). Suppresses
-// badlines via 7-line yscroll cycles, so bitmap row 0 repeats
-// (bounce_big_count[frame] times). Then plays SID. Chains to irq_bars
-// at BAR_TOP=$80.
-//
-// FLD pattern: badlines naturally fire every 8 lines (when line%8 ==
-// yscroll). To repeat row 0, we force badlines every 7 lines instead
-// — this resets RC before it can reach 7, so VCBASE never advances
-// past 0. Each forced badline yscroll matches the line: write
-// yscroll = line%8 on line BEFORE so it's set before VIC's cycle-14
-// check.
+// irq_fld — fires at line $43 (after rows 0+1 of bitmap have rendered
+// normally). Suppresses badlines so bitmap row 2 repeats N times,
+// pushing the logo (rows 8+) down by N pixels. Row 0 (scroll) and
+// row 1 (empty) sit above the bounce, fixed at lines $32..$41.
+// Then plays SID. Chains to irq_bars at BAR_TOP=$80.
 //==================================================================
 irq_fld:
         pha
@@ -299,20 +315,20 @@ irq_fld:
         // HCL pattern (codebase64 base:fld): wait for next line,
         // then write yscroll = (yscroll+1) & 7. Both yscroll and
         // line%8 increment by 1 each line → diff stays constant →
-        // no badline fires. After K lines, exit. yscroll ends at
-        // (initial + K) & 7.
+        // no badline fires. After K lines, exit.
         //
-        // Important: irq_open set yscroll = 3, so we entered with
-        // yscroll=3 and first badline fired naturally at $33. Now
-        // skip line $34's increment (or it would match $34%8=4) by
-        // writing yscroll=5 explicitly on the first iter.
+        // We enter at line $43 with yscroll=3 (row 2's badline just
+        // fired naturally). At $44 (line%8=4) we set yscroll=5 to
+        // suppress, then increment per line. Row 2 (empty) repeats
+        // N times. $44%8 = $34%8 = 4 so the yscroll math is identical
+        // to the row-0 FLD case.
 
-        // Wait for line $34 (next line after IRQ entry).
-        lda #$33
+        // Wait for line $44 (next line after IRQ entry).
+        lda #$43
 !w1:    cmp VIC_RASTER
         beq !w1-
 
-        // First write: yscroll=5 (= line%8 + 1 at $34, since $34%8=4)
+        // First write: yscroll=5 (= line%8 + 1 at $44, since $44%8=4)
         lda #$3d                // BMM + DEN + RSEL + yscroll=5
         sta VIC_CTRL1
 
@@ -371,6 +387,11 @@ irq_bars:
         lda #$ff
         sta $d019
 
+        // Intro gate: bars off until zp_intro >= T_BARS.
+        lda zp_intro
+        cmp #T_BARS
+        bcc !barsoff+
+
         // Self-modify the lda's lo byte so the palette shifts per
         // frame. bar_palette is page-aligned and 512 bytes long (16
         // reps of the 32-entry palette), so any low-byte offset 0..$ff
@@ -392,8 +413,10 @@ bar_lda:
 
         lda #$00
         sta VIC_BG              // restore bg to black
-        lda #$00
         sta VIC_BORDER          // restore border to black
+!barsoff:
+        // bg/border are already $00 from previous frame; nothing to do
+        // when bars are off besides chaining to irq_close.
 
         lda #<irq_close
         sta $fffe
@@ -449,7 +472,7 @@ sid_freq_hi:
 
 // 32-step pattern at 4 frames/step = ~187 BPM 16ths.
 .const NOTE_REST = $ff
-.const STEP_FRAMES = 4
+.const STEP_FRAMES = 6           // slower pace (was 4) so the mix breathes
 
 // Chord progression (Am - Em - F - G), 8 steps each
 //   chord index 0..3 → arp_notes table offset (chord*4)
@@ -545,9 +568,7 @@ my_music_init:
         sta $d410
         lda #$04
         sta $d411          // 25% duty
-        // Gate ON so V3 sustains continuously
-        lda #$41           // pulse, gate on
-        sta $d412
+        // V3 starts ungated; gate triggered at T_SCROLLER in my_music_play.
 
         // Master volume
         lda #$0f
@@ -560,6 +581,19 @@ my_music_init:
 
 
 my_music_play:
+        // --- Master volume fade-in: vol = min(intro >> 3, $0f). ---
+        // intro ticks at 25 Hz so vol reaches max at intro=$78=120 ticks =
+        // ~4.8 sec, lining up with T_BALLS. Cost: 9 cy / frame.
+        lda zp_intro              // 3
+        lsr                       // 2
+        lsr                       // 2
+        lsr                       // 2  (now intro >> 3)
+        cmp #$10                  // 2
+        bcc !volok+               // 3
+        lda #$0f                  // (skipped once saturated)
+!volok:
+        sta $d418                 // 4
+
         // --- V3 arpeggio: change freq every frame ---
         // chord_per_step uses (mu_step & 31)
         lda mu_step
@@ -581,6 +615,15 @@ my_music_play:
         lda sid_freq_hi,y
         sta $d40f
 
+        // V3 gate: triggered once at T_SCROLLER, idempotently re-written
+        // each frame after (write of $41 with gate already on is a no-op).
+        lda zp_intro
+        cmp #T_SCROLLER
+        bcc !v3_skipgate+
+        lda #$41                  // pulse + gate on
+        sta $d412
+!v3_skipgate:
+
         // --- Step boundary work ---
         inc mu_frame
         lda mu_frame
@@ -594,8 +637,13 @@ my_music_play:
         and #$7f                  // wrap at 128 (lead loops every 128 steps)
         sta mu_step
 
-        // V1 bass — uses (mu_step & 31)
-        and #$1f
+        // V1 bass — uses (mu_step & 31). Gated by T_BARS.
+        and #$1f                  // (preserves mu_step's low 5 bits in A)
+        pha
+        lda zp_intro
+        cmp #T_BARS
+        bcc !v1_skip+
+        pla
         tax
         lda bass_pattern,x
         cmp #NOTE_REST
@@ -613,9 +661,15 @@ my_music_play:
 !v1_rest:
         lda #$40
         sta $d404
+        jmp !v1_done+
+!v1_skip:
+        pla                       // discard preserved value
 !v1_done:
 
-        // V2 lead — uses full mu_step (0..127)
+        // V2 lead — uses full mu_step (0..127). Gated by T_BALLS.
+        lda zp_intro
+        cmp #T_BALLS
+        bcc !v2_skip+
         ldx mu_step
         lda lead_pattern,x
         cmp #NOTE_REST
@@ -633,6 +687,8 @@ my_music_play:
 !v2_rest:
         lda #$40
         sta $d40b
+        jmp !v2_done+
+!v2_skip:
 !v2_done:
 !done:
         rts
@@ -738,64 +794,6 @@ bit_table: .byte 1, 2, 4, 8, 16, 32, 64, 128
 
 
 //==================================================================
-// update_scroll_colors — rainbow effect. Each cell at row 4 gets
-// rainbow[(col + frame>>1) & $0f]. frame>>1 → smoother flow.
-//==================================================================
-update_scroll_colors:
-        lda zp_frame
-        lsr                     // /2 so the rainbow flows at half speed
-        sta zp_tmp
-        ldy #39
-!loop:  tya
-        clc
-        adc zp_tmp
-        and #$0f
-        tax
-        lda rainbow_palette,x
-        sta SCROLL_COL,y
-        dey
-        bpl !loop-
-        rts
-
-rainbow_palette:
-        // 16-entry smooth-ish C64 rainbow
-        .byte $02,$08,$08,$07,$07,$0d,$05,$0d
-        .byte $03,$03,$0e,$0e,$06,$04,$0a,$02
-
-
-//==================================================================
-do_scroll:
-        inc zp_frame
-        dec zp_smooth
-        bpl !done+
-
-        lda #7
-        sta zp_smooth
-
-        ldx #0
-!shift: lda SCROLL_SCR + 1, x
-        sta SCROLL_SCR, x
-        inx
-        cpx #39
-        bne !shift-
-
-        ldy #0
-!next:  lda (zp_text_ptr),y
-        cmp #$ff
-        bne !place+
-        lda #<scroll_text
-        sta zp_text_ptr
-        lda #>scroll_text
-        sta zp_text_ptr+1
-        jmp !next-
-!place: sta SCROLL_SCR + 39
-        inc zp_text_ptr
-        bne !done+
-        inc zp_text_ptr+1
-!done:  rts
-
-
-//==================================================================
 // Data
 //==================================================================
 
@@ -815,11 +813,197 @@ sprite_xphase: .byte 0, 32, 64, 96, 128, 160, 192, 224
 sprite_yphase: .byte 0, 80, 160, 40, 120, 200, 56, 184
 
 // FLD bounce: total number of FLD lines to insert before logo.
-// Each FLD line pushes the bitmap down by 1 line. Sine wave 0..28
-// over 256 frames → smooth ~5-sec bounce cycle.
+// Range capped at 0..6: if FLD spans a full 8-line RC cycle (N>=7),
+// VCBASE updates mid-FLD and yscroll phase-wraps, causing the logo
+// to jump back to baseline. Keeping N<7 makes the bounce smooth.
 .align 256
 bounce_total:
-        .fill 256, round(14 + 14 * sin(toRadians(i * 360 / 256)))
+        .fill 256, round(3 + 3 * sin(toRadians(i * 360 / 256)))
+
+
+//==================================================================
+// Scroll-in-bitmap segment — at $5400 (past Tables + font copy).
+// Renders scroll text into bitmap row 23 ($3CC0..$3DDF). Per frame,
+// shift row 23 pixels left by 1 bit; every 8 frames advance text and
+// reload pending byte from font.
+//==================================================================
+.pc = $5400 "BmpScroll"
+
+// 8 pending bytes (one per pixel row of upcoming char).
+pending_row:
+        .fill 8, 0
+
+
+//==================================================================
+// copy_chargen — bank CHARGEN ROM in, copy uppercase set to RAM at
+// FONT_BASE, restore. SEI is on from start.
+//==================================================================
+copy_chargen:
+        lda #$33
+        sta $01
+        ldx #0
+!loop:  lda $d000,x
+        sta FONT_BASE+$000,x
+        lda $d100,x
+        sta FONT_BASE+$100,x
+        lda $d200,x
+        sta FONT_BASE+$200,x
+        lda $d300,x
+        sta FONT_BASE+$300,x
+        lda $d400,x
+        sta FONT_BASE+$400,x
+        lda $d500,x
+        sta FONT_BASE+$500,x
+        lda $d600,x
+        sta FONT_BASE+$600,x
+        lda $d700,x
+        sta FONT_BASE+$700,x
+        inx
+        bne !loop-
+        lda #$35
+        sta $01
+        rts
+
+
+// Initialize: clear bitmap row 23, load pending from first char's font.
+init_bmp_scroll:
+        lda #<(scroll_text + 40)
+        sta zp_text_ptr
+        lda #>(scroll_text + 40)
+        sta zp_text_ptr+1
+        lda #0
+        sta zp_smooth
+
+        // Clear 320 bytes of bitmap row 23
+        ldx #0
+        lda #0
+!c1:    sta SCROLL_ROW_BMP+$000,x
+        inx
+        cpx #$40
+        bne !c1-
+        ldx #0
+!c2:    sta SCROLL_ROW_BMP+$040,x
+        inx
+        bne !c2-
+
+        // Load pending bytes from first char's font
+        ldy #0
+        lda (zp_text_ptr),y
+        sta zp_tmp
+        asl
+        asl
+        asl
+        sta $02
+        lda zp_tmp
+        lsr
+        lsr
+        lsr
+        lsr
+        lsr
+        clc
+        adc #>FONT_BASE
+        sta $03
+        ldy #7
+!fill:  lda ($02),y
+        sta pending_row,y
+        dey
+        bpl !fill-
+        rts
+
+
+// Per-frame: shift row 23 left by 1 bit. After 8 frames, advance text.
+update_bmp_scroll:
+        ldx #0
+!rowloop:
+        asl pending_row,x
+        rol SCROLL_ROW_BMP + 39*8, x
+        rol SCROLL_ROW_BMP + 38*8, x
+        rol SCROLL_ROW_BMP + 37*8, x
+        rol SCROLL_ROW_BMP + 36*8, x
+        rol SCROLL_ROW_BMP + 35*8, x
+        rol SCROLL_ROW_BMP + 34*8, x
+        rol SCROLL_ROW_BMP + 33*8, x
+        rol SCROLL_ROW_BMP + 32*8, x
+        rol SCROLL_ROW_BMP + 31*8, x
+        rol SCROLL_ROW_BMP + 30*8, x
+        rol SCROLL_ROW_BMP + 29*8, x
+        rol SCROLL_ROW_BMP + 28*8, x
+        rol SCROLL_ROW_BMP + 27*8, x
+        rol SCROLL_ROW_BMP + 26*8, x
+        rol SCROLL_ROW_BMP + 25*8, x
+        rol SCROLL_ROW_BMP + 24*8, x
+        rol SCROLL_ROW_BMP + 23*8, x
+        rol SCROLL_ROW_BMP + 22*8, x
+        rol SCROLL_ROW_BMP + 21*8, x
+        rol SCROLL_ROW_BMP + 20*8, x
+        rol SCROLL_ROW_BMP + 19*8, x
+        rol SCROLL_ROW_BMP + 18*8, x
+        rol SCROLL_ROW_BMP + 17*8, x
+        rol SCROLL_ROW_BMP + 16*8, x
+        rol SCROLL_ROW_BMP + 15*8, x
+        rol SCROLL_ROW_BMP + 14*8, x
+        rol SCROLL_ROW_BMP + 13*8, x
+        rol SCROLL_ROW_BMP + 12*8, x
+        rol SCROLL_ROW_BMP + 11*8, x
+        rol SCROLL_ROW_BMP + 10*8, x
+        rol SCROLL_ROW_BMP +  9*8, x
+        rol SCROLL_ROW_BMP +  8*8, x
+        rol SCROLL_ROW_BMP +  7*8, x
+        rol SCROLL_ROW_BMP +  6*8, x
+        rol SCROLL_ROW_BMP +  5*8, x
+        rol SCROLL_ROW_BMP +  4*8, x
+        rol SCROLL_ROW_BMP +  3*8, x
+        rol SCROLL_ROW_BMP +  2*8, x
+        rol SCROLL_ROW_BMP +  1*8, x
+        rol SCROLL_ROW_BMP +  0*8, x
+        inx
+        cpx #8
+        bne !rowloop-
+
+        // Increment bit count; every 8 frames advance to next char
+        inc zp_smooth
+        lda zp_smooth
+        cmp #8
+        bne !done+
+        lda #0
+        sta zp_smooth
+        inc zp_text_ptr
+        bne !nowrap+
+        inc zp_text_ptr+1
+!nowrap:
+        ldy #0
+        lda (zp_text_ptr),y
+        cmp #$ff
+        bne !load+
+        lda #<(scroll_text + 40)
+        sta zp_text_ptr
+        lda #>(scroll_text + 40)
+        sta zp_text_ptr+1
+!load:
+        // Load pending from font of new char
+        ldy #0
+        lda (zp_text_ptr),y
+        sta zp_tmp
+        asl
+        asl
+        asl
+        sta $02
+        lda zp_tmp
+        lsr
+        lsr
+        lsr
+        lsr
+        lsr
+        clc
+        adc #>FONT_BASE
+        sta $03
+        ldy #7
+!fill:  lda ($02),y
+        sta pending_row,y
+        dey
+        bpl !fill-
+!done:
+        rts
 
 // Sprite Y for top-border sprites — range 14..30
 .align 256

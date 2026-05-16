@@ -7,9 +7,11 @@ KickAssembler 6510, tested on VICE x64sc (PAL).
 
 - **Open top/bottom borders** via the canonical HCL polling trick (`$d011` 24/25-row toggle in IRQs at line `$f9` and `$01`).
 - **Multicolour bitmap "de FEEST" logo** in the centre (160×200 Koala, encoded from a PNG by `tools/png_to_koala.py`).
-- **Rainbow rasterbars** wrapping the logo. The bar IRQ at line `$50` polls `$d012` and writes both `$d021` (background, behind the bitmap's transparent pixels) and `$d020` (border / side stripes) per scanline from a page-aligned 512-byte palette. 21-cy tight loop fits within the bad-line CPU budget.
+- **Stable bitmap scroller** at the top — chargen-ROM font rolled left 1 px/frame via a 40-cell ROL chain on bitmap row 0. Trigger raster moved from line `$33` to `$43` so FLD doesn't disturb rows 0 + 1, keeping the scroller stationary while the logo bounces below.
+- **Rainbow rasterbars** wrapping the logo. The bar IRQ at line `$80` polls `$d012` and writes both `$d021` (background, behind the bitmap's transparent pixels) and `$d020` (border / side stripes) per scanline from a page-aligned 512-byte palette. 21-cy tight loop fits within the bad-line CPU budget.
 - **Eight Y-expanded "koorballen" sprites** bouncing on sine paths — three in the open top border, three in the display, two in the open bottom border. Sprites 0-2 are disabled during VBL to hide their Y+256 wrap-around duplicates.
-- **SID music** (`Nightshift.sid` by Agemixer) loaded via KickAssembler's `LoadSid()` and played from `irq_open` after the time-critical sprite re-enable and motion work.
+- **Custom 3-voice SID music** — bass pulse, lead pulse, sustained arp over a 32-step Am-Em-F-G chord progression with a 128-step lead melody.
+- **Sequenced intro** driven by `zp_intro` saturating frame counter: phase 0 logo only → phase 1 (`T_BARS=60`) bars in → phase 2 (`T_BALLS=120`) balls in → phase 3 (`T_SCROLLER=180`) scroller in. Music master volume ramps from `$00` to `$0f` over the first ~4 sec, and SID voices gate in on the same boundaries (V1 bass at `T_BARS`, V2 lead at `T_BALLS`, V3 arp at `T_SCROLLER`).
 
 50 Hz PAL, locked.
 
