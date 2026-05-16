@@ -13,12 +13,12 @@ parts/screenfill/screenfill.prg
 # BitmapScreenRAM (1000 bytes)
 parts/main/main.prg   400   2      3e8
 # Main code + IRQs
-parts/main/main.prg   810   412    1ea
+parts/main/main.prg   810   412    1ed
 # Music (SID player + patterns)
 parts/main/main.prg   1000  c02    25e
 # Bitmap (logo data, 8000 bytes)
 parts/main/main.prg   2000  1c02   1f40
-# Tables (palette, sines, bounce)
-parts/main/main.prg   4000  3c02   700
+# Tables (palette, sines, bounce, rainbow_pal)
+parts/main/main.prg   4000  3c02   800
 # BmpScroll renderer + scroll text
 parts/main/main.prg   5400  5002   9c4

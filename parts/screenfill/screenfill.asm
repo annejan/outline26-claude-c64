@@ -7,7 +7,11 @@
 // rotating bit-mask. Waits ~3 sec, then triggers Spindle's loader
 // (jsr $c90) and JMPs into the main demo at $0810.
 //
-// Lives at $4000 so it never overlaps main code at $0810..$09f9.
+// Lives at $c000 — well above main demo's $0810..$5dc3 range so the
+// screenfill code SURVIVES the `jsr $c90` that loads main into RAM.
+// Crucial: $4000-$46ff is main's Tables segment; an earlier $4000
+// placement got the screenfill code overwritten mid-load and `jmp
+// $0810` was replaced by palette bytes → CPU ran into garbage.
 //
 // Spindle conventions observed:
 //   - $01 stays at $35 (CPU sees full RAM)
@@ -25,7 +29,7 @@
 .const SCRPOS  = $03           // 0..255 within current screen page
 .const WCNT    = $04           // word counter / mask seed
 
-* = $4000 "ScreenFill"
+* = $c000 "ScreenFill"
 start:
         sei
         lda #$35

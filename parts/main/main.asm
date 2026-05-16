@@ -232,6 +232,7 @@ irq_close:
         cmp #T_SCROLLER
         bcc !scrolloff+
         jsr update_bmp_scroll
+        jsr update_scroll_colors
 !scrolloff:
         pla
         tay
@@ -288,14 +289,14 @@ irq_open:
         // frame at raster ~282. This window is safe → no tearing.
         jsr move_sprites
 
-        // Chain to irq_fld at line $3B. Row 0 (scroller) has already
-        // displayed at $33..$3A by the time FLD kicks in — so the
-        // scroll at the top is stable while FLD bounces the logo below.
+        // Chain to irq_fld at line $3B. Scroller letters get their
+        // rainbow colours from per-cell color RAM (updated each frame
+        // in irq_close), not from per-scanline $D021 writes.
         lda #<irq_fld
         sta $fffe
         lda #>irq_fld
         sta $ffff
-        lda #$3b                // FLD trigger AFTER row 0 finishes
+        lda #$3b
         sta VIC_RASTER
 
         pla
@@ -729,6 +730,18 @@ bar_palette:
         .byte $00, $08, $07, $01, $07, $08, $00, $00
 }
 
+// 256-byte rainbow palette for the scroller bg. Cycles through 16
+// colours, repeated 16 times so a self-modified low-byte offset
+// (zp_frame >> 1) plus y in $33..$3a always lands inside.
+.align 256
+rainbow_pal:
+.for (var rep = 0; rep < 16; rep++) {
+        // Smooth gradient: blue → cyan → green → yellow → orange →
+        // pink → purple → dark blue, then back. 16 entries.
+        .byte $06, $0e, $03, $0d, $05, $07, $08, $0a
+        .byte $02, $0a, $04, $0e, $03, $0d, $05, $07
+}
+
 
 //==================================================================
 // move_sprites — 8 balls roaming.
@@ -985,6 +998,29 @@ init_bmp_scroll:
         sta pending_row,y
         dey
         bpl !fill-
+        rts
+
+
+//==================================================================
+// update_scroll_colors — write 40 bytes of rainbow into colour RAM
+// $D800..$D827 (bitmap row 0). In multicolour bitmap mode the "%11"
+// pixel pair takes its colour from colour RAM, so the letter strokes
+// in the scroll row pick up a per-cell rainbow gradient. zp_frame
+// shifts the gradient horizontally so the rainbow flows under the
+// scrolling text.
+//   ~12 cy/iter × 40 = ~480 cy. Runs in irq_close window only after
+//   T_SCROLLER, alongside update_bmp_scroll.
+//==================================================================
+update_scroll_colors:
+        ldx zp_frame
+        ldy #0
+!loop:  lda rainbow_pal,x
+        and #$0f                // colour RAM uses only low nibble
+        sta COLOUR_RAM+0,y      // bitmap row 0 = colour RAM cells 0..39
+        inx
+        iny
+        cpy #40
+        bne !loop-
         rts
 
 
