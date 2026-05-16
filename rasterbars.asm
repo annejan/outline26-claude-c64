@@ -814,13 +814,19 @@ sprite_xphase: .byte 0, 32, 64, 96, 128, 160, 192, 224
 // 8 Y-phase offsets — also distinct
 sprite_yphase: .byte 0, 80, 160, 40, 120, 200, 56, 184
 
-// FLD bounce: total number of FLD lines to insert before logo.
-// Range capped at 0..6: if FLD spans a full 8-line RC cycle (N>=7),
-// VCBASE updates mid-FLD and yscroll phase-wraps, causing the logo
-// to jump back to baseline. Keeping N<7 makes the bounce smooth.
+// FLD bounce: number of yscroll writes per frame.
+// Effective pixel shift for K writes (FLD at line $43 = row 2):
+//   K=0:    0
+//   K=1..6: 2..7   (the "RC<7" regime)
+//   K=7:    0      (phase-wrap discontinuity)
+//   K=7..N: K-7    (the "RC=7 idle" regime — RC sticks at 7 so VCBASE
+//                   freezes at row 3 and the badline at $44+K cleanly
+//                   slides the next row by K-7 pixels)
+// Staying in K=7..35 gives a smooth 0..28-pixel bounce, no phase wrap.
+// Last FLD line at $44+34=$66, badline at $67, well before BAR_TOP=$80.
 .align 256
 bounce_total:
-        .fill 256, round(3 + 3 * sin(toRadians(i * 360 / 256)))
+        .fill 256, round(21 + 14 * sin(toRadians(i * 360 / 256)))
 
 
 //==================================================================
@@ -837,28 +843,30 @@ pending_row:
 
 
 //==================================================================
-// copy_chargen — bank CHARGEN ROM in, copy uppercase set to RAM at
-// FONT_BASE, restore. SEI is on from start.
+// copy_chargen — bank CHARGEN ROM in, copy MIXED-case set ($D800-$DFFF)
+// to RAM at FONT_BASE, restore. SEI is on from start.
+// Mixed set: a-z at screen codes $01-$1A, A-Z at $41-$5A — matches
+// .encoding "screencode_mixed" so "deFEEST" prints correctly.
 //==================================================================
 copy_chargen:
         lda #$33
         sta $01
         ldx #0
-!loop:  lda $d000,x
+!loop:  lda $d800,x
         sta FONT_BASE+$000,x
-        lda $d100,x
+        lda $d900,x
         sta FONT_BASE+$100,x
-        lda $d200,x
+        lda $da00,x
         sta FONT_BASE+$200,x
-        lda $d300,x
+        lda $db00,x
         sta FONT_BASE+$300,x
-        lda $d400,x
+        lda $dc00,x
         sta FONT_BASE+$400,x
-        lda $d500,x
+        lda $dd00,x
         sta FONT_BASE+$500,x
-        lda $d600,x
+        lda $de00,x
         sta FONT_BASE+$600,x
-        lda $d700,x
+        lda $df00,x
         sta FONT_BASE+$700,x
         inx
         bne !loop-
@@ -977,10 +985,18 @@ init_bmp_scroll:
         rts
 
 
-// Per-frame: shift row 23 left by 1 bit. After 8 frames, advance text.
+// Per-frame: shift each pixel row of scroll bitmap by 1 bit.
+// Even pixel rows (0,2,4,6) shift LEFT  (ROL cell 39→0, pending feeds at right edge).
+// Odd pixel rows (1,3,5,7) shift RIGHT (ROR cell 0→39, pending feeds at left edge).
+// Visual: zig-zag scroll — top of each char moves right-to-left, next row left-to-right.
 update_bmp_scroll:
         ldx #0
 !rowloop:
+        txa
+        and #$01
+        bne !row_odd+
+
+        // Even row: ROL chain shifts content LEFT, new bit enters cell 39 bit 0.
         asl pending_row,x
         rol SCROLL_ROW_BMP + 39*8, x
         rol SCROLL_ROW_BMP + 38*8, x
@@ -1022,9 +1038,58 @@ update_bmp_scroll:
         rol SCROLL_ROW_BMP +  2*8, x
         rol SCROLL_ROW_BMP +  1*8, x
         rol SCROLL_ROW_BMP +  0*8, x
+        jmp !row_next+
+
+!row_odd:
+        // Odd row: ROR chain shifts content RIGHT, new bit enters cell 0 bit 7.
+        lsr pending_row,x
+        ror SCROLL_ROW_BMP +  0*8, x
+        ror SCROLL_ROW_BMP +  1*8, x
+        ror SCROLL_ROW_BMP +  2*8, x
+        ror SCROLL_ROW_BMP +  3*8, x
+        ror SCROLL_ROW_BMP +  4*8, x
+        ror SCROLL_ROW_BMP +  5*8, x
+        ror SCROLL_ROW_BMP +  6*8, x
+        ror SCROLL_ROW_BMP +  7*8, x
+        ror SCROLL_ROW_BMP +  8*8, x
+        ror SCROLL_ROW_BMP +  9*8, x
+        ror SCROLL_ROW_BMP + 10*8, x
+        ror SCROLL_ROW_BMP + 11*8, x
+        ror SCROLL_ROW_BMP + 12*8, x
+        ror SCROLL_ROW_BMP + 13*8, x
+        ror SCROLL_ROW_BMP + 14*8, x
+        ror SCROLL_ROW_BMP + 15*8, x
+        ror SCROLL_ROW_BMP + 16*8, x
+        ror SCROLL_ROW_BMP + 17*8, x
+        ror SCROLL_ROW_BMP + 18*8, x
+        ror SCROLL_ROW_BMP + 19*8, x
+        ror SCROLL_ROW_BMP + 20*8, x
+        ror SCROLL_ROW_BMP + 21*8, x
+        ror SCROLL_ROW_BMP + 22*8, x
+        ror SCROLL_ROW_BMP + 23*8, x
+        ror SCROLL_ROW_BMP + 24*8, x
+        ror SCROLL_ROW_BMP + 25*8, x
+        ror SCROLL_ROW_BMP + 26*8, x
+        ror SCROLL_ROW_BMP + 27*8, x
+        ror SCROLL_ROW_BMP + 28*8, x
+        ror SCROLL_ROW_BMP + 29*8, x
+        ror SCROLL_ROW_BMP + 30*8, x
+        ror SCROLL_ROW_BMP + 31*8, x
+        ror SCROLL_ROW_BMP + 32*8, x
+        ror SCROLL_ROW_BMP + 33*8, x
+        ror SCROLL_ROW_BMP + 34*8, x
+        ror SCROLL_ROW_BMP + 35*8, x
+        ror SCROLL_ROW_BMP + 36*8, x
+        ror SCROLL_ROW_BMP + 37*8, x
+        ror SCROLL_ROW_BMP + 38*8, x
+        ror SCROLL_ROW_BMP + 39*8, x
+
+!row_next:
         inx
         cpx #8
-        bne !rowloop-
+        beq !rowloop_done+
+        jmp !rowloop-
+!rowloop_done:
 
         // Increment bit count; every 8 frames advance to next char
         inc zp_smooth
@@ -1088,14 +1153,20 @@ sine_bot:
 
 
 // pre-pad with 40 spaces so text scrolls IN from the right
-.encoding "screencode_upper"
+.encoding "screencode_mixed"
 scroll_text:
         .text "                                        "
-        .text "HELLO FROM OUTLINE 64! "
-        .text "THIS IS A MINIMAL OPEN-BORDER DEMO WITH FOUR SPRITES AND A SMOOTH-SCROLLING MESSAGE. "
-        .text "THE TOP/BOTTOM BORDERS ARE OPENED USING THE CANONICAL HCL POLLING TRICK FROM CODEBASE64. "
-        .text "TWO WHITE/CYAN BALLS LIVE IN THE OPENED TOP BORDER, AND TWO YELLOW/GREEN BALLS DOWN BELOW IN THE OPENED BOTTOM BORDER. "
-        .text "                                        "
+        .text "deFEEST presents a little C64 intro for the OUTLINE 2026 demoparty... "
+        .text "Co-written by Anne Jan Brouwer and Claude Opus 4.7 over many cycle-exact hours. "
+        .text "On display: open top and bottom borders via the canonical HCL trick, "
+        .text "a multicolour bitmap logo that wipe-reveals from the left and then bounces on a flexible-line-distance effect, "
+        .text "cylinder-shaded rasterbars with border-wrap stripes in a 21-cycle bad-line loop, "
+        .text "eight expanded koorballen sprites swinging on sine paths, "
+        .text "a stable bitmap-mode scroller on row zero riding above the bounce, "
+        .text "and a hand-written three-voice SID jam that fades in voice by voice during the intro. "
+        .text "Greetings to everyone who still codes the breadbin and thanks to the OUTLINE crew. "
+        .text "Assembled with KickAssembler, run on VICE x64sc PAL, committed to git while screenshots were piped through MCP. "
+        .text "Looping now...                          "
         .byte $ff
 
 
