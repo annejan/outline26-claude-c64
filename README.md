@@ -22,29 +22,44 @@ You need:
 
 - **KickAssembler** (jar in `kickass/KickAss.jar`, [download from theweb.dk](http://theweb.dk/KickAssembler/))
 - **VICE** with `x64sc` (`zypper in vice` on openSUSE)
+- **xa65** for Spindle (`zypper in xa` on openSUSE)
+- **Spindle v2.3** — first run `./build.sh` will fail with hints; build the `spin` tool via:
+  ```
+  curl -L https://hd0.linusakesson.net/files/spindle-2.3.tgz | tar xz
+  cd spindle-2.3/spindle && make
+  ```
 - Java for the assembler
 
-Assemble and run:
+Build the multi-part disk and run:
 
 ```
-java -jar kickass/KickAss.jar rasterbars.asm
-x64sc rasterbars.prg
+./build.sh        # produces outline-64.d64
+./run-disk.sh     # autostarts the disk in x64sc
 ```
 
-## Memory layout (VIC bank 0)
+## Multi-part layout (Spindle)
+
+| Part | Path | Contents |
+| ---- | ---- | -------- |
+| 1    | `parts/screenfill/screenfill.asm` | Loading screen at `$4000` — "DEFEEST" pattern, holds ~3 sec, then `jsr $c90` + `jmp $0810` |
+| 2    | `parts/main/main.asm`             | The bouncebars demo — adapted as Spindle part 2 |
+
+Spindle's resident loader sits at `$0c00-$0dff` (+ scratch `$0e00-$0eff` and zero-page `$f4-$f7` during loads). The main demo keeps clear of that range — bitmap screen RAM moved to `$0400`.
+
+## Main-demo memory layout (VIC bank 0)
 
 | Range          | Contents                                       |
 | -------------- | ---------------------------------------------- |
-| `$0801-$080c`  | BASIC SYS stub (`BasicUpstart2`)               |
-| `$0810-$09f9`  | Main code + IRQs                               |
+| `$0400-$07e7`  | Bitmap-mode screen RAM (colour info)           |
+| `$07f8-$07ff`  | Sprite pointers                                |
+| `$0810-$09f9`  | Main code + IRQs (entry point: `$0810`)        |
 | `$0b00-$0b3f`  | Sprite shape data (block `$2c`)                |
-| `$0c00-$0fe7`  | Bitmap-mode screen RAM (colour info)           |
-| `$0ff8-$0fff`  | Sprite pointers                                |
+| `$0c00-$0dff`  | **reserved for Spindle's resident loader**     |
 | `$1000-$125d`  | Hand-written 3-voice SID player + patterns     |
 | `$2000-$3f3f`  | Logo bitmap (multicolour, 8000 bytes)          |
 | `$4000-$46ff`  | Page-aligned tables (palette, sines, bounce)   |
 | `$4c00-$53ff`  | Chargen-ROM copy (mixed-case font for scroll)  |
-| `$5400-$5dc1`  | Bitmap scroll renderer + scroll text           |
+| `$5400-$5dc3`  | Bitmap scroll renderer + scroll text + sprite shape |
 
 > **Trap to remember:** VIC sees the chargen ROM at `$1000-$1fff` in bank 0, *not* RAM. Sprite shape data placed there is invisible to VIC — VIC reads chargen glyphs as sprite data. Keep sprite blocks outside that window.
 
