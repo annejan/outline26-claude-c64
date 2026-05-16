@@ -53,6 +53,7 @@
 .const zp_tmp       = $f9
 .const zp_msb       = $fa
 .const zp_intro     = $f8       // intro tick counter (ticks every 2 frames), saturates at $ff
+.const zp_scroll_mode = $f7     // 0=left scroll, 1=right scroll, 2=zig-zag (alternating rows)
 
 // Intro phase thresholds (in zp_intro ticks; 2 frames per tick @ 50 Hz so 1 tick = 40 ms)
 .const T_BARS      = 40          // bars enable (~1.6 sec)
@@ -824,8 +825,6 @@ bounce_total:
         .fill 256, round(14 + 14 * sin(toRadians(i * 1080 / 256)))
 
 
-
-
 //==================================================================
 // Scroll-in-bitmap segment — at $5400 (past Tables + font copy).
 // Renders scroll text into bitmap row 23 ($3CC0..$3DDF). Per frame,
@@ -944,6 +943,7 @@ init_bmp_scroll:
         sta zp_text_ptr+1
         lda #0
         sta zp_smooth
+        sta zp_scroll_mode      // start in mode 0 (left scroll)
 
         // Clear 320 bytes of bitmap row 23
         ldx #0
@@ -983,17 +983,26 @@ init_bmp_scroll:
 
 
 // Per-frame: shift each pixel row of scroll bitmap by 1 bit.
-// Even pixel rows (0,2,4,6) shift LEFT  (ROL cell 39→0, pending feeds at right edge).
-// Odd pixel rows (1,3,5,7) shift RIGHT (ROR cell 0→39, pending feeds at left edge).
-// Visual: zig-zag scroll — top of each char moves right-to-left, next row left-to-right.
+// zp_scroll_mode picks the per-row direction:
+//   0 = LEFT  (all rows ROL, pending feeds at right edge → text scrolls right-to-left)
+//   1 = RIGHT (all rows ROR, pending feeds at left edge → text scrolls left-to-right)
+//   2 = ZIG-ZAG (even rows ROL, odd rows ROR — visual split)
+// Mode advances at $fe sentinel bytes in scroll_text and wraps after mode 2.
 update_bmp_scroll:
         ldx #0
 !rowloop:
+        // Dispatch on scroll mode → ROL/ROR per row.
+        lda zp_scroll_mode
+        beq !row_left+          // mode 0 → all left
+        cmp #1
+        bne !row_zigzag+        // mode 2 → fall through to parity check
+        jmp !row_odd+           // mode 1 → all right (jmp: out of branch range)
+!row_zigzag:
         txa
         and #$01
-        bne !row_odd+
-
-        // Even row: ROL chain shifts content LEFT, new bit enters cell 39 bit 0.
+        bne !row_odd+           // odd row in zig-zag → ROR
+!row_left:
+        // ROL chain shifts content LEFT, new bit enters cell 39 bit 0.
         asl pending_row,x
         rol SCROLL_ROW_BMP + 39*8, x
         rol SCROLL_ROW_BMP + 38*8, x
@@ -1099,14 +1108,34 @@ update_bmp_scroll:
         bne !nowrap+
         inc zp_text_ptr+1
 !nowrap:
+!recheck:
         ldy #0
         lda (zp_text_ptr),y
         cmp #$ff
-        bne !load+
+        bne !chk_fe+
+        // End-of-text: rewind to start, reset to mode 0.
         lda #<(scroll_text + 40)
         sta zp_text_ptr
         lda #>(scroll_text + 40)
         sta zp_text_ptr+1
+        lda #0
+        sta zp_scroll_mode
+        jmp !recheck-
+!chk_fe:
+        cmp #$fe
+        bne !load+
+        // Mode-change sentinel: advance past it and bump mode (mod 3).
+        inc zp_text_ptr
+        bne !nm+
+        inc zp_text_ptr+1
+!nm:    lda zp_scroll_mode
+        clc
+        adc #1
+        cmp #3
+        bcc !nm2+
+        lda #0
+!nm2:   sta zp_scroll_mode
+        jmp !recheck-
 !load:
         // Load pending from font of new char
         ldy #0
@@ -1152,16 +1181,23 @@ sine_bot:
         .fill 256, 226 + round(7 * (1 - cos(toRadians(i * 360 / 256))))
 
 
-// pre-pad with 40 spaces so text scrolls IN from the right
+// pre-pad with 40 spaces so text scrolls IN from the right.
+// $fe = mode-switch sentinel (left → right → zig-zag → loops).
+// $ff = end-of-text (rewind + mode 0).
 .encoding "screencode_mixed"
 scroll_text:
         .text "                                        "
+        // ---- block 1: mode 0 (left scroll, normal) ----
         .text "deFEEST presents a little C64 intro for the OUTLINE 2026 demoparty... "
         .text "Co-written by Anne Jan Brouwer and Claude Opus 4.7 over many cycle-exact hours. "
+        .byte $fe
+        // ---- block 2: mode 1 (right scroll, inverse) ----
         .text "On display: open top and bottom borders via the canonical HCL trick, "
         .text "a multicolour bitmap logo that wipe-reveals from the left and then bounces on a flexible-line-distance effect, "
         .text "cylinder-shaded rasterbars with border-wrap stripes in a 21-cycle bad-line loop, "
-        .text "eight expanded koorballen sprites swinging on sine paths, "
+        .text "eight expanded koorballen sprites swinging on sine paths. "
+        .byte $fe
+        // ---- block 3: mode 2 (zig-zag split) ----
         .text "a stable bitmap-mode scroller on row zero riding above the bounce, "
         .text "and a hand-written three-voice SID jam that fades in voice by voice during the intro. "
         .text "Greetings to everyone who still codes the breadbin and thanks to the OUTLINE crew. "
