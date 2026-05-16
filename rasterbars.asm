@@ -134,8 +134,7 @@ bar_done:
 // gradient bar at a sine-driven vertical position.
 //------------------------------------------------------------------
 //------------------------------------------------------------------
-// build_bar — two anti-phase bars. Cool always painted last so it
-// overlays at crossovers (simple, no flicker).
+// build_bar — one sine-moving rasterbar with smooth warm gradient.
 //------------------------------------------------------------------
 build_bar:
         // clear line_colors
@@ -145,44 +144,24 @@ build_bar:
         dex
         bpl !clr-
 
-        // bar 1 — warm palette, sine_bar[frame]
+        // paint bar at sine_bar[frame]
         ldy zp_frame
         lda sine_bar,y
         tax
         ldy #0
-!w:     lda bar_palette_warm,y
+!paint: lda bar_palette,y
         sta line_colors,x
         inx
         iny
         cpy #BAR_HEIGHT
-        bne !w-
-
-        // bar 2 — cool palette, sine_bar[frame + 128]
-        lda zp_frame
-        clc
-        adc #128
-        tay
-        lda sine_bar,y
-        tax
-        ldy #0
-!c:     lda bar_palette_cool,y
-        sta line_colors,x
-        inx
-        iny
-        cpy #BAR_HEIGHT
-        bne !c-
+        bne !paint-
         rts
 
 
-bar_palette_warm:
+bar_palette:
         // brown → red → orange → light red → light grey → yellow → white
         .byte $09,$02,$08,$0a,$0f,$07,$01
         .byte $01,$07,$0f,$0a,$08,$02,$09
-
-bar_palette_cool:
-        // dark blue → light blue → cyan → light green → white
-        .byte $06,$0e,$0e,$03,$03,$0d,$01
-        .byte $01,$0d,$03,$03,$0e,$0e,$06
 
 .align 256
 sine_bar:
