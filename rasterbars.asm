@@ -23,10 +23,12 @@
 .const VIC_BG       = $d021
 .const SPR_COL      = $d027
 
-.const SCREEN       = $0400
+.const SCREEN       = $0400        // text-mode screen (unused in bitmap mode)
+.const BMP_SCREEN   = $0c00        // bitmap-mode colour-info screen RAM
+.const BITMAP       = $2000        // 8000-byte bitmap data (VIC sees in bank 0)
 .const COLOUR_RAM   = $d800
-.const SPR_PTRS     = $07f8
-.const SPR_DATA     = $2000
+.const SPR_PTRS     = BMP_SCREEN + $3f8   // last 8 bytes of bitmap-mode screen
+.const SPR_DATA     = $0a00        // sprite shape block $28 (free area; $1000-$1FFF is chargen ROM from VIC's view!)
 .const SPR_BLOCK    = SPR_DATA / 64
 
 .const SCROLL_ROW   = 4
@@ -44,6 +46,7 @@
 .const zp_msb       = $fa
 
 .var music = LoadSid("kickass/Examples/09.PSID Import/Nightshift.sid")
+.var logo  = LoadBinary("defeest.kla", BF_KOALA)
 
 BasicUpstart2(start)
 
@@ -75,17 +78,18 @@ start:
 
         lda #$00
         sta VIC_BORDER          // black border
-        lda #$00
-        sta VIC_BG              // black bg
+        lda #logo.getBackgroundColor()
+        sta VIC_BG              // bitmap-mode bg (also used by bars/IRQ)
 
-        lda VIC_CTRL1
-        and #$7f
-        ora #$1b
+        // Multicolour bitmap mode: D011=$3B (BMM+DEN+RSEL+yscroll=3),
+        // D016=$D8 (MCM+CSEL+xscroll=0), D018=$38 (screen at $0C00,
+        // bitmap at $2000 within VIC bank 0).
+        lda #$3b
         sta VIC_CTRL1
-
-        // 38-col mode for smooth scroll edges (CSEL=0)
-        lda #$00
+        lda #$d8
         sta VIC_CTRL2
+        lda #$38
+        sta $d018
 
         // raster IRQ chain
         lda #<irq_close
@@ -107,14 +111,18 @@ forever:
 
 //==================================================================
 clear_screen:
+        // Bitmap-mode screen RAM at $0C00 holds 2 colour nibbles per
+        // cell: hi=%01 slot, lo=%10 slot. Our logo encoding uses the
+        // same 4-colour set everywhere — fill with $67 (blue + yellow).
         ldx #0
-        lda #$20
-!loop:  sta SCREEN+$000,x
-        sta SCREEN+$100,x
-        sta SCREEN+$200,x
-        sta SCREEN+$300,x
+        lda #$67
+!loop:  sta BMP_SCREEN+$000,x
+        sta BMP_SCREEN+$100,x
+        sta BMP_SCREEN+$200,x
+        sta BMP_SCREEN+$300,x
         inx
         bne !loop-
+        // Colour RAM ($D800) provides the %11 slot — uniform white.
         lda #$01
 !loop:  sta COLOUR_RAM+$000,x
         sta COLOUR_RAM+$100,x
@@ -204,7 +212,7 @@ irq_close:
         pha
         lda #$ff
         sta $d019
-        lda #$13                // 24-row, DEN
+        lda #$33                // 24-row, DEN, BMM (open border in bitmap mode)
         sta VIC_CTRL1
         // Disable sprites 0,1,2 — their low Y causes the comparator
         // to fire again at Y+256 (in the bottom of the rendered area).
@@ -234,20 +242,17 @@ irq_open:
 
         lda #$ff
         sta $d019
-        lda #$1b                // 25-row, DEN
+        lda #$3b                // 25-row, DEN, BMM
         sta VIC_CTRL1
         lda #%11111111          // all 8 sprites on
         sta SPR_EN
+
+        inc zp_frame            // global animation tick (was in do_scroll)
 
         // Update sprite positions FIRST while raster is at line 1..~8.
         // Top sprites start at Y=14, bottom sprites finished previous
         // frame at raster ~282. This window is safe → no tearing.
         jsr move_sprites
-
-        jsr do_scroll
-        lda zp_smooth
-        sta VIC_CTRL2           // X-scroll (CSEL=0)
-        jsr update_scroll_colors
 
         // Play SID — runs in irq_open after critical work. BAR_TOP
         // is set high enough that music.play completes before the
@@ -325,9 +330,18 @@ bar_lda:
 .pc = music.location "Music"
 .fill music.size, music.getData(i)
 
-// Page-aligned tables segment — placed past music data so they
-// don't collide with $1000..$1e00 music block.
-.pc = $2200 "Tables"
+// Multicolour bitmap data — 8000 bytes at $2000.
+.pc = BITMAP "Bitmap"
+.fill logo.getBitmapSize(), logo.getBitmap(i)
+
+// Bitmap-mode screen RAM ($0C00) holds 2 colour nibbles per cell —
+// uniform for our 4-colour logo. We could also do this at runtime
+// in clear_screen; doing it at compile time saves startup time.
+.pc = $0c00 "BitmapScreenRAM"
+.fill 1000, $67
+
+// Page-aligned tables segment — placed past bitmap.
+.pc = $4000 "Tables"
 
 // Page-aligned 512-byte palette = 16 reps of the 32-entry rainbow.
 // Self-modified lda base + y(<$d0) always stays inside the table.
