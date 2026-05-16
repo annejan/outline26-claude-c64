@@ -38,6 +38,7 @@
 .const zp_smooth    = $fd
 .const zp_frame     = $fe
 .const zp_tmp       = $f9
+.const zp_msb       = $fa
 
 BasicUpstart2(start)
 
@@ -227,10 +228,15 @@ irq_open:
         lda #%11111111          // all 8 sprites on
         sta SPR_EN
 
+        // Update sprite positions FIRST while raster is at line 1..~8.
+        // Top sprites start at Y=14, bottom sprites finished previous
+        // frame at raster ~282. This window is safe → no tearing.
+        jsr move_sprites
+
         jsr do_scroll
         lda zp_smooth
         sta VIC_CTRL2           // X-scroll (CSEL=0)
-        jsr move_sprites
+        jsr update_scroll_colors
 
         lda #<irq_close
         sta $fffe
@@ -256,15 +262,24 @@ irq_open:
 // Each sprite gets a different X phase and Y phase via sprite_phase.
 //==================================================================
 move_sprites:
+        lda #0
+        sta zp_msb
         ldx #7
 !loop:
-        // X position
+        // X position low byte
         lda zp_frame
         clc
         adc sprite_xphase,x
         tay
-        lda sine_x,y
+        lda sine_x_lo,y
         sta zp_tmp
+        // X MSB bit — OR sprite-specific bit into accumulator if hi=1
+        lda sine_x_hi,y
+        beq !nomsb+
+        lda zp_msb
+        ora bit_table,x
+        sta zp_msb
+!nomsb:
         txa
         asl                     // sprite index × 2 = SPR_X offset
         tay
@@ -301,9 +316,37 @@ move_sprites:
         dex
         bpl !loop-
 
-        lda #0
+        lda zp_msb
         sta SPR_MSB
         rts
+
+bit_table: .byte 1, 2, 4, 8, 16, 32, 64, 128
+
+
+//==================================================================
+// update_scroll_colors — rainbow effect. Each cell at row 4 gets
+// rainbow[(col + frame>>1) & $0f]. frame>>1 → smoother flow.
+//==================================================================
+update_scroll_colors:
+        lda zp_frame
+        lsr                     // /2 so the rainbow flows at half speed
+        sta zp_tmp
+        ldy #39
+!loop:  tya
+        clc
+        adc zp_tmp
+        and #$0f
+        tax
+        lda rainbow_palette,x
+        sta SCROLL_COL,y
+        dey
+        bpl !loop-
+        rts
+
+rainbow_palette:
+        // 16-entry smooth-ish C64 rainbow
+        .byte $02,$08,$08,$07,$07,$0d,$05,$0d
+        .byte $03,$03,$0e,$0e,$06,$04,$0a,$02
 
 
 //==================================================================
@@ -342,10 +385,15 @@ do_scroll:
 // Data
 //==================================================================
 
-// Sprite X sine — swings 50..200, no MSB needed (X < 256)
+// Sprite X sine — 9-bit values 24..344 (full content width!).
+// We need MSB so use TWO tables: low byte + MSB flag.
 .align 256
-sine_x:
-        .fill 256, 50 + round(75 * (1 + sin(toRadians(i * 360 / 256))))
+sine_x_lo:
+        .fill 256, (24 + round(160 * (1 + sin(toRadians(i * 360 / 256))))) & $ff
+
+.align 256
+sine_x_hi:
+        .fill 256, ((24 + round(160 * (1 + sin(toRadians(i * 360 / 256))))) >> 8) & 1
 
 // 8 X-phase offsets so sprites swing at different positions
 sprite_xphase: .byte 0, 32, 64, 96, 128, 160, 192, 224
