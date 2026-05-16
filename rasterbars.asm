@@ -130,47 +130,18 @@ bar_done:
 
 
 //------------------------------------------------------------------
-// build_bar — rebuild line_colors each frame with a smooth-
-// gradient bar at a sine-driven vertical position.
-//------------------------------------------------------------------
-//------------------------------------------------------------------
-// build_bar — one sine-moving rasterbar with smooth warm gradient.
+// build_bar — one STATIC gradient bar centred in the bar zone.
+// No motion → no complexity. Pre-built once, never modified.
 //------------------------------------------------------------------
 build_bar:
-        // clear line_colors
-        ldx #BAR_ZONE_LEN-1
-        lda #0
-!clr:   sta line_colors,x
-        dex
-        bpl !clr-
-
-        // paint bar at sine_bar[frame]
-        ldy zp_frame
-        lda sine_bar,y
-        tax
-        ldy #0
-!paint: lda bar_palette,y
-        sta line_colors,x
-        inx
-        iny
-        cpy #BAR_HEIGHT
-        bne !paint-
-        rts
-
-
-bar_palette:
-        // brown → red → orange → light red → light grey → yellow → white
-        .byte $09,$02,$08,$0a,$0f,$07,$01
-        .byte $01,$07,$0f,$0a,$08,$02,$09
-
-.align 256
-sine_bar:
-        // 0..(BAR_ZONE_LEN - BAR_HEIGHT - 1) = 0..65
-        .fill 256, round(32.5 * (1 - cos(toRadians(i * 360 / 256))))
+        rts                     // nothing to do — bar is pre-painted
 
 .align 256
 line_colors:
-        .fill BAR_ZONE_LEN, 0
+        // 80-line buffer with a 14-line gradient bar centred at lines 33..46
+        .fill 33, 0
+        .byte $09,$02,$08,$0a,$0f,$07,$01,$01,$07,$0f,$0a,$08,$02,$09
+        .fill 33, 0
 
 
 //==================================================================
@@ -183,10 +154,11 @@ irq_close:
         sta $d019
         lda #$13                // explicit value: DEN | yscroll=3, RSEL=0
         sta VIC_CTRL1
-        // Disable sprite 0 here so its Y-wraparound duplicate at raster
-        // 16+256=272 doesn't render. It'll be re-enabled by irq_open at
-        // line $01 (before raster reaches 16 in the new frame).
-        lda #%00001110          // sprites 1,2,3 enabled — sprite 0 off
+        // Disable sprites whose Y wraparound (Y+256) lands inside the
+        // visible frame — sprites with Y < 56 fire the comparator twice
+        // per PAL frame (once at Y, once at Y+256). Sprite 0 (Y=$10)
+        // and sprite 1 (Y=35..69) need disabling here; sprite 2,3 don't.
+        lda #%00001100          // only sprites 2,3 stay enabled
         sta SPR_EN
         lda #<irq_open
         sta $fffe
@@ -468,15 +440,18 @@ sine_x:
 sine_top:
         .fill 256, 0 + round(15 * (1 - cos(toRadians(i * 360 / 256))))
 
-// Upper-display Y sine: range 35..70 (between top border and bar zone)
+// Wider Y sine ranges — sprites can now traverse the bar zone for
+// a more natural bouncing pattern. The bar will get some glitches
+// when sprites cross over but that's the tradeoff.
 .align 256
 sine_upper:
-        .fill 256, 35 + round(17 * (1 - cos(toRadians(i * 360 / 256))))
+        // 30..200 (covers most of display)
+        .fill 256, 30 + round(85 * (1 - cos(toRadians(i * 360 / 256))))
 
-// Lower-display Y sine: range 192..222 (between bar zone and bottom border)
 .align 256
 sine_lower:
-        .fill 256, 192 + round(15 * (1 - cos(toRadians(i * 360 / 256))))
+        // 60..220 (covers most of display, offset phase)
+        .fill 256, 60 + round(80 * (1 - cos(toRadians(i * 360 / 256))))
 
 // Bottom-border Y sine: range 226..246 (stays below display, ≤ $f7)
 .align 256
