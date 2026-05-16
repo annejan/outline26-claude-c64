@@ -45,7 +45,6 @@
 .const zp_tmp       = $f9
 .const zp_msb       = $fa
 
-.var music = LoadSid("kickass/Examples/09.PSID Import/Nightshift.sid")
 .var logo  = LoadBinary("defeest.kla", BF_KOALA)
 
 BasicUpstart2(start)
@@ -66,11 +65,7 @@ start:
         jsr init_sprites
         jsr init_scroll
 
-        // init SID music (A = song number - 1)
-        lda #music.startSong-1
-        ldx #0
-        ldy #0
-        jsr music.init
+        jsr my_music_init
 
         // clear the VIC garbage byte
         lda #0
@@ -344,7 +339,7 @@ irq_fld:
         // what gives the pixel-level shift. (HCL pattern.)
 
 !skip:
-        jsr music.play
+        jsr my_music_play
 
         lda #<irq_bars
         sta $fffe
@@ -413,9 +408,234 @@ bar_lda:
         rti
 
 
-// SID music data goes at its native load address.
-.pc = music.location "Music"
-.fill music.size, music.getData(i)
+// Hand-written 3-voice SID player + pattern data. Hard 8-bit bassline.
+.pc = $1000 "Music"
+
+// Note-period table for SID PAL clock. 5 octaves: C-0..B-4 (indices 0..59).
+sid_freq_lo:
+        .byte $17, $27, $39, $4b, $5f, $74, $8a, $a1, $ba, $d4, $ef, $0c   // C-0..B-0
+        .byte $2d, $4f, $73, $97, $be, $e8, $14, $42, $74, $a9, $df, $19   // C-1..B-1
+        .byte $5a, $9e, $e7, $35, $7e, $d0, $28, $85, $e8, $52, $bd, $33   // C-2..B-2
+        .byte $b4, $3d, $cf, $6a, $fc, $a0, $50, $0a, $d0, $a3, $7d, $66   // C-3..B-3
+        .byte $68, $7a, $9e, $d4, $f8, $40, $a0, $14, $a0, $46, $fa, $cc   // C-4..B-4
+sid_freq_hi:
+        .byte $01, $01, $01, $01, $01, $01, $01, $01, $01, $01, $01, $02   // C-0..B-0
+        .byte $02, $02, $02, $02, $02, $02, $03, $03, $03, $03, $03, $04   // C-1..B-1
+        .byte $04, $04, $04, $05, $05, $05, $06, $06, $06, $07, $07, $08   // C-2..B-2
+        .byte $08, $09, $09, $0a, $0a, $0b, $0c, $0d, $0d, $0e, $0f, $10   // C-3..B-3
+        .byte $11, $12, $13, $14, $15, $17, $18, $1a, $1b, $1d, $1e, $20   // C-4..B-4
+
+// Note-number shortcuts (octave * 12 + semitone, with octave 4 included)
+.const N_E2 = 28
+.const N_F2 = 29
+.const N_G2 = 31
+.const N_A2 = 33
+.const N_B2 = 35
+.const N_C3 = 36
+.const N_D3 = 38
+.const N_E3 = 40
+.const N_F3 = 41
+.const N_G3 = 43
+.const N_A3 = 45
+.const N_B3 = 47
+.const N_C4 = 48
+.const N_D4 = 50
+.const N_E4 = 52
+.const N_F4 = 53
+.const N_G4 = 55
+.const N_A4 = 57
+.const N_B4 = 59
+
+
+// 32-step pattern at 4 frames/step = ~187 BPM 16ths.
+.const NOTE_REST = $ff
+.const STEP_FRAMES = 4
+
+// Chord progression (Am - Em - F - G), 8 steps each
+//   chord index 0..3 → arp_notes table offset (chord*4)
+chord_per_step:
+        .byte 0,0,0,0,0,0,0,0    // Am (steps 0..7)
+        .byte 3,3,3,3,3,3,3,3    // Em (steps 8..15)
+        .byte 1,1,1,1,1,1,1,1    // F  (steps 16..23)
+        .byte 2,2,2,2,2,2,2,2    // G  (steps 24..31)
+
+// 4 chords × 4 arp notes (root, 3rd, 5th, octave). Voice 3 cycles every frame.
+arp_notes:
+        .byte N_A2, N_C3, N_E3, N_A3    // Am: A C E A↑
+        .byte N_F2, N_A2, N_C3, N_F3    // F:  F A C F↑
+        .byte N_G2, N_B2, N_D3, N_G3    // G:  G B D G↑
+        .byte N_E2, N_G2, N_B2, N_E3    // Em: E G B E↑
+
+// Bass: 16th-note pattern with octave jumps every 3rd step. Tracks chord roots.
+bass_pattern:
+        // Am
+        .byte N_A2, N_A2, N_A3, N_A2, N_A2, N_E3, N_A3, N_A2
+        // Em
+        .byte N_E2, N_E2, N_E3, N_E2, N_E2, N_B2, N_E3, N_E2
+        // F
+        .byte N_F2, N_F2, N_F3, N_F2, N_F2, N_C3, N_F3, N_F2
+        // G
+        .byte N_G2, N_G2, N_G3, N_G2, N_G2, N_D3, N_G3, N_G2
+
+// Lead melody — 128 steps = 4 chord cycles = ~10 sec at 4 frames/step.
+// Each chord cycle gets a different phrase, so the melody winds without
+// looping for ~10 seconds.
+lead_pattern:
+        // ---- Phrase 1: sparse opening (Am Em F G) ----
+        .byte N_A3,NOTE_REST,N_E3,NOTE_REST, N_A3,N_C4,N_E3,NOTE_REST
+        .byte N_G3,NOTE_REST,N_B3,NOTE_REST, N_E4,N_G3,N_E3,NOTE_REST
+        .byte N_F3,NOTE_REST,N_A3,NOTE_REST, N_F4,N_A3,N_C4,NOTE_REST
+        .byte N_G3,NOTE_REST,N_B3,NOTE_REST, N_D4,N_G4,N_F4,N_E4
+        // ---- Phrase 2: active 8ths, rising energy ----
+        .byte N_A4,N_C4,N_E4,N_A4, N_C4,N_E4,N_C4,N_A3
+        .byte N_B3,N_D4,N_G3,N_B3, N_E4,N_G3,N_E3,N_B3
+        .byte N_C4,N_A3,N_F3,N_A3, N_F4,N_C4,N_A3,N_F3
+        .byte N_D4,N_B3,N_G3,N_B3, N_G4,N_D4,N_B3,N_G3
+        // ---- Phrase 3: high climb, arps in the lead too ----
+        .byte N_E4,N_A4,N_E4,N_C4, N_A4,N_E4,N_A4,N_E4
+        .byte N_B3,N_E4,N_G4,N_B4, N_E4,N_B3,N_E4,N_G4
+        .byte N_C4,N_F4,N_A4,NOTE_REST, N_F4,N_C4,N_A3,N_F3
+        .byte N_G4,N_B4,N_D4,NOTE_REST, N_B4,N_G4,N_D4,N_B3
+        // ---- Phrase 4: descending resolution ----
+        .byte N_E4,NOTE_REST,N_C4,NOTE_REST, N_A3,NOTE_REST,NOTE_REST,NOTE_REST
+        .byte N_E4,NOTE_REST,N_B3,NOTE_REST, N_G3,NOTE_REST,NOTE_REST,NOTE_REST
+        .byte N_F3,NOTE_REST,N_C4,NOTE_REST, N_F3,NOTE_REST,NOTE_REST,NOTE_REST
+        .byte N_G3,NOTE_REST,N_D4,NOTE_REST, N_G3,NOTE_REST,NOTE_REST,NOTE_REST
+
+
+// Per-tune state in RAM (initialized at boot)
+mu_step:        .byte 0
+mu_frame:       .byte 0
+
+
+my_music_init:
+        // Clear SID
+        ldx #$1c
+        lda #0
+!loop:  sta $d400,x
+        dex
+        bpl !loop-
+
+        // Voice 1 (bass): pulse wave, kick-like ADSR
+        lda #$04           // attack=0, decay=4 (fast)
+        sta $d405
+        lda #$61           // sustain=6, release=1 (punchy)
+        sta $d406
+        lda #$00
+        sta $d402
+        lda #$08           // 12.5% duty
+        sta $d403
+
+        // Voice 2 (lead): pulse wave, sharper
+        lda #$02           // attack=0, decay=2
+        sta $d40c
+        lda #$81           // sustain=8, release=1
+        sta $d40d
+        lda #$00
+        sta $d409
+        lda #$06           // ~37% duty (rich harmonic)
+        sta $d40a
+
+        // Voice 3 (arpeggio): sustained pulse, max volume — pitch cycles per frame
+        lda #$00
+        sta $d413          // attack=0, decay=0
+        lda #$f0           // sustain=F, release=0
+        sta $d414
+        lda #$00
+        sta $d410
+        lda #$04
+        sta $d411          // 25% duty
+        // Gate ON so V3 sustains continuously
+        lda #$41           // pulse, gate on
+        sta $d412
+
+        // Master volume
+        lda #$0f
+        sta $d418
+
+        lda #0
+        sta mu_step
+        sta mu_frame
+        rts
+
+
+my_music_play:
+        // --- V3 arpeggio: change freq every frame ---
+        // chord_per_step uses (mu_step & 31)
+        lda mu_step
+        and #$1f
+        tax
+        lda chord_per_step,x
+        asl
+        asl                       // chord_idx * 4
+        sta zp_tmp
+        lda zp_frame
+        and #$03                  // arp index 0..3
+        clc
+        adc zp_tmp
+        tax
+        lda arp_notes,x
+        tay
+        lda sid_freq_lo,y
+        sta $d40e
+        lda sid_freq_hi,y
+        sta $d40f
+
+        // --- Step boundary work ---
+        inc mu_frame
+        lda mu_frame
+        cmp #STEP_FRAMES
+        bne !done+
+
+        lda #0
+        sta mu_frame
+        inc mu_step
+        lda mu_step
+        and #$7f                  // wrap at 128 (lead loops every 128 steps)
+        sta mu_step
+
+        // V1 bass — uses (mu_step & 31)
+        and #$1f
+        tax
+        lda bass_pattern,x
+        cmp #NOTE_REST
+        beq !v1_rest+
+        tay
+        lda sid_freq_lo,y
+        sta $d400
+        lda sid_freq_hi,y
+        sta $d401
+        lda #$40
+        sta $d404
+        lda #$41
+        sta $d404
+        jmp !v1_done+
+!v1_rest:
+        lda #$40
+        sta $d404
+!v1_done:
+
+        // V2 lead — uses full mu_step (0..127)
+        ldx mu_step
+        lda lead_pattern,x
+        cmp #NOTE_REST
+        beq !v2_rest+
+        tay
+        lda sid_freq_lo,y
+        sta $d407
+        lda sid_freq_hi,y
+        sta $d408
+        lda #$40
+        sta $d40b
+        lda #$41
+        sta $d40b
+        jmp !v2_done+
+!v2_rest:
+        lda #$40
+        sta $d40b
+!v2_done:
+!done:
+        rts
 
 // Multicolour bitmap data — 8000 bytes at $2000.
 .pc = BITMAP "Bitmap"
