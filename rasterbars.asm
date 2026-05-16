@@ -56,9 +56,11 @@
 .const zp_scroll_mode = $f7     // 0=left scroll, 1=right scroll, 2=zig-zag (alternating rows)
 
 // Intro phase thresholds (in zp_intro ticks; 2 frames per tick @ 50 Hz so 1 tick = 40 ms)
-.const T_BARS      = 40          // bars enable (~1.6 sec)
-.const T_BALLS     = 120         // balls enable (~4.8 sec)
-.const T_SCROLLER  = 200         // scroller enable (~8 sec)
+// New order: balls → bars → logo → scroller.
+.const T_BALLS     = 40          // balls enable    (~1.6 sec)
+.const T_BARS      = 120         // bars enable     (~4.8 sec)
+.const T_LOGO      = 200         // logo wipe begins (~8 sec) — reveal_column uses (zp_intro - T_LOGO)
+.const T_SCROLLER  = 240         // scroller enable (~9.6 sec)
 
 .var logo  = LoadBinary("defeest.kla", BF_KOALA)
 
@@ -902,12 +904,14 @@ init_slide_hide:
 // Cost: 18 sta abs,X = ~92 cy when revealing, ~10 cy when done.
 //==================================================================
 reveal_column:
+        // Logo wipe starts at zp_intro = T_LOGO and covers 40 columns.
         lda zp_intro
-        beq !done+
-        cmp #41
-        bcs !done+
+        cmp #T_LOGO
+        bcc !done+                // before T_LOGO → no reveal yet
         sec
-        sbc #1
+        sbc #T_LOGO               // 0..N since T_LOGO
+        cmp #40
+        bcs !done+                // wipe complete after 40 ticks
         tax                       // X = column index 0..39
 
         lda #$67                  // screen RAM nibbles: blue/yellow
@@ -984,8 +988,8 @@ init_bmp_scroll:
 
 // Per-frame: shift each pixel row of scroll bitmap by 1 bit.
 // zp_scroll_mode picks the per-row direction:
-//   0 = LEFT  (all rows ROL, pending feeds at right edge → text scrolls right-to-left)
-//   1 = RIGHT (all rows ROR, pending feeds at left edge → text scrolls left-to-right)
+//   0 = LEFT scroll (all rows ROL) — text scrolls right-to-left, readable
+//   1 = LEFT scroll (same as mode 0) — slot kept for future variation
 //   2 = ZIG-ZAG (even rows ROL, odd rows ROR — visual split)
 // Mode advances at $fe sentinel bytes in scroll_text and wraps after mode 2.
 update_bmp_scroll:
@@ -993,11 +997,9 @@ update_bmp_scroll:
 !rowloop:
         // Dispatch on scroll mode → ROL/ROR per row.
         lda zp_scroll_mode
-        beq !row_left+          // mode 0 → all left
-        cmp #1
-        bne !row_zigzag+        // mode 2 → fall through to parity check
-        jmp !row_odd+           // mode 1 → all right (jmp: out of branch range)
-!row_zigzag:
+        cmp #2
+        bne !row_left+          // mode 0 or 1 → all left
+        // mode 2: zig-zag — pick by row parity
         txa
         and #$01
         bne !row_odd+           // odd row in zig-zag → ROR
