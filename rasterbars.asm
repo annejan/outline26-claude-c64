@@ -35,7 +35,7 @@
 .const SCROLL_SCR   = SCREEN + SCROLL_ROW * 40
 .const SCROLL_COL   = COLOUR_RAM + SCROLL_ROW * 40
 
-.const BAR_TOP      = $50       // first line of bar zone (below music.play time)
+.const BAR_TOP      = $80       // first line of bar zone (after FLD + music)
 .const BAR_BOT      = $ec       // first line PAST bar zone (in open bot border)
 
 // Zero-page
@@ -242,11 +242,9 @@ irq_open:
 
         lda #$ff
         sta $d019
-        // 25-row + DEN + BMM ($38) | sine-wave yscroll (0..7) → 8-px
-        // vertical wobble of the bitmap. Logo bounces.
-        ldx zp_frame
-        lda yscroll_bounce,x
-        ora #$38
+        // 25-row + DEN + BMM, yscroll=3 (default). irq_fld will
+        // modify yscroll per-line for FLD effect.
+        lda #$3b
         sta VIC_CTRL1
         lda #%11111111          // all 8 sprites on
         sta SPR_EN
@@ -258,9 +256,94 @@ irq_open:
         // frame at raster ~282. This window is safe → no tearing.
         jsr move_sprites
 
-        // Play SID — runs in irq_open after critical work. BAR_TOP
-        // is set high enough that music.play completes before the
-        // bar IRQ fires.
+        // Chain to irq_fld at line $33 (top of display zone). irq_fld
+        // does the FLD per-line yscroll trick to multi-row bounce the
+        // logo, then plays SID, then chains to bars.
+        lda #<irq_fld
+        sta $fffe
+        lda #>irq_fld
+        sta $ffff
+        lda #$33
+        sta VIC_RASTER
+
+        pla
+        tay
+        pla
+        tax
+        pla
+        rti
+
+
+//==================================================================
+// irq_fld — fires at line $33 (top of bitmap display). Suppresses
+// badlines via 7-line yscroll cycles, so bitmap row 0 repeats
+// (bounce_big_count[frame] times). Then plays SID. Chains to irq_bars
+// at BAR_TOP=$80.
+//
+// FLD pattern: badlines naturally fire every 8 lines (when line%8 ==
+// yscroll). To repeat row 0, we force badlines every 7 lines instead
+// — this resets RC before it can reach 7, so VCBASE never advances
+// past 0. Each forced badline yscroll matches the line: write
+// yscroll = line%8 on line BEFORE so it's set before VIC's cycle-14
+// check.
+//==================================================================
+irq_fld:
+        pha
+        txa
+        pha
+        tya
+        pha
+        lda #$ff
+        sta $d019
+
+        ldx zp_frame
+        lda bounce_total,x      // total FLD lines (0..28)
+        tax
+        beq !skip+
+
+        // HCL pattern (codebase64 base:fld): wait for next line,
+        // then write yscroll = (yscroll+1) & 7. Both yscroll and
+        // line%8 increment by 1 each line → diff stays constant →
+        // no badline fires. After K lines, exit. yscroll ends at
+        // (initial + K) & 7.
+        //
+        // Important: irq_open set yscroll = 3, so we entered with
+        // yscroll=3 and first badline fired naturally at $33. Now
+        // skip line $34's increment (or it would match $34%8=4) by
+        // writing yscroll=5 explicitly on the first iter.
+
+        // Wait for line $34 (next line after IRQ entry).
+        lda #$33
+!w1:    cmp VIC_RASTER
+        beq !w1-
+
+        // First write: yscroll=5 (= line%8 + 1 at $34, since $34%8=4)
+        lda #$3d                // BMM + DEN + RSEL + yscroll=5
+        sta VIC_CTRL1
+
+        dex
+        beq !done+
+
+!fld_loop:
+        lda VIC_RASTER
+!w2:    cmp VIC_RASTER
+        beq !w2-
+        // yscroll++ (and #7 keeps in range, ora #$38 preserves mode bits)
+        clc
+        lda VIC_CTRL1
+        adc #$01
+        and #$07
+        ora #$38
+        sta VIC_CTRL1
+        dex
+        bne !fld_loop-
+
+!done:
+        // DON'T restore yscroll — leaving it at incremented value
+        // means next badline fires K lines later than default. That's
+        // what gives the pixel-level shift. (HCL pattern.)
+
+!skip:
         jsr music.play
 
         lda #<irq_bars
@@ -511,10 +594,12 @@ sprite_xphase: .byte 0, 32, 64, 96, 128, 160, 192, 224
 // 8 Y-phase offsets — also distinct
 sprite_yphase: .byte 0, 80, 160, 40, 120, 200, 56, 184
 
-// Sine wave 0..7 indexed by zp_frame → bitmap yscroll bounce.
+// FLD bounce: total number of FLD lines to insert before logo.
+// Each FLD line pushes the bitmap down by 1 line. Sine wave 0..28
+// over 256 frames → smooth ~5-sec bounce cycle.
 .align 256
-yscroll_bounce:
-        .fill 256, round(3.5 + 3.5 * sin(toRadians(i * 360 / 256)))
+bounce_total:
+        .fill 256, round(14 + 14 * sin(toRadians(i * 360 / 256)))
 
 // Sprite Y for top-border sprites — range 14..30
 .align 256
