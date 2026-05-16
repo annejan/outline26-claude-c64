@@ -33,7 +33,7 @@
 .const SCROLL_SCR   = SCREEN + SCROLL_ROW * 40
 .const SCROLL_COL   = COLOUR_RAM + SCROLL_ROW * 40
 
-.const BAR_TOP      = $20       // first line of bar zone (in open top border)
+.const BAR_TOP      = $50       // first line of bar zone (below music.play time)
 .const BAR_BOT      = $ec       // first line PAST bar zone (in open bot border)
 
 // Zero-page
@@ -42,6 +42,8 @@
 .const zp_frame     = $fe
 .const zp_tmp       = $f9
 .const zp_msb       = $fa
+
+.var music = LoadSid("kickass/Examples/09.PSID Import/Nightshift.sid")
 
 BasicUpstart2(start)
 
@@ -61,12 +63,18 @@ start:
         jsr init_sprites
         jsr init_scroll
 
+        // init SID music (A = song number - 1)
+        lda #music.startSong-1
+        ldx #0
+        ldy #0
+        jsr music.init
+
         // clear the VIC garbage byte
         lda #0
         sta $3fff
 
-        lda #$06
-        sta VIC_BORDER          // blue border
+        lda #$00
+        sta VIC_BORDER          // black border
         lda #$00
         sta VIC_BG              // black bg
 
@@ -241,6 +249,11 @@ irq_open:
         sta VIC_CTRL2           // X-scroll (CSEL=0)
         jsr update_scroll_colors
 
+        // Play SID — runs in irq_open after critical work. BAR_TOP
+        // is set high enough that music.play completes before the
+        // bar IRQ fires.
+        jsr music.play
+
         lda #<irq_bars
         sta $fffe
         lda #>irq_bars
@@ -292,8 +305,8 @@ bar_lda:
 
         lda #$00
         sta VIC_BG              // restore bg to black
-        lda #$06
-        sta VIC_BORDER          // restore border to blue
+        lda #$00
+        sta VIC_BORDER          // restore border to black
 
         lda #<irq_close
         sta $fffe
@@ -308,15 +321,28 @@ bar_lda:
         rti
 
 
+// SID music data goes at its native load address.
+.pc = music.location "Music"
+.fill music.size, music.getData(i)
+
+// Page-aligned tables segment — placed past music data so they
+// don't collide with $1000..$1e00 music block.
+.pc = $2200 "Tables"
+
 // Page-aligned 512-byte palette = 16 reps of the 32-entry rainbow.
 // Self-modified lda base + y(<$d0) always stays inside the table.
-.align 256
 bar_palette:
 .for (var rep = 0; rep < 16; rep++) {
-        .byte $06,$06,$0e,$0e,$03,$03,$0d,$0d
-        .byte $07,$07,$01,$01,$07,$07,$0d,$0d
-        .byte $03,$03,$0e,$0e,$06,$06,$04,$04
-        .byte $02,$02,$04,$04,$06,$06,$0e,$0e
+        // 4 cylinder-shaded bands, 8 lines each. Each band:
+        // dark → mid → bright → mid → dark + 2 black gap → next.
+        // Blue cylinder
+        .byte $00, $06, $0e, $01, $0e, $06, $00, $00
+        // Red cylinder
+        .byte $00, $02, $0a, $01, $0a, $02, $00, $00
+        // Green cylinder
+        .byte $00, $05, $0d, $01, $0d, $05, $00, $00
+        // Yellow/orange cylinder
+        .byte $00, $08, $07, $01, $07, $08, $00, $00
 }
 
 
@@ -456,11 +482,11 @@ do_scroll:
 // We need MSB so use TWO tables: low byte + MSB flag.
 .align 256
 sine_x_lo:
-        .fill 256, (24 + round(160 * (1 + sin(toRadians(i * 360 / 256))))) & $ff
+        .fill 256, (32 + round(124 * (1 + sin(toRadians(i * 360 / 256))))) & $ff
 
 .align 256
 sine_x_hi:
-        .fill 256, ((24 + round(160 * (1 + sin(toRadians(i * 360 / 256))))) >> 8) & 1
+        .fill 256, ((32 + round(124 * (1 + sin(toRadians(i * 360 / 256))))) >> 8) & 1
 
 // 8 X-phase offsets so sprites swing at different positions
 sprite_xphase: .byte 0, 32, 64, 96, 128, 160, 192, 224
