@@ -69,6 +69,7 @@ start:
 
         jsr copy_chargen
         jsr clear_screen
+        jsr init_slide_hide
         jsr init_sprites
         jsr init_bmp_scroll
 
@@ -267,6 +268,7 @@ irq_open:
         beq !intromax+
         inc zp_intro
 !intromax:
+        jsr reveal_column        // expose one more bitmap column from the left
 
         // Update sprite positions FIRST while raster is at line 1..~8.
         // Top sprites start at Y=14, bottom sprites finished previous
@@ -862,6 +864,70 @@ copy_chargen:
         bne !loop-
         lda #$35
         sta $01
+        rts
+
+
+//==================================================================
+// init_slide_hide — zero screen-RAM hi/lo nibbles AND colour RAM for
+// bitmap rows 8-16. With $D021 also $00, every pixel slot in those
+// rows is black: the logo is bitmap-data-resident but visually gone.
+// reveal_column flips cells back to $67/$01 to expose the logo column
+// by column from the left.
+//==================================================================
+init_slide_hide:
+        // Rows 8-16 of screen RAM: $0C00+8*40=$0D40 .. $0E87 (360 bytes)
+        // Rows 8-16 of colour RAM: $D800+8*40=$D940 .. $DA87 (360 bytes)
+        lda #0
+        ldx #0
+!c1:    sta $0d40,x
+        sta $d940,x
+        inx
+        bne !c1-
+        ldx #0
+!c2:    sta $0e40,x
+        sta $da40,x
+        inx
+        cpx #104          // 360 - 256
+        bne !c2-
+        rts
+
+
+//==================================================================
+// reveal_column — expose one cell column of bitmap rows 8-16.
+// Called every frame; idempotent. zp_intro=K reveals cells 0..K-1.
+// Cost: 18 sta abs,X = ~92 cy when revealing, ~10 cy when done.
+//==================================================================
+reveal_column:
+        lda zp_intro
+        beq !done+
+        cmp #41
+        bcs !done+
+        sec
+        sbc #1
+        tax                       // X = column index 0..39
+
+        lda #$67                  // screen RAM nibbles: blue/yellow
+        sta $0d40,x               // row 8
+        sta $0d68,x               // row 9
+        sta $0d90,x               // row 10
+        sta $0db8,x               // row 11
+        sta $0de0,x               // row 12
+        sta $0e08,x               // row 13
+        sta $0e30,x               // row 14
+        sta $0e58,x               // row 15
+        sta $0e80,x               // row 16
+
+        lda #$01                  // colour RAM: white
+        sta $d940,x
+        sta $d968,x
+        sta $d990,x
+        sta $d9b8,x
+        sta $d9e0,x
+        sta $da08,x
+        sta $da30,x
+        sta $da58,x
+        sta $da80,x
+!done:
         rts
 
 
