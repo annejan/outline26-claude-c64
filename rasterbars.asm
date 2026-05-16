@@ -108,55 +108,20 @@ start:
 .const BAR_HEIGHT     = 14              // height of the moving bar
 
 forever:
-        // wait line $6f
-        ldy #BAR_ZONE_TOP - 1
-        cpy VIC_RASTER
-        bne *-3
-        // disable DEN: kills bad-line cycle theft in the bar zone
-        lda #$0b
-        sta VIC_CTRL1
-        // sync to start of bar zone
         ldy #BAR_ZONE_TOP
+        ldx #0
+bar_loop:
+        lda line_colors,x
         cpy VIC_RASTER
         bne *-3
-
-        ldx #0
-        jmp bar_loop            // skip the .align padding (which is $00 = BRK)
-
-.align $100                     // ensure bne stays on one page → always 3 cy
-bar_loop:                       // 63-cycle iter: every line's sta lands at the same cy
-        lda line_colors,x       // 4
-        sta VIC_BORDER          // 4
-        sta VIC_BG              // 4
-        nop                     // 2  (22 NOPs = 44 cy padding)
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        nop                     // 2
-        inx                     // 2
-        cpx #BAR_ZONE_LEN       // 2
-        bne bar_loop            // 3 taken → 63 cy total per iter
-
-        // restore CTRL1 + colours
-        lda #$1b
-        sta VIC_CTRL1
+        sta VIC_BORDER
+        sta VIC_BG
+        cpx #BAR_ZONE_LEN-1
+        beq bar_done
+        inx
+        iny
+        jmp bar_loop
+bar_done:
         lda #$06
         sta VIC_BORDER
         lda #$00
@@ -218,6 +183,11 @@ irq_close:
         sta $d019
         lda #$13                // explicit value: DEN | yscroll=3, RSEL=0
         sta VIC_CTRL1
+        // Disable sprite 0 here so its Y-wraparound duplicate at raster
+        // 16+256=272 doesn't render. It'll be re-enabled by irq_open at
+        // line $01 (before raster reaches 16 in the new frame).
+        lda #%00001110          // sprites 1,2,3 enabled — sprite 0 off
+        sta SPR_EN
         lda #<irq_open
         sta $fffe
         lda #>irq_open
@@ -245,6 +215,10 @@ irq_open:
         sta $d019
         lda #$1b                // 25-row + yscroll=3 + DEN
         sta VIC_CTRL1
+        // Re-enable sprite 0 (was disabled at end of previous frame to
+        // hide the Y-wraparound duplicate).
+        lda #%00001111
+        sta SPR_EN
 
         // All scroll + sprite work happens here, well before line $5b.
         jsr build_bar
