@@ -79,9 +79,12 @@ setup:
         sta zp_plasma_tgl
         sta zp_bar_clr_ofs
 
-        // clear screen to space
+        // Fill screen with solid block ($A0 reverse-space in screencode_mixed)
+        // so the per-cell colour-RAM plasma is actually visible. Plain
+        // $20 (space) is transparent — colour RAM cycling without any
+        // foreground pixels would render nothing on screen.
         ldx #0
-        lda #$20
+        lda #$a0
 !clr:   sta $0400,x
         sta $0500,x
         sta $0600,x
@@ -108,8 +111,12 @@ setup:
 
 
 //==================================================================
-// write_plasma_row — write 40 cells (packed as 20 bytes) to color RAM
-//   X = row index 0..24
+// write_plasma_row — write all 40 color-RAM cells in row X.
+//   X = row index 0..24.
+// Text-mode color RAM ($D800-$DBFF) is 1 byte per cell (low nibble
+// only). The previous packed-2x4 version wrote 20 bytes and left
+// cols 20-39 stale, which painted the right half of the screen with
+// whatever leftover colour was there (looked white on the live demo).
 //==================================================================
 write_plasma_row:
         lda zp_plasma_phs
@@ -125,20 +132,11 @@ write_plasma_row:
         ldx #0
 !lp:    ldy zp_wave_phs
         lda wave,y
-        asl
-        asl
-        asl
-        asl
-        sta zp_tmp
-        iny
-        lda wave,y
         and #$0f
-        ora zp_tmp
 smc:    sta $d800,x
+        inc zp_wave_phs
         inx
-        inc zp_wave_phs
-        inc zp_wave_phs
-        cpx #20
+        cpx #40
         bcc !lp-
         rts
 
