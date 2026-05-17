@@ -1041,28 +1041,34 @@ row_colour:
 // for body lines and blanks. KEEP IN SYNC with credit_text below.
 //==================================================================
 is_header:
-        .byte 0,0,0     // 0..2 blank
-        .byte 1         // 3 "defeest presents"
-        .byte 0         // 4 blank
-        .byte 1         // 5 "outline 2026 demo"
-        .byte 0,0,0     // 6..8 blank
-        .byte 1         // 9 "code"
-        .byte 0,0       // 10..11 names
-        .byte 0         // 12 blank
-        .byte 1         // 13 "music"
-        .byte 0         // 14 body
-        .byte 0         // 15 blank
-        .byte 1         // 16 "graphics"
-        .byte 0         // 17 body
-        .byte 0         // 18 blank
-        .byte 1         // 19 "tools"
-        .byte 0,0,0     // 20..22 body
-        .byte 0         // 23 blank
-        .byte 1         // 24 "greetings"
-        .byte 0,0,0,0   // 25..28 body
-        .byte 0,0       // 29..30 blank
-        .byte 1         // 31 "thanks for watching"
-        .byte 0,0,0,0   // 32..35 blank tail
+        .byte 0,0,0         //  0..2  blank
+        .byte 1             //  3     you were watching
+        .byte 0             //  4     defeest
+        .byte 1             //  5     x 2026
+        .byte 0,0,0         //  6..8  blank
+        .byte 1             //  9     code
+        .byte 0,0,0,0       // 10..13 names
+        .byte 0             // 14     blank
+        .byte 1             // 15     music
+        .byte 0             // 16     ai-coded
+        .byte 0             // 17     blank
+        .byte 1             // 18     graphics
+        .byte 0             // 19     defeest.nl
+        .byte 0             // 20     blank
+        .byte 1             // 21     tools
+        .byte 0,0,0,0,0     // 22..26 body
+        .byte 0             // 27     blank
+        .byte 1             // 28     documentation
+        .byte 0,0           // 29..30 body
+        .byte 0             // 31     blank
+        .byte 1             // 32     greetings
+        .byte 0,0,0         // 33..35 body
+        .byte 0             // 36     blank
+        .byte 1             // 37     thanks
+        .byte 0,0           // 38..39 body
+        .byte 0             // 40     blank
+        .byte 0             // 41     thanks for watching
+        .byte 0,0,0,0       // 42..45 blank tail
 
 
 //==================================================================
