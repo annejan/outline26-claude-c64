@@ -15,13 +15,15 @@
         .word $0000              // cleanup
         .word $0000              // callmusic
 
-        // Memory: code at $80 (single page — interlude is tiny).
-        .byte 'P', $80, $80
+        // Memory: code + tables at $80-$84 (5 pages: plasma wave, raster bars, etc.)
+        .byte 'P', $80, $84
         // Inherit intro's music tables at $10-$12 — we call intro's
         // my_music_play at $119e. Pefchain MUST NOT overwrite these.
         .byte 'I', $10, $12
-        // Zero-page: $f4 (kick phase), $f5 (filter cutoff), $f6 (beat count)
-        .byte 'Z', $f4, $f6
+        // Zero-page: $f4-kick_phase, $f5-filt_cut, $f6-beat_count,
+        //            $f7-plasma_phs, $f8-plasma_tgl, $f9-bar_clr_ofs,
+        //            $fa-wave_phs, $fc-tmp
+        .byte 'Z', $f4, $fc
         // I/O safe (we leave $01 at $35)
         .byte 'S'
         .byte $00

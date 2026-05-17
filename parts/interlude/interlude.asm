@@ -1,27 +1,22 @@
 //==================================================================
-// outline-64 — Part 2.5: interlude
+// outline-64 — interlude: text-mode plasma + raster bars
 //
-// Between intro and end. Continues intro's chord progression and lead
-// melody (calls intro's my_music_play at $119e — its tables stay
-// resident at $1000-$125D and pefchain won't touch them because we
-// declare 'I',$10,$12 in the EFO header).
+// Two visual layers over the pad + build-up music arc:
 //
-// Sound arc:
-//   beats  0..23  → pad-only breather (V1 bass muted, lead + arp drift)
-//   beats 24..31  → V1 bass returns + cutoff ramps from $80 → $FF, building
-//                   tension into greets ("groove into next part")
+//   1. PLASMA — diagonal colour bars scrolling through color RAM.
+//      A 256-byte wave scrolls horizontally; each 40-col row has
+//      a staggered phase offset, creating a diagonal bar pattern.
+//      Half the rows update each frame (packed 2×4-bit per byte)
+//      to fit PAL budget.
 //
-// V1's intro-set ADSR (AD=$04, SR=$61 — punchy bass) is preserved so
-// the bass sounds correct the moment we unmute it. We just write
-// $D404 = 0 (control = no wave + gate off) every frame in the muted
-// window, then stop doing that once the build-up beat hits.
+//   2. RASTER BARS — 6 horizontal bars in the border, colours
+//      cycling per beat. IRQ chain (main -> 6 bars -> main) flips
+//      border at each bar's raster position.
 //
-// Lives at $8000 — a free area that doesn't conflict with intro
-// ($0400-$5bbc), end's load region ($3000-$444c), or the spindle
-// resident loader at $0200-$03ff.
+// Memory:
+//   $8000-$84FF  code + tables (5 pages)
+//   $1000-$125D  intro music tables (inherited)
 //
-// Spindle 3.1 lifecycle: setup / interrupt / fadeout (sec/rts, the
-// script transitions on f6 = $20).
 //==================================================================
 
 .const VIC_CTRL1  = $d011
@@ -32,74 +27,124 @@
 .const VIC_IRQ    = $d019
 .const VIC_BORDER = $d020
 .const VIC_BG     = $d021
+.const IRQ_VEC    = $fffe
 
-// Intro's resident music routine address (from intro.sym).
 .const INTRO_MUSIC_PLAY = $119e
 
-// Beat pacing — 24 frames per beat × 32 beats ≈ 15 s.
-.const BEAT_PERIOD     = 24
-.const BUILDUP_BEAT    = 24      // bass returns + sweep starts at this beat
-.const N_BUILDUP_BEATS = 8       // 32 - 24 — beats of build-up before transition
+.const BEAT_PERIOD   = 24
+.const BUILDUP_BEAT  = 24
+.const FILT_CUT_LO   = $40
+.const FILT_CUT_STEP = $18
 
-// Filter sweep starting + final cutoff (only active during build-up).
-.const FILT_CUT_LO     = $40     // muffled-ish opening of the sweep
-.const FILT_CUT_STEP   = $18     // per-beat ramp ($40 + 8*$18 = $100 → $FF clamp)
-
-// Zero-page
-.const zp_beat_phase = $f4        // counts 0..BEAT_PERIOD-1
-.const zp_filt_cut   = $f5        // current filter cutoff during build-up
-.const zp_beat_count = $f6        // total beats — script transitions on f6 = $20
+.const zp_beat_phase = $f4
+.const zp_filt_cut   = $f5
+.const zp_beat_count = $f6
+.const zp_plasma_phs = $f7
+.const zp_plasma_tgl = $f8
+.const zp_bar_clr_ofs= $f9
+.const zp_wave_phs   = $fa
+.const zp_tmp        = $fc
 
 * = $8000 "Interlude"
 
+//==================================================================
+// setup
+//==================================================================
 setup:
-        // VIC bank 0, default text mode setup. Black bg + border, no
-        // sprites — visuals to be added in a later iteration.
         lda #$3c
         sta $dd02
-        lda #%00010100            // screen $0400, chargen $1000
+        lda #%00010100
         sta VIC_MEM
-        lda #$1b                  // text mode, DEN, RSEL, yscroll=3
+        lda #$1b
         sta VIC_CTRL1
-        lda #$08                  // CSEL, mono
+        lda #$08
         sta VIC_CTRL2
         lda #$00
         sta SPR_EN
         sta VIC_BORDER
         sta VIC_BG
 
-        // SID master volume — intro's fadeout no longer silences it,
-        // but reassert in case it drifted.
         lda #$1f
         sta $d418
-
-        // Mute V1 (bass) by writing control = 0 (no wave + gate off).
-        // CRITICAL: do NOT touch $D405/$D406 — we want intro's punchy
-        // bass ADSR (AD=$04, SR=$61) preserved so the bass sounds right
-        // the moment we unmute it at BUILDUP_BEAT.
         lda #$00
         sta $d404
+        sta $d416
+        sta $d417
 
-        // Filter starts off (cutoff 0, no routing) — when the build-up
-        // hits we route V2 through LP, set initial cutoff, and ramp.
-        sta $d416                 // cutoff hi
-        sta $d417                 // resonance + voice routing
-        sta zp_filt_cut
-
-        // Init beat state
+        lda #0
         sta zp_beat_phase
         sta zp_beat_count
+        sta zp_filt_cut
+        sta zp_plasma_phs
+        sta zp_plasma_tgl
+        sta zp_bar_clr_ofs
 
-        // Raster IRQ at top of frame
-        lda #$00
+        // clear screen to space
+        ldx #0
+        lda #$20
+!clr:   sta $0400,x
+        sta $0500,x
+        sta $0600,x
+        sta $0700,x
+        inx
+        bne !clr-
+
+        // fill ALL 25 color RAM rows
+        lda #0
+        sta zp_plasma_tgl
+!all:   ldx zp_plasma_tgl
+        jsr write_plasma_row
+        inc zp_plasma_tgl
+        lda zp_plasma_tgl
+        cmp #25
+        bne !all-
+        lda #0
+        sta zp_plasma_tgl
+
+        // vsync IRQ
+        lda #$ff
         sta VIC_RASTER
         rts
 
 
 //==================================================================
-// interrupt — per-frame. Continues intro's music, gates V1 mute /
-// filter sweep on the beat count, ticks the beat counter for the
-// script transition.
+// write_plasma_row — write 40 cells (packed as 20 bytes) to color RAM
+//   X = row index 0..24
+//==================================================================
+write_plasma_row:
+        lda zp_plasma_phs
+        clc
+        adc row_offset,x
+        sta zp_wave_phs
+
+        lda row_cr_lo,x
+        sta smc+1
+        lda row_cr_hi,x
+        sta smc+2
+
+        ldx #0
+!lp:    ldy zp_wave_phs
+        lda wave,y
+        asl
+        asl
+        asl
+        asl
+        sta zp_tmp
+        iny
+        lda wave,y
+        and #$0f
+        ora zp_tmp
+smc:    sta $d800,x
+        inx
+        inc zp_wave_phs
+        inc zp_wave_phs
+        cpx #20
+        bcc !lp-
+        rts
+
+
+//==================================================================
+// interrupt — main vsync handler, raster $FF
 //==================================================================
 interrupt:
         pha
@@ -110,69 +155,87 @@ interrupt:
         lda #$ff
         sta VIC_IRQ
 
-        // Continue intro's chord progression + lead.
         jsr INTRO_MUSIC_PLAY
-
-        // my_music_play writes $D418 = vol_in each frame (which is
-        // $0f once zp_intro saturated). Re-assert $1F to put SID back
-        // into LP filter mode (bit 4) with full vol — we need the LP
-        // mode for the build-up's cutoff sweep.
         lda #$1f
         sta $d418
 
-        // V1 mute logic: while beat_count < BUILDUP_BEAT, force V1
-        // control to 0 (silent). Once we're in the build-up window
-        // we stop overwriting — music_play's next bass-note write
-        // wakes V1 back up with intro's AD/SR envelope intact.
+        // V1 mute / build-up
         lda zp_beat_count
         cmp #BUILDUP_BEAT
         bcs !buildup+
-
-        // Still in pad-only phase — kill V1.
         lda #$00
         sta $d404
         jmp !beat+
-
 !buildup:
-        // Build-up phase — V1 plays naturally (no mute). Sweep the
-        // LP filter cutoff every frame so the closing tension is
-        // smooth, not stepped per beat. Route V1 (bass) through LP
-        // so its return swells in.
-        lda #$01                  // V1 routed to filter (bit 0 = V1 → filter)
-        sta $d417                 // resonance=0 (clean), routing=V1
+        lda #$01
+        sta $d417
         lda zp_filt_cut
-        sta $d416                 // cutoff hi (8-bit, lo nibble of $D415 left 0)
-
+        sta $d416
 !beat:
-        // ---- beat counter (script transition + filter sweep step) ----
         inc zp_beat_phase
         lda zp_beat_phase
         cmp #BEAT_PERIOD
         bcc !no_beat+
         lda #0
         sta zp_beat_phase
-        inc zp_beat_count         // pefchain transitions when this hits $20
+        inc zp_beat_count
 
-        // On each beat in build-up, ramp the filter cutoff up.
+        // rotate bar colours on beat
+        inc zp_bar_clr_ofs
+
         lda zp_beat_count
         cmp #BUILDUP_BEAT
         bcc !no_beat+
-        cmp #BUILDUP_BEAT         // first build-up beat: init cutoff
+        cmp #BUILDUP_BEAT
         bne !ramp+
         lda #FILT_CUT_LO
         sta zp_filt_cut
         jmp !no_beat+
-!ramp:
-        lda zp_filt_cut
+!ramp:  lda zp_filt_cut
         clc
         adc #FILT_CUT_STEP
-        bcs !sat+                 // overflow → saturate at $FF
+        bcs !sat+
         sta zp_filt_cut
         jmp !no_beat+
-!sat:
-        lda #$ff
+!sat:   lda #$ff
         sta zp_filt_cut
 !no_beat:
+
+        // plasma — advance phase, update half the rows
+        inc zp_plasma_phs
+
+        lda zp_plasma_tgl
+        and #1
+        bne !odd+
+        lda #0
+        sta row_base
+        lda #13
+        sta row_cnt
+        jmp !go+
+!odd:   lda #1
+        sta row_base
+        lda #12
+        sta row_cnt
+!go:
+        ldx row_base
+!row_lp:
+        jsr write_plasma_row
+        inx
+        inx
+        dec row_cnt
+        bne !row_lp-
+
+        inc zp_plasma_tgl
+
+        // chain to first bar IRQ
+        lda #$1b
+        sta VIC_CTRL1
+        lda bar_rasters
+        sta VIC_RASTER
+        lda #<bar_chain_0
+        sta IRQ_VEC
+        lda #>bar_chain_0
+        sta IRQ_VEC + 1
 
         pla
         tay
@@ -183,10 +246,175 @@ interrupt:
 
 
 //==================================================================
-// fadeout — script transitions on f6 = $20. Just returns carry set so
-// pefchain moves on. Leave SID state alone so the build-up's filter
-// sweep + bass momentum carries straight into greets.
+// Bar IRQ chain — 6 unrolled handlers
+//==================================================================
+bar_chain_0:
+        lda bar_base_colors+0
+        clc
+        adc zp_bar_clr_ofs
+        and #$0f
+        sta VIC_BORDER
+        lda #$1b
+        sta VIC_CTRL1
+        lda bar_rasters+1
+        sta VIC_RASTER
+        lda #<bar_chain_1
+        sta IRQ_VEC
+        lda #>bar_chain_1
+        sta IRQ_VEC+1
+        lda #$ff
+        sta VIC_IRQ
+        rti
+
+bar_chain_1:
+        lda bar_base_colors+1
+        clc
+        adc zp_bar_clr_ofs
+        and #$0f
+        sta VIC_BORDER
+        lda #$1b
+        sta VIC_CTRL1
+        lda bar_rasters+2
+        sta VIC_RASTER
+        lda #<bar_chain_2
+        sta IRQ_VEC
+        lda #>bar_chain_2
+        sta IRQ_VEC+1
+        lda #$ff
+        sta VIC_IRQ
+        rti
+
+bar_chain_2:
+        lda bar_base_colors+2
+        clc
+        adc zp_bar_clr_ofs
+        and #$0f
+        sta VIC_BORDER
+        lda #$1b
+        sta VIC_CTRL1
+        lda bar_rasters+3
+        sta VIC_RASTER
+        lda #<bar_chain_3
+        sta IRQ_VEC
+        lda #>bar_chain_3
+        sta IRQ_VEC+1
+        lda #$ff
+        sta VIC_IRQ
+        rti
+
+bar_chain_3:
+        lda bar_base_colors+3
+        clc
+        adc zp_bar_clr_ofs
+        and #$0f
+        sta VIC_BORDER
+        lda #$1b
+        sta VIC_CTRL1
+        lda bar_rasters+4
+        sta VIC_RASTER
+        lda #<bar_chain_4
+        sta IRQ_VEC
+        lda #>bar_chain_4
+        sta IRQ_VEC+1
+        lda #$ff
+        sta VIC_IRQ
+        rti
+
+bar_chain_4:
+        lda bar_base_colors+4
+        clc
+        adc zp_bar_clr_ofs
+        and #$0f
+        sta VIC_BORDER
+        lda #$1b
+        sta VIC_CTRL1
+        lda bar_rasters+5
+        sta VIC_RASTER
+        lda #<bar_chain_5
+        sta IRQ_VEC
+        lda #>bar_chain_5
+        sta IRQ_VEC+1
+        lda #$ff
+        sta VIC_IRQ
+        rti
+
+bar_chain_5:
+        lda bar_base_colors+5
+        clc
+        adc zp_bar_clr_ofs
+        and #$0f
+        sta VIC_BORDER
+        lda #$1b
+        sta VIC_CTRL1
+        lda bar_rasters+6
+        sta VIC_RASTER
+        lda #<bar_chain_end
+        sta IRQ_VEC
+        lda #>bar_chain_end
+        sta IRQ_VEC+1
+        lda #$ff
+        sta VIC_IRQ
+        rti
+
+bar_chain_end:
+        lda #$00
+        sta VIC_BORDER
+        lda #$ff
+        sta VIC_RASTER
+        lda #<interrupt
+        sta IRQ_VEC
+        lda #>interrupt
+        sta IRQ_VEC + 1
+        lda #$ff
+        sta VIC_IRQ
+        rti
+
+
+//==================================================================
+// fadeout
 //==================================================================
 fadeout:
         sec
         rts
+
+
+//==================================================================
+// Tables
+//==================================================================
+
+// Wave: two overlaid sines, 0..15
+.align 256
+wave:
+.for (var i = 0; i < 256; i++) {
+        .var s1 = 7.5 + 7.5 * sin(i * 2 * PI / 256)
+        .var s2 = 7.5 + 7.5 * sin(i * 4 * PI / 256)
+        .byte floor((s1 + s2) * 0.5 + 0.5)
+}
+
+// Row stagger — each row's phase offset in the wave
+row_offset:
+.for (var r = 0; r < 25; r++) {
+        .byte floor(r * 197 / 25) & 255
+}
+
+// Row color RAM base addresses (precomputed)
+row_cr_lo:
+.for (var r = 0; r < 25; r++) {
+        .byte <($d800 + r * 40)
+}
+row_cr_hi:
+.for (var r = 0; r < 25; r++) {
+        .byte >($d800 + r * 40)
+}
+
+// Bar raster positions
+bar_rasters:
+.byte 32, 72, 112, 152, 192, 232
+
+// Bar base colours (0-15, offset by zp_bar_clr_ofs each beat)
+bar_base_colors:
+.byte 2, 4, 5, 7, 3, 6
+
+// Work area (in code space, not ZP)
+row_base: .byte 0
+row_cnt:  .byte 0
