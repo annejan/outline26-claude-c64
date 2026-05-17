@@ -48,6 +48,27 @@
 .const N_CREDIT_ROWS = 36        // KEEP IN SYNC with the .text blocks below
 .const FADE_DONE     = 99        // fade-in completes after 99 frames (~2 sec @50Hz)
 .const TEXT_REVEAL   = FADE_DONE // colour RAM flips from black to the gradient at this fade tick
+.const SCROLL_TICK_MASK = $03    // tick yscroll every (mask+1) frames — $03 = every 4 frames
+                                 //   → 32 frames/row × 36 rows ≈ 23 sec per full credit cycle.
+                                 //   Bump to $07 for ~46 sec, drop to $01 for ~11 sec.
+
+// ----- end music tables / state -----
+.const zp_mu_step    = $f4       // music step 0..127 (lead pattern index; chord = step & 31)
+.const zp_mu_frame   = $f3       // within-step frame counter, 0..END_STEP_FRAMES-1
+.const END_STEP_FRAMES = 24      // 4× slower than main's 6 — chord lasts ~3.8s, full progression ~15s
+.const NOTE_REST     = $FF
+
+// Music data lives in main.asm's $1000-$125D segment which is still
+// resident in RAM when end loads (end's chunk is $3000+). Addresses
+// copied from parts/main/main.sym — bump these if main's Music
+// segment layout shifts. Note: end_test.asm (standalone wrapper)
+// does NOT contain these tables, so end_test cannot play music
+// without running through the full demo first.
+.const MAIN_SID_FREQ_LO    = $1000
+.const MAIN_SID_FREQ_HI    = $103C
+.const MAIN_CHORD_PER_STEP = $1078
+.const MAIN_ARP_NOTES      = $1098
+.const MAIN_LEAD_PATTERN   = $10C8
 
 
 //==================================================================
@@ -518,60 +539,13 @@ start:
         sta zp_wrap_pending
         jsr push_next_credit_row
 
-        // --- SID drone: sustained Am chord (A2 + C3 + E3) with filter ---
-        // Frequencies from main.asm sid_freq_lo/hi table (PAL).
-        // Voice 1: A2, pulse 12.5%
-        lda #$52                     // freq lo A2 (main.asm index 33)
-        sta $d400
-        lda #$07                     // freq hi A2
-        sta $d401
-        lda #$00
-        sta $d402                     // pulse lo
-        lda #$08                     // pulse hi = 12.5%
-        sta $d403
-        lda #$41                     // gate + pulse, hold
-        sta $d404
-        lda #$08                     // AD: attack=0, decay=8
-        sta $d405
-        lda #$f0                     // SR: sustain=15, release=0
-        sta $d406
-        // Voice 2: C3, pulse 25%
-        lda #$b4                     // freq lo C3 (main.asm index 36)
-        sta $d407
-        lda #$08                     // freq hi C3
-        sta $d408
-        lda #$00
-        sta $d409
-        lda #$04
-        sta $d40a                    // pulse 25%
-        lda #$41
-        sta $d40b
-        lda #$08
-        sta $d40c
-        lda #$f0
-        sta $d40d
-        // Voice 3: E3, pulse 25%
-        lda #$fc                     // freq lo E3 (main.asm index 40)
-        sta $d40e
-        lda #$0a                     // freq hi E3
-        sta $d40f
-        lda #$00
-        sta $d410
-        lda #$04
-        sta $d411
-        lda #$41
-        sta $d412
-        lda #$08
-        sta $d413
-        lda #$f0
-        sta $d414
-        // Master volume: fades in with zp_fade (ramped by irq_top each frame).
-        // Route V1+V2+V3 through filter (LP mode), start vol=0.
-        lda #%00000111              // route voices 1+2+3 to filter
-        sta $d417
-        lda #$00                    // LP filter mode, vol = 0 (fade in)
-        sta $d418
-        // Filter cutoff sweeps via zp_frame in irq_top.
+        // --- SID: slow meandering version of main's chord+lead progression ---
+        // main.asm leaves its music tables resident at $1000-$125D after
+        // the end-part load (end writes $3000+ only). end_music_init
+        // sets pad-flavoured ADSR + LP filter; end_music_play (called
+        // from irq_top) reads main's chord_per_step / arp_notes /
+        // lead_pattern / sid_freq tables at a quarter the main tempo.
+        jsr end_music_init
 
         // Raster IRQ chain: irq_top@$00 (yscroll + maybe row-shift),
         // then irq_bars@$32..$f8 for the side rainbow.
@@ -618,57 +592,34 @@ irq_top:
         jsr reveal_text
 !fade_done:
 
-        // --- yscroll: compute first so CTRL1 is stable BEFORE display ---
-        // Previously this block ran AFTER scroll_rows_up, so on shift
-        // frames CTRL1 got updated ~line 220 (mid-screen). Badlines
-        // before the update used the OLD yscroll, after used the NEW;
-        // the 0..7-line gap between old-badline-window and new-badline-
-        // window left rows stuck on the same char pointer, repeating
-        // the row across that strip. Setting CTRL1 here (line ~3)
-        // makes badlines consistent for the entire frame.
+        // --- yscroll: tick on every (SCROLL_TICK_MASK+1)th frame. ---
+        // CTRL1 is always written before display so badlines stay
+        // stable for the entire frame; the SCROLL_TICK_MASK gate just
+        // controls how often we DEC yscroll (slows the credit roll).
+        ldx #0
+        stx zp_wrap_pending     // default no wrap this frame
+        lda zp_frame
+        and #SCROLL_TICK_MASK
+        bne !skip_tick+
         lda zp_yscroll
         sec
         sbc #1
-        bpl !no_wrap+
-        // Wrap: flag scroll_rows_up to run later, reset yscroll to 7.
+        bpl !y_ok+
+        // wrap
         ldx #1
         stx zp_wrap_pending
         lda #7
-        bne !apply_y+           // bne always taken (A=7)
-!no_wrap:
-        ldx #0
-        stx zp_wrap_pending
-!apply_y:
-        sta zp_yscroll
+!y_ok:  sta zp_yscroll
+!skip_tick:
+        lda zp_yscroll
         ora #$18                // DEN + RSEL + BMM=0 + ECM=0 + yscroll
         sta VIC_CTRL1
 
-        // --- SID: master volume fades in with zp_fade ---
-        // Volume 0..$0f. $d418 bit 4 enables low-pass filter — voices
-        // are routed to filter via $d417 in setup, so we need LP here
-        // for the filter cutoff sweep below to actually be audible.
-        lda zp_fade
-        lsr
-        lsr                     // /4, reaches $0f at fade=60 (~1.2s)
-        cmp #$10
-        bcc !vol_ok+
-        lda #$0f
-!vol_ok:ora #$10                // bit 4 = LP filter enable
-        sta $d418
-
-        // --- Filter cutoff sweep ---
-        lda zp_frame
-        lsr
-        lsr
-        lsr                     // 0..31 slow tick
-        and #$07                // $d416 hi cutoff = bits 0-2
-        sta $d416
-        lda #$20
-        sta $d415               // cutoff lo fixed, hi sweeps
+        // --- SID: slow chord/melody progression (volume + voices) ---
+        jsr end_music_play
 
         // --- Text wave: $D016 xscroll wobble ---
-        // CSEL=0 (38-col), xscroll 0..7 from a sine table.  The entire
-        // text area rocks left/right for a gentle DYCP-lite feel.
+        // CSEL=0 (38-col), xscroll 0..7 from a sine table.
         lda zp_frame
         lsr                     // slower wave (every 2 frames)
         tax
@@ -677,10 +628,6 @@ irq_top:
         sta VIC_CTRL2
 
         // --- Wrap action: shift screen up + pull next credit line ---
-        // Runs AFTER CTRL1 is settled. The scroll_rows_up row-major
-        // writes still race the beam (row K written by line ~12+9K,
-        // VIC reads row K at line $32+yscroll+8K → margin 22+ for the
-        // worst row even with new yscroll=7).
         lda zp_wrap_pending
         beq !skip_wrap+
         jsr scroll_rows_up
@@ -798,6 +745,167 @@ push_next_credit_row:
 
 
 //==================================================================
+// end_music_init — soft pad sound, LP filter, all 3 voices routed.
+// V1/V2 triangle for warm pad, V3 pulse for arp shimmer.
+//==================================================================
+end_music_init:
+        // Clear SID
+        ldx #$1c
+        lda #0
+!c:     sta $d400,x
+        dex
+        bpl !c-
+
+        // V1 (bass pad): triangle, slow attack, long release
+        lda #$71                  // attack=7 (~120ms), decay=1
+        sta $d405
+        lda #$fa                  // sustain=15, release=10 (~750ms)
+        sta $d406
+
+        // V2 (lead pad): triangle, slow attack
+        lda #$51                  // attack=5, decay=1
+        sta $d40c
+        lda #$f9                  // sustain=15, release=9
+        sta $d40d
+
+        // V3 (arp): pulse 25%, quick attack
+        lda #$00
+        sta $d410                 // pulse lo
+        lda #$04
+        sta $d411                 // pulse hi (~25%)
+        lda #$11                  // attack=1, decay=1
+        sta $d413
+        lda #$f8                  // sustain=15, release=8
+        sta $d414
+
+        // Filter: all 3 voices routed, low resonance
+        lda #%00000111
+        sta $d417
+        // Cutoff mid-range; static (no sweep needed for pad)
+        lda #$00
+        sta $d415                 // cutoff lo
+        lda #$20
+        sta $d416                 // cutoff hi (~mid)
+
+        // Master vol = 0 (fade-in via irq_top's zp_fade), LP enabled
+        lda #$10
+        sta $d418
+
+        // Reset music step counters
+        lda #0
+        sta zp_mu_step
+        sta zp_mu_frame
+        rts
+
+
+//==================================================================
+// end_music_play — called once per frame from irq_top. Plays a slow
+// meandering version of main's chord progression + lead melody.
+//
+// - Master volume tracks zp_fade (0 → $0f over the first ~1.2s).
+// - V3 arp: cycles through the current chord's 4 notes, changing
+//   every 4 frames inside each step (so 6 arp swaps per step).
+// - V1 bass: chord root, re-triggered each step (every END_STEP_FRAMES
+//   frames). Long release lets it bleed into the next note for pad.
+// - V2 lead: lead_pattern[mu_step], re-triggered each step. NOTE_REST
+//   in the pattern releases the gate so longer rests sound natural.
+//==================================================================
+end_music_play:
+        // --- master volume fade-in ---
+        lda zp_fade
+        lsr
+        lsr                       // /4, reaches $0f at fade=60 (~1.2s)
+        cmp #$10
+        bcc !vol_ok+
+        lda #$0f
+!vol_ok:ora #$10                  // bit 4 = LP filter on
+        sta $d418
+
+        // --- V3 arp: change freq every 4 frames within step ---
+        lda zp_mu_frame
+        and #$03
+        bne !no_arp+
+
+        // chord_idx = chord_per_step[mu_step & 31]
+        lda zp_mu_step
+        and #$1f
+        tax
+        lda MAIN_CHORD_PER_STEP,x
+        asl
+        asl                       // chord_idx * 4 (= arp group base)
+        sta zp_tmp
+
+        // arp_idx = (mu_frame / 4) & 3
+        lda zp_mu_frame
+        lsr
+        lsr
+        and #$03
+        clc
+        adc zp_tmp                // arp group base + arp index
+        tax
+        lda MAIN_ARP_NOTES,x      // note number
+        tay
+        lda MAIN_SID_FREQ_LO,y
+        sta $d40e
+        lda MAIN_SID_FREQ_HI,y
+        sta $d40f
+        lda #$41                  // pulse + gate (idempotent re-arm)
+        sta $d412
+!no_arp:
+
+        // --- step boundary ---
+        inc zp_mu_frame
+        lda zp_mu_frame
+        cmp #END_STEP_FRAMES
+        bne !done+
+        lda #0
+        sta zp_mu_frame
+        inc zp_mu_step
+        lda zp_mu_step
+        and #$7f                  // wrap at 128 (lead pattern length)
+        sta zp_mu_step
+
+        // --- V1 bass: chord root ---
+        and #$1f                  // chord index
+        tax
+        lda MAIN_CHORD_PER_STEP,x
+        asl
+        asl                       // chord*4
+        tax
+        lda MAIN_ARP_NOTES,x      // root note (first arp entry of chord)
+        tay
+        lda MAIN_SID_FREQ_LO,y
+        sta $d400
+        lda MAIN_SID_FREQ_HI,y
+        sta $d401
+        lda #$10                  // triangle, gate off
+        sta $d404
+        lda #$11                  // triangle, gate on (re-trigger)
+        sta $d404
+
+        // --- V2 lead: lead_pattern[mu_step] (or rest) ---
+        ldx zp_mu_step
+        lda MAIN_LEAD_PATTERN,x
+        cmp #NOTE_REST
+        beq !v2_rest+
+        tay
+        lda MAIN_SID_FREQ_LO,y
+        sta $d407
+        lda MAIN_SID_FREQ_HI,y
+        sta $d408
+        lda #$10
+        sta $d40b
+        lda #$11
+        sta $d40b
+        jmp !done+
+!v2_rest:
+        lda #$10                  // triangle, gate off → release tail
+        sta $d40b
+!done:
+        rts
+
+
+//==================================================================
 // wave_xscroll — 256-byte sine for $D016 horizontal wobble.
 // CSEL=0 (38-column), xscroll 0..7. The text rocks smoothly left/right.
 // Amplitude centred on 3.5 so the rounded range is exactly 0..7 with
@@ -873,26 +981,27 @@ credit_text:
         row("                                        ")
         row("                                        ")
         row("                                        ")
-        row("              defeest presents          ")
-        row("                                        ")
-        row("              outline 2026 demo         ")
+        row("              you were watching         ")
+        row("                  deFEEST               ")
+        row("              X2026                     ")
         row("                                        ")
         row("                                        ")
         row("                                        ")
         row("           code                         ")
-        row("              anne jan brouwer          ")
+        row("              Anus                      ")
         row("              claude opus 4.7           ")
         row("                                        ")
         row("           music                        ")
-        row("              hand-written 3-voice sid  ")
+        row("              AI coded 3-voice sid      ")
         row("                                        ")
         row("           graphics                     ")
         row("              defeest.nl                ")
         row("                                        ")
         row("           tools                        ")
+        row("              claude code               ")
         row("              kickassembler             ")
         row("              spindle 2.3               ")
-        row("              vice x64sc                ")
+        row("              VICE MCP                  ")
         row("                                        ")
         row("           greetings                    ")
         row("              outline 2026 crew         ")
