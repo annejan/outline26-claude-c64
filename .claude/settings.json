@@ -5,7 +5,10 @@
       "Bash(gh search *)",
       "Bash(arm-none-eabi-nm *)",
       "Bash(arm-none-eabi-size *)",
-      "Bash(cargo info *)"
+      "Bash(cargo info *)",
+      "Bash(cargo check *)",
+      "Bash(cargo clippy *)",
+      "Bash(clang-format --dry-run *)"
     ]
   }
 }

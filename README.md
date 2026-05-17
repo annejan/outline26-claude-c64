@@ -3,24 +3,73 @@
 A C64 demo for the Outline 2026 demoparty, written together with Claude.
 KickAssembler 6510, tested on VICE x64sc (PAL).
 
+## How this was built
+
+Pair-coded with Claude in a live editor / emulator loop. The general
+shape of the process:
+
+- **Tight feedback cycle.** Every change rebuilds the `.d64` (`./build.sh`)
+  and autostarts it in a custom VICE-MCP build (`./run-mcp.sh`). Claude
+  drives VICE through the MCP server — screenshots, register reads,
+  memory dumps, breakpoints — so visual + cycle-level verification is
+  part of normal editing, not a separate "test step". When something
+  freezes the demo, the first debug move is usually `vice.registers.get`
+  + `vice.memory.read` to see exactly which 12 bytes got corrupted and
+  why (see e.g. the `feedback-kickass-hi-byte-precedence` memory note —
+  a `>label + N` parser-precedence trap that walked DEFEEST screencodes
+  through all 64 KB of memory).
+- **Claude keeps a persistent memory** of the project's anchor commit,
+  toolchain quirks, raster-bar timing rules, sprite write windows,
+  Spindle script byte-counts, KA syntax gotchas, etc. — so re-discovered
+  knowledge from session N is available in session N+1 without rereading
+  the entire codebase.
+- **Codebase64 is the reference manual.** Whenever a new effect is
+  designed (FLD, raster bars, palette fades, water ripple, etc.) the
+  first stop is the [Codebase64 VIC effects index][cb64] and the
+  [6502/6510 math routines][cb64math]. Cycle counts and edge-case
+  warnings come from there; the code is then specialised to the
+  particular demo memory layout.
+- **Spindle 3.1 / pefchain** does all the linking and background-loading.
+  Each part is its own `.pef` with an `EFO2` header that declares which
+  memory pages it owns, what its `setup`/`interrupt`/`fadeout` entry
+  points are, and which zero-page bytes it touches. Pefchain runs an
+  NMI-driven loader during one part to stream the next part into RAM,
+  so transitions are seamless when memory layouts don't collide.
+- **Git is the prompts log.** Each meaningful change is committed and
+  pushed (durable authorization — no per-commit confirmation), so the
+  log of "what we decided and when" lives in commit messages rather
+  than a separate journal.
+
+[cb64]: https://codebase.c64.org/doku.php?id=vic:demo_programming
+[cb64math]: https://codebase.c64.org/doku.php?id=base:6502_6510_maths
+
 ## What's in the demo
 
-Three sequenced parts loaded by [Spindle](https://hd0.linusakesson.net/spindle.php):
+Four parts loaded by [Spindle 3.1][spindle] via pefchain. Each one
+auto-advances on a timer / state condition — no space key, no manual
+trigger. The end card is the only "stay" loop.
+
+[spindle]: https://hd0.linusakesson.net/spindle.php
 
 ### Part 1 — `parts/screenfill/screenfill.asm` (loading screen)
 
-- Walks a "DEFEEST" string across the whole 40×25 screen, alternating
-  upper/lower case per cell via a rotating bit-mask.
-- Holds for ~3 sec running a **water-ripple colour cycle**: a precomputed
-  1024-byte radial-distance map indexes a 16-entry palette shifted by a
-  phase counter each frame, so concentric rings appear to expand outward
-  from the centre.
-- Last second of hold snaps bg+border $06 → $00 (no `$0B` intermediate;
-  on new-VIC `$0B` is brighter than blue, see [COLFADE v2](https://codebase.c64.org/lib/exe/fetch.php?media=vic:colfade_v2.pdf)) and walks the ripple
-  palette through a hue-stable fadetab to black.
-- Hands off to main with `jsr $200 / jmp $0810`.
+- **Animated radial DEFEEST bloom.** Setup precomputes a 1024-byte
+  `char_table` (each cell's final DEFEEST character, picked by a rotating
+  bit-mask walk over upper/lower case). Interrupt then reveals the text
+  ring-by-ring: every 6 frames, all cells whose `dist_table` value
+  equals the current `RADIUS` get copied from `char_table` into screen
+  RAM. 16 rings ≈ 1.9 s of bloom.
+- **Water-ripple colour cycle.** After the fill, ~3 s of palette cycling
+  on colour RAM. The same 1024-byte radial-distance map now indexes a
+  16-entry palette shifted by a phase counter each frame, so concentric
+  rings appear to expand outward from centre.
+- **Fade to black.** Last ~1.7 s snaps bg+border `$06 → $00` (no `$0B`
+  intermediate; on new-VIC `$0B` is brighter than blue, see
+  [COLFADE v2](https://codebase.c64.org/lib/exe/fetch.php?media=vic:colfade_v2.pdf))
+  and walks the ripple palette through a hue-stable fadetab to black.
+- Transition: pefchain advances when `$06` (= `HOLDCNT`) hits 0.
 
-### Part 2 — `parts/main/main.asm` (the demo)
+### Part 2 — `parts/intro/intro.asm` (the demo)
 
 - **Open top/bottom borders** via the canonical HCL polling trick
   (`$d011` 24/25-row toggle in IRQs at line `$f9` and `$01`).
@@ -40,6 +89,7 @@ Three sequenced parts loaded by [Spindle](https://hd0.linusakesson.net/spindle.p
     advance walks `zp_text_ptr` **backwards** through block 2 so the
     source still reads forward
   - mode 2 — zig-zag (even pixel rows shift left, odd rows shift right)
+
   1 px/frame via 40-cell ROL/ROR chains. Per-cell rainbow colour-RAM
   cycle every frame so the letters flow through hues. Sprites 0-2 have
   their foreground-priority bit set, so the rainbow strokes overdraw
@@ -55,8 +105,10 @@ Three sequenced parts loaded by [Spindle](https://hd0.linusakesson.net/spindle.p
   are disabled in `irq_close` to hide their Y+256 wrap-around duplicates.
 - **Custom 3-voice SID music** — bass pulse, lead pulse, sustained arp
   over a 32-step Am-Em-F-G chord progression with a 128-step lead melody.
-- **Sequenced intro** (driven by `zp_intro`, ticks at 25 Hz, saturates
-  at `$ff`):
+  Music tables are resident at `$1000-$125D` so later parts can call
+  intro's `my_music_play` to keep the theme drifting through transitions.
+- **Sequenced intro/outro** (driven by `zp_intro`/`zp_outro`, 25 Hz tick,
+  saturating at `$ff`):
 
   | tick | const         | event                                   |
   | ---- | ------------- | --------------------------------------- |
@@ -66,30 +118,33 @@ Three sequenced parts loaded by [Spindle](https://hd0.linusakesson.net/spindle.p
   | 200  | `T_LOGO`      | logo wipe-reveal begins (40 columns)    |
   | 240  | `T_SCROLLER`  | scroller fade-in; V3 arp gate fires     |
 
-  Sprites cascade in one-at-a-time (top 3 → mid 3 → bot 2). SID master
-  volume ramps from `$00` to `$0f` over the intro window. V2 lead gates
-  at `T_BALLS`.
+  Outro reverses it: scroller drain, logo un-wipe, rasterbars off,
+  sprite cascade out (7 → 0), then `zp_outro` hits `T_OUTRO_DONE = $f0`
+  and pefchain advances.
 
-- **Sequenced outro** (`zp_outro`, armed when `scroll_text` hits `$ff`,
-  same 25 Hz tick):
+### Part 2.5 — `parts/interlude/interlude.asm` (breather)
 
-  | tick | const            | event                                |
-  | ---- | ---------------- | ------------------------------------ |
-  |   0  |                  | scroller advance frozen; row drains  |
-  |  40  | `T_OUTRO_LOGO`   | logo un-wipes (column 39 → 0)        |
-  | 120  | `T_OUTRO_BARS`   | rasterbars off                       |
-  | 176  | `T_OUTRO_BALLS`  | sprite 7 despawns (then 6, 5, ... 0) |
-  | 240  | `T_OUTRO_DONE`   | hand-off to part 3 via `jsr $200`    |
+- Tiny (~130 bytes at `$8000`). Black screen, no visuals — just music.
+- Calls intro's resident `my_music_play` at `$11AE` so the chord +
+  lead drift continues through this part. V1 (bass) is muted every
+  frame to give the lead some room — pad-only feel.
+- Beat counter at `$f6` ticks every 24 frames (~125 BPM). After 32
+  beats (~15 s) pefchain advances to the end credits.
+- Inherits intro's music pages (`'I', $10, $12` in the EFO header) so
+  pefchain doesn't overwrite the resident tables.
 
-  SID master volume fades back to `$00` over the first ~5 sec of the
-  outro window (`vol_intro - vol_outro`, clamped).
+### Part 3 — `parts/end/end.asm` (credit roll)
 
-### Part 3 — `parts/end/end.asm` (placeholder)
-
-109-byte text-mode placeholder. Drops `"to be continued..."` centered on
-black, halts. Loads at `$c000` (the dead screenfill region) so main's
-code at `$0810` survives the load and the trailing `jmp $c000` fires
-into the new entry point.
+- Custom font copied into bank 0, scrolled smoothly bottom-to-top via
+  a row-major `scroll_rows_up` (full 40-byte row writes per chunk so VIC
+  never reads mid-row torn cells).
+- Per-row gradient colours; "deFEEST" header pulses through a brightness
+  ramp.
+- Side rasterbars on the left and right border columns.
+- Plays the intro chord/lead theme via referenced constants
+  (`MAIN_SID_FREQ_LO` = `$1000`, etc.) — same theme, slower, with PWM
+  on V3 + a gentle filter sweep for arp shimmer.
+- Transition: `stay` — this part runs forever.
 
 50 Hz PAL, locked.
 
@@ -126,19 +181,25 @@ at `setup` / `interrupt` / `fadeout` routines plus memory-page tags.
 
 ```
 parts/screenfill/screenfill.pef     06 = 00
-parts/main/main.pef                 f6 = f0
+parts/intro/intro.pef               f6 = f0
+parts/interlude/interlude.pef       f6 = 20
 parts/end/end.pef                   stay
 ```
 
 Each line: `<pef-file> <transition-condition>`. Pefchain background-
 loads the next part DURING the current one (via an NMI-driven loader)
 so transitions are seamless when memory layouts don't collide. When
-they do (main and end both use pages `$20-$47`), pefchain inserts a
-tiny blank part for the load — visible in `./build.sh` output. Each
-condition tells pefchain when to advance:
+they do (e.g. intro claims pages `$04-$09` and screenfill writes to
+`$04-$07` for its screen RAM), pefchain inserts a tiny blank-load chunk
+during the transition — visible in `./build.sh` output's sector map.
+
+Each condition tells pefchain when to advance:
 
 - `06 = 00` — wait for zero-page `$06` (= screenfill's HOLDCNT) to hit 0.
-- `f6 = f0` — wait for `$f6` (= main's zp_outro) to reach `T_OUTRO_DONE`.
+- `f6 = f0` — wait for `$f6` (= intro's `zp_outro`) to reach `T_OUTRO_DONE`.
+- `f6 = 20` — wait for `$f6` (= interlude's beat counter) to reach 32.
+  The script reuses the same byte that intro wrote to, repurposed by
+  interlude's setup (which resets it to 0).
 - `stay`    — never advance (end runs forever).
 
 Spindle 3.1's resident loader sits at `$0200-$02FF` (+ buffer page
@@ -160,7 +221,7 @@ For each part the build pipeline is:
 Then `pefchain pefchain_script -o outline-64.d64` links the whole
 thing.
 
-## Main-demo memory layout (VIC bank 0)
+## Intro memory layout (VIC bank 0)
 
 | Range          | Contents                                       |
 | -------------- | ---------------------------------------------- |
@@ -195,6 +256,8 @@ thing.
 
 ## Credits
 
-- Music: hand-written 3-voice SID jam (bass + lead + arp)
+- Music: hand-written 3-voice SID jam (bass + lead + arp), drifts
+  through intro → interlude → end
 - Logo: defeest.nl
 - Assembly: Anne Jan Brouwer with Claude (Anthropic) Opus 4.7
+- Thanks: Claude Code, opencode, and an endless supply of terrible ideas

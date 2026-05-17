@@ -45,7 +45,7 @@
 .const zp_fade     = $fb         // fade-in counter, 0..FADE_DONE, ticks each frame; drives SID volume + text reveal
 .const zp_wrap_pending = $fc     // set non-zero in irq_top when yscroll wraps; consumed later to fire scroll_rows_up
 
-.const N_CREDIT_ROWS = 36        // KEEP IN SYNC with the .text blocks below
+.const N_CREDIT_ROWS = 44        // KEEP IN SYNC with the .text blocks below
 .const FADE_DONE     = 99        // fade-in completes after 99 frames (~2 sec @50Hz)
 .const TEXT_REVEAL   = FADE_DONE // colour RAM flips from black to the gradient at this fade tick
 .const SCROLL_TICK_MASK = $03    // tick yscroll every (mask+1) frames — $03 = every 4 frames
@@ -55,15 +55,15 @@
 // ----- end music tables / state -----
 .const zp_mu_step    = $f4       // music step 0..127 (lead pattern index; chord = step & 31)
 .const zp_mu_frame   = $f3       // within-step frame counter, 0..END_STEP_FRAMES-1
-.const END_STEP_FRAMES = 24      // 4× slower than main's 6 — chord lasts ~3.8s, full progression ~15s
+.const END_STEP_FRAMES = 24      // 4× slower than intro's 6 — chord lasts ~3.8s, full progression ~15s
 .const NOTE_REST     = $FF
 
-// Music data lives in main.asm's $1000-$125D segment which is still
-// resident in RAM when end loads (end's chunk is $3000+). Addresses
-// copied from parts/main/main.sym — bump these if main's Music
-// segment layout shifts. Note: end_test.asm (standalone wrapper)
-// does NOT contain these tables, so end_test cannot play music
-// without running through the full demo first.
+// Music data lives in intro.asm's $1000-$125D segment which is still
+// resident in RAM when end loads (end's chunk is $3000+). Pefchain
+// inherits intro's music pages via 'I',$10,$12 in interlude's EFO
+// header — they survive through interlude and into end. Addresses
+// copied from parts/intro/intro.sym — bump these if intro's Music
+// segment layout shifts.
 .const MAIN_SID_FREQ_LO    = $1000
 .const MAIN_SID_FREQ_HI    = $103C
 .const MAIN_CHORD_PER_STEP = $1078
@@ -543,10 +543,10 @@ setup:
         jsr push_next_credit_row
 
         // --- SID: slow meandering chord/lead progression ---
-        // main.asm leaves its music tables resident at $1000-$125D
+        // intro.asm leaves its music tables resident at $1000-$125D
         // after the end-part load (end writes $3000+ only).
         // end_music_init sets pad-flavoured ADSR + LP filter;
-        // end_music_play (called from interrupt) reads main's
+        // end_music_play (called from interrupt) reads intro's
         // chord_per_step / arp_notes / lead_pattern / sid_freq tables
         // at a quarter the main tempo.
         jsr end_music_init
@@ -1018,16 +1018,23 @@ credit_text:
         row("                                        ")
         row("           tools                        ")
         row("              claude code               ")
+        row("              opencode                  ")
         row("              kickassembler             ")
         row("              spindle 3.1               ")
         row("              vice-mcp                  ")
         row("                                        ")
+        row("           documentation                ")
+        row("              codebase.c64.org          ")
+        row("              spindle v3 manual         ")
+        row("                                        ")
         row("           greetings                    ")
         row("              outline 2026 crew         ")
-        row("              codebase64                ")
         row("              linus akesson             ")
         row("              mads nielsen              ")
         row("                                        ")
+        row("           thanks                       ")
+        row("              cloude                    ")
+        row("              and more terrible ideas   ")
         row("                                        ")
         row("              thanks for watching       ")
         row("                                        ")
