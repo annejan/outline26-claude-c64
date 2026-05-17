@@ -26,6 +26,7 @@ build_part() {
 
 build_part parts/screenfill screenfill
 build_part parts/main       main
+build_part parts/end        end
 
 echo ">>> baking disk image"
 ( cd "$ROOT" && "$SPIN" -vv -o outline-64.d64 script )

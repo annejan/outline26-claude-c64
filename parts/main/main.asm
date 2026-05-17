@@ -58,6 +58,8 @@
 .const zp_msb       = $fa
 .const zp_intro     = $f8       // intro tick counter (ticks every 2 frames), saturates at $ff
 .const zp_scroll_mode = $f7     // 0=left scroll, 1=right scroll, 2=zig-zag (alternating rows)
+.const zp_outro     = $f6       // outro tick counter; 0 = inactive, otherwise ticks every 2 frames once $ff in scroll_text triggers the ending
+.const zp_active_count = $f5    // cached number of active ball sprites (0..8); computed once per frame in irq_open, read by irq_close
 
 // Intro phase thresholds (in zp_intro ticks; 2 frames per tick @ 50 Hz so 1 tick = 40 ms)
 // New order: balls → bars → logo → scroller.
@@ -65,6 +67,15 @@
 .const T_BARS      = 120         // bars enable     (~4.8 sec)
 .const T_LOGO      = 200         // logo wipe begins (~8 sec) — reveal_column uses (zp_intro - T_LOGO)
 .const T_SCROLLER  = 240         // scroller enable (~9.6 sec)
+
+// Outro phase thresholds (in zp_outro ticks; mirror intro pacing).
+// Outro starts when scroll_text hits $ff. Scroller stops immediately (gate
+// on zp_outro != 0); subsequent thresholds remove the other elements in the
+// REVERSE order they appeared in the intro.
+.const T_OUTRO_LOGO  = 40        // logo un-wipe begins (~1.6 sec after $ff)
+.const T_OUTRO_BARS  = 120       // bars switch off     (~4.8 sec)
+.const T_OUTRO_BALLS = 176       // sprite 7 despawns first; one ball every 8 ticks → sprite 0 off at 176+56=232
+.const T_OUTRO_DONE  = 240       // outro complete, main chains to end part (~9.6 sec)
 
 .var logo  = LoadBinary("defeest.kla", BF_KOALA)
 
@@ -89,9 +100,11 @@ start:
 
         jsr my_music_init
 
-        // Intro starts at frame 0.
+        // Intro starts at frame 0; outro inactive until scroll hits $ff.
         lda #0
         sta zp_intro
+        sta zp_outro
+        sta zp_active_count
 
         // clear the VIC garbage byte
         sta $3fff
@@ -126,7 +139,28 @@ start:
         cli
 
 forever:
-        jmp forever
+        // Poll for outro completion. zp_outro saturates at $ff once ticking
+        // starts so the cmp is safe even after the threshold passes.
+        lda zp_outro
+        cmp #T_OUTRO_DONE
+        bcc forever
+
+        // Outro complete: clean teardown, then chain to part 3 ("end").
+        sei
+        lda #0
+        sta $d01a               // disable VIC raster IRQ
+        lda #$ff
+        sta $d019               // ack pending VIC IRQ
+        lda #0
+        sta $d418               // silence SID (master vol = 0)
+        sta SPR_EN              // sprites off
+        sta VIC_BORDER          // border black
+        sta VIC_BG              // bg black
+
+        // End part loads at $c000 (overwriting the now-dead screenfill
+        // area; doesn't touch main's code so this jmp survives).
+        jsr $c90
+        jmp $c000
 
 
 //==================================================================
@@ -215,16 +249,12 @@ irq_close:
         sta $d019
         lda #$33                // 24-row, DEN, BMM (open border in bitmap mode)
         sta VIC_CTRL1
-        // Intro gate: balls off until T_BALLS. Sprites 0-2 always off
-        // here (their low Y wraps and would re-fire); 3-7 conditional.
-        lda zp_intro
-        cmp #T_BALLS
-        bcc !ballsoff_c+
-        lda #%11111000          // sprites 3,4,5,6,7 enabled
-        bne !setspr_c+
-!ballsoff_c:
-        lda #0
-!setspr_c:
+        // Sequential ball mask, AND'd with %11111000 to keep sprites
+        // 0-2 OFF in the vblank wrap window (Y-wrap fix). Reads
+        // zp_active_count cached by the previous irq_open in this frame.
+        ldx zp_active_count
+        lda spr_count_mask,x
+        and #%11111000
         sta SPR_EN
         lda #<irq_open
         sta $fffe
@@ -265,15 +295,11 @@ irq_open:
         // modify yscroll per-line for FLD effect.
         lda #$3b
         sta VIC_CTRL1
-        // Sprite enable depends on intro phase.
-        lda zp_intro
-        cmp #T_BALLS
-        bcc !ballsoff+
-        lda #%11111111          // all 8 sprites on
-        bne !setspr+
-!ballsoff:
-        lda #0                  // balls off during intro
-!setspr:
+        // Sequential ball spawn/despawn: calc_active_count populates
+        // zp_active_count based on zp_intro/zp_outro, then we mask.
+        jsr calc_active_count
+        ldx zp_active_count
+        lda spr_count_mask,x
         sta SPR_EN
 
         inc zp_frame            // global animation tick (was in do_scroll)
@@ -288,6 +314,18 @@ irq_open:
         beq !intromax+
         inc zp_intro
 !intromax:
+        // Outro counter — ticks at same 25 Hz once update_bmp_scroll has
+        // armed it (zp_outro != 0). Saturates at $ff like zp_intro.
+        lda zp_outro
+        beq !outromax+
+        lda zp_frame
+        and #$01
+        bne !outromax+
+        lda zp_outro
+        cmp #$ff
+        beq !outromax+
+        inc zp_outro
+!outromax:
         jsr reveal_column        // expose one more bitmap column from the left
 
         // Update sprite positions FIRST while raster is at line 1..~8.
@@ -402,9 +440,13 @@ irq_bars:
         sta $d019
 
         // Intro gate: bars off until zp_intro >= T_BARS.
+        // Outro gate: bars off again once zp_outro >= T_OUTRO_BARS.
         lda zp_intro
         cmp #T_BARS
         bcc !barsoff+
+        lda zp_outro
+        cmp #T_OUTRO_BARS
+        bcs !barsoff+
 
         // Self-modify the lda's lo byte so the palette shifts per
         // frame. bar_palette is page-aligned and 512 bytes long (16
@@ -595,18 +637,39 @@ my_music_init:
 
 
 my_music_play:
-        // --- Master volume fade-in: vol = min(intro >> 3, $0f). ---
-        // intro ticks at 25 Hz so vol reaches max at intro=$78=120 ticks =
-        // ~4.8 sec, lining up with T_BALLS. Cost: 9 cy / frame.
-        lda zp_intro              // 3
-        lsr                       // 2
-        lsr                       // 2
-        lsr                       // 2  (now intro >> 3)
-        cmp #$10                  // 2
-        bcc !volok+               // 3
-        lda #$0f                  // (skipped once saturated)
-!volok:
-        sta $d418                 // 4
+        // --- Master volume: intro fades in, outro fades out ---
+        // vol_in  = min(intro >> 3, $0f)  — reaches $0f at intro=120 (~4.8s)
+        // vol_out = min(outro >> 3, $0f)  — reaches $0f at outro=120 (~4.8s)
+        // final   = max(vol_in - vol_out, 0)
+        // Once outro armed, audio fades to silence over the first ~4.8s
+        // of the outro window (well before T_OUTRO_DONE).
+        lda zp_intro
+        lsr
+        lsr
+        lsr
+        cmp #$10
+        bcc !vin_ok+
+        lda #$0f
+!vin_ok:
+        sta zp_tmp                // vol_in
+
+        lda zp_outro
+        lsr
+        lsr
+        lsr
+        cmp #$10
+        bcc !vout_ok+
+        lda #$0f
+!vout_ok:
+        sta zp_msb                // vol_out (borrowing zp_msb as scratch)
+
+        lda zp_tmp
+        sec
+        sbc zp_msb
+        bcs !vfinal+
+        lda #0                    // clamp negative result
+!vfinal:
+        sta $d418
 
         // --- V3 arpeggio: change freq every frame ---
         // chord_per_step uses (mu_step & 31)
@@ -820,6 +883,76 @@ bit_table: .byte 1, 2, 4, 8, 16, 32, 64, 128
 
 
 //==================================================================
+// calc_active_count — compute how many ball sprites should currently be
+// visible based on intro/outro tick counters, store in zp_active_count.
+// Ball N spawns at zp_intro = T_BALLS + N*8 (intro spawn cascade) and
+// despawns at zp_outro = T_OUTRO_BALLS + (7-N)*8 (outro cascade in
+// reverse order). Result is a count in 0..8; the caller maps it to a
+// bitmask via spr_count_mask.
+//==================================================================
+calc_active_count:
+        // intro_count: how many sprites have been spawned in
+        lda zp_intro
+        cmp #T_BALLS
+        bcs !ic_active+
+        lda #0
+        beq !ic_done+
+!ic_active:
+        sec
+        sbc #T_BALLS
+        lsr
+        lsr
+        lsr                       // (zp_intro - T_BALLS) >> 3
+        clc
+        adc #1
+        cmp #9
+        bcc !ic_ok+
+        lda #8                    // saturate at 8
+!ic_ok:
+!ic_done:
+        sta zp_tmp                // intro_count in 0..8
+
+        // outro_count: how many sprites have despawned
+        lda zp_outro
+        beq !oc_zero+
+        cmp #T_OUTRO_BALLS
+        bcs !oc_active+
+        lda #0
+        beq !oc_done+
+!oc_active:
+        sec
+        sbc #T_OUTRO_BALLS
+        lsr
+        lsr
+        lsr
+        clc
+        adc #1
+        cmp #9
+        bcc !oc_ok+
+        lda #8
+!oc_ok:
+        jmp !oc_done+
+!oc_zero:
+        lda #0
+!oc_done:
+        sta zp_msb                // outro_count in 0..8
+
+        // active = max(0, intro_count - outro_count)
+        lda zp_tmp
+        sec
+        sbc zp_msb
+        bcs !ac_ok+
+        lda #0
+!ac_ok:
+        sta zp_active_count
+        rts
+
+// active count → SPR_EN mask (sprites 0..active-1 enabled).
+spr_count_mask:
+        .byte $00, $01, $03, $07, $0f, $1f, $3f, $7f, $ff
+
+
+//==================================================================
 // Data
 //==================================================================
 
@@ -922,9 +1055,13 @@ init_slide_hide:
 //==================================================================
 // reveal_column — expose one cell column of bitmap rows 8-16.
 // Called every frame; idempotent. zp_intro=K reveals cells 0..K-1.
-// Cost: 18 sta abs,X = ~92 cy when revealing, ~10 cy when done.
+// When outro is active, branches to wipe_out_column which hides
+// cells right-to-left, undoing the intro reveal.
 //==================================================================
 reveal_column:
+        lda zp_outro
+        bne wipe_out_column
+
         // Logo wipe starts at zp_intro = T_LOGO and covers 40 columns.
         lda zp_intro
         cmp #T_LOGO
@@ -948,6 +1085,47 @@ reveal_column:
 
         lda #$01                  // colour RAM: white
         sta $d940,x
+        sta $d968,x
+        sta $d990,x
+        sta $d9b8,x
+        sta $d9e0,x
+        sta $da08,x
+        sta $da30,x
+        sta $da58,x
+        sta $da80,x
+!done:
+        rts
+
+// wipe_out_column — outro mirror of reveal_column. Walks columns from
+// 39 down to 0 (right→left) starting at zp_outro = T_OUTRO_LOGO, clearing
+// each cell's screen-RAM nibbles and colour RAM to $00 so the logo
+// disappears into the black bg.
+wipe_out_column:
+        lda zp_outro
+        cmp #T_OUTRO_LOGO
+        bcc !done+                // before T_OUTRO_LOGO → no hide yet
+        sec
+        sbc #T_OUTRO_LOGO         // 0..N since T_OUTRO_LOGO
+        cmp #40
+        bcs !done+                // wipe-out complete after 40 ticks
+        sta zp_tmp
+        lda #39
+        sec
+        sbc zp_tmp                // X = 39 - offset (column 39 → 0)
+        tax
+
+        lda #$00
+        sta $0540,x               // row 8
+        sta $0568,x
+        sta $0590,x
+        sta $05b8,x
+        sta $05e0,x
+        sta $0608,x
+        sta $0630,x
+        sta $0658,x
+        sta $0680,x               // row 16
+
+        sta $d940,x               // A still $00 from previous sta
         sta $d968,x
         sta $d990,x
         sta $d9b8,x
@@ -1148,6 +1326,13 @@ update_bmp_scroll:
         beq !rowloop_done+
         jmp !rowloop-
 !rowloop_done:
+        // Outro freeze: once zp_outro is armed, keep shifting (so the row
+        // drains naturally over ~320 frames) but skip advance + load so we
+        // don't walk zp_text_ptr past $ff into sprite_shape garbage.
+        lda zp_outro
+        beq !no_outro_gate+
+        rts
+!no_outro_gate:
 
         // Increment bit count; every 8 frames advance to next char
         inc zp_smooth
@@ -1194,14 +1379,12 @@ update_bmp_scroll:
         lda (zp_text_ptr),y
         cmp #$ff
         bne !chk_fe+
-        // End-of-text: rewind to start, reset to mode 0.
-        lda #<(scroll_text + 40)
-        sta zp_text_ptr
-        lda #>(scroll_text + 40)
-        sta zp_text_ptr+1
-        lda #0
-        sta zp_scroll_mode
-        jmp !recheck-
+        // End-of-text: trigger outro instead of rewinding. zp_text_ptr
+        // stays parked on the $ff byte; the next-frame outro gate above
+        // prevents the advance from walking off into sprite_shape data.
+        lda #1
+        sta zp_outro
+        rts
 !chk_fe:
         cmp #$fe
         bne !load+
