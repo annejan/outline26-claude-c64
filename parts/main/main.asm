@@ -1231,8 +1231,8 @@ sine_bot:
 scroll_text:
         .text "                                        "
         // ---- block 1: mode 0 (left scroll, normal) ----
-        .text "deFEEST presents a little C64 intro for the X 2026 demoparty.. "
-        .text "Co-written by Anus and Claude Opus 4.7 over many cycle-exact hours.                           "
+        .text "deFEEST presents a little C64 demo for the X 2026 demoparty.. "
+        .text "Co-written by Anus and Claude Opus 4.7 over many cycle-exact hours.                "
         .byte $fe
         // ---- block 2: mode 1 (right scroll, inverse) ----
         .text "On display: open top and bottom borders via the canonical HCL trick, "
@@ -1241,7 +1241,7 @@ scroll_text:
         .text "eight expanded sprites swinging on sine paths.                         "
         .byte $fe
         // ---- block 3: mode 2 (zig-zag split) ----
-        .text "a stable bitmap-mode scroller on row zero riding above the bounce, "
+        .text "A stable bitmap-mode scroller on row zero riding above the bounce, "
         .text "and a hand-written three-voice SID jam that fades in voice by voice during the intro. "
         .text "Greetings to everyone who still codes the breadbin and thanks to the X crew. "
         .byte $ff
@@ -1253,7 +1253,7 @@ sprite_shape:
         .byte %00001111, %11111111, %00000000
         .byte %00011111, %11111111, %10000000
         .byte %00111111, %11111111, %11000000
-        .byte %00111101, %11111011, %11000000
+        .byte %00111111, %11111111, %11000000
         .byte %01111111, %11111111, %11100000
         .byte %01111111, %11111111, %11100000
         .byte %11111111, %11111111, %11110000
