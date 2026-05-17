@@ -36,8 +36,10 @@
 .const RADIUS  = $07           // current ring being filled (0..15, 16=done)
 .const RFRAME  = $08           // frames elapsed within current ring
 
-// Radial fill pacing: 6 frames per ring × 16 rings ≈ 1.9 s.
-.const ANIM_FRAMES_PER_RING = 6
+// Radial fill pacing: 8 frames per ring × 16 rings ≈ 2.6 s — slow
+// enough to read the BASIC text underneath transforming into the
+// bloom as the disc expands outward.
+.const ANIM_FRAMES_PER_RING = 8
 
 // === Spindle 3.1 effect lifecycle ===
 // setup:     called once. Inits VIC, fills screen with DEFEEST pattern,
@@ -149,20 +151,16 @@ chrtab_w:
 
 
 //==================================================================
-// fill_done — char_table is fully built. Blank the screen (spaces)
-// so the radial reveal can paint chars in one ring at a time. Init
-// fill + ripple state and arm raster IRQ at vsync.
+// fill_done — char_table is fully built. We deliberately DO NOT clear
+// screen RAM here: whatever BASIC / Spindle's loader left on screen
+// (READY., LOAD"*",8,1, SEARCHING, LOADING, RUN, …) stays visible
+// underneath the radial fill. The chargen swap to lowercase ($D018
+// = $17 above) is itself the "case-sensitive mode" transition — the
+// BASIC text re-renders in its lowercase glyphs as the demo begins,
+// and the DEFEEST bloom then expands outward over it.
+// Init fill + ripple state and arm raster IRQ at vsync.
 //==================================================================
 fill_done:
-        ldx #0
-        lda #$20                // space
-!clr:   sta $0400,x
-        sta $0500,x
-        sta $0600,x
-        sta $0700,x
-        inx
-        bne !clr-
-
         lda #0
         sta RADIUS
         sta RFRAME
