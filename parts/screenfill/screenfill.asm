@@ -29,10 +29,15 @@
 
 .const MASK    = $fb           // bit-mask scratch
 .const CHARCNT = $02           // position within "DEFEEST" (0..6)
-.const SCRPOS  = $03           // 0..255 within current screen page
+.const SCRPOS  = $03           // 0..255 within current char_table page
 .const WCNT    = $04           // word counter / mask seed
 .const PHASE   = $05           // ripple phase (incremented per frame)
-.const HOLDCNT = $06           // remaining ripple frames
+.const HOLDCNT = $06           // remaining ripple frames (script → 0)
+.const RADIUS  = $07           // current ring being filled (0..15, 16=done)
+.const RFRAME  = $08           // frames elapsed within current ring
+
+// Radial fill pacing: 6 frames per ring × 16 rings ≈ 1.9 s.
+.const ANIM_FRAMES_PER_RING = 6
 
 // === Spindle 3.1 effect lifecycle ===
 // setup:     called once. Inits VIC, fills screen with DEFEEST pattern,
@@ -119,15 +124,18 @@ is_lower:
 
 emit:
         ldx SCRPOS
-scroffset:
-        sta $0400,x
+chrtab_w:
+        sta char_table,x
         inc SCRPOS
         bne !nowrap+
-        // SCRPOS wrapped → advance scroffset to next page.
-        inc scroffset+2
-        // After page $07 we're past the screen — stop.
-        lda scroffset+2
-        cmp #$08
+        // SCRPOS wrapped → advance chrtab_w to next page.
+        inc chrtab_w+2
+        // After 4 pages ($c700-$caff) we're past the cell area — stop.
+        // Note the explicit parens: KA evaluates `>char_table + 4` as
+        // `>(char_table+4)` which is just $c7 — leaves the wrap-stop
+        // comparison permanently unequal and walks setup over all 64K.
+        lda chrtab_w+2
+        cmp #((>char_table) + 4)
         beq fill_done
 !nowrap:
 
@@ -141,12 +149,23 @@ scroffset:
 
 
 //==================================================================
-// fill_done — fall-through from the DEFEEST fill loop. Initialise
-// ripple state and arm the raster IRQ at line $ff (vsync). Pefchain
-// enables the IRQ on return from setup.
+// fill_done — char_table is fully built. Blank the screen (spaces)
+// so the radial reveal can paint chars in one ring at a time. Init
+// fill + ripple state and arm raster IRQ at vsync.
 //==================================================================
 fill_done:
+        ldx #0
+        lda #$20                // space
+!clr:   sta $0400,x
+        sta $0500,x
+        sta $0600,x
+        sta $0700,x
+        inx
+        bne !clr-
+
         lda #0
+        sta RADIUS
+        sta RFRAME
         sta PHASE
         lda #150
         sta HOLDCNT
@@ -156,23 +175,12 @@ fill_done:
 
 
 //==================================================================
-// interrupt — fires at raster $ff (vsync). One ripple+fadeout tick.
-// When HOLDCNT == 0 the effect is done; we early-exit so pefchain
-// can sit idle waiting for the script's "06 = 0" condition.
-//
-// Per call:
-//   1. Build current_pal[i] = ripple_palette[(i - PHASE) & 15]
-//      (16 entries — recompute once per frame, then index by dist).
-//   2. For every colour-RAM byte, write current_pal[dist_table[c]].
-//      dist_table is a precomputed 1024-byte table of scaled radial
-//      distances from screen centre, range 0..15. Increasing PHASE
-//      walks the palette inward in cell-space → rings appear to
-//      EXPAND outward (drop-on-water look).
-//   3. Staged bg+border snap-to-black + palette fadetab.
-//
-// Cost: ~18.5k cy (4×256 inner loop + 16-entry palette build). Tight
-// against PAL frame budget — pefchain's NMI loader steals some cycles
-// too. Acceptable: if we miss vsync the ripple just advances one less.
+// interrupt — fires at raster $ff (vsync). Two phases:
+//   1. RADIAL FILL  (RADIUS = 0..15) — every ANIM_FRAMES_PER_RING
+//      frames, emit one ring of DEFEEST chars (cells whose dist_table
+//      value matches RADIUS). HOLDCNT stays untouched.
+//   2. RIPPLE+FADE  (RADIUS >= 16) — original palette cycle + fade.
+//      Decrements HOLDCNT each frame; script transitions on HOLDCNT=0.
 //==================================================================
 interrupt:
         pha
@@ -183,8 +191,60 @@ interrupt:
         lda #$ff
         sta $d019                // ack IRQ
 
+        // ---- phase select ----
+        lda RADIUS
+        cmp #16
+        bcs !do_ripple+
+
+        // ===== RADIAL FILL =====
+        inc RFRAME
+        lda RFRAME
+        cmp #ANIM_FRAMES_PER_RING
+        bcs !emit_ring+
+        jmp irq_done
+!emit_ring:
+        lda #0
+        sta RFRAME
+
+        // For every cell whose dist_table == RADIUS, copy char_table[c]
+        // into screen RAM. 4 × 256 cells, ~10k cy total — fits a frame.
+        ldy #0
+!p1:    lda dist_table+$000,y
+        cmp RADIUS
+        bne !nx1+
+        lda char_table+$000,y
+        sta $0400,y
+!nx1:   iny
+        bne !p1-
+!p2:    lda dist_table+$100,y
+        cmp RADIUS
+        bne !nx2+
+        lda char_table+$100,y
+        sta $0500,y
+!nx2:   iny
+        bne !p2-
+!p3:    lda dist_table+$200,y
+        cmp RADIUS
+        bne !nx3+
+        lda char_table+$200,y
+        sta $0600,y
+!nx3:   iny
+        bne !p3-
+!p4:    lda dist_table+$300,y
+        cmp RADIUS
+        bne !nx4+
+        lda char_table+$300,y
+        sta $0700,y
+!nx4:   iny
+        bne !p4-
+
+        inc RADIUS
+        jmp irq_done
+
+!do_ripple:
+        // ===== RIPPLE + FADE =====
         lda HOLDCNT
-        beq !irq_done+
+        beq irq_done
 
         // current_pal[i] = ripple_palette[(i - PHASE) & 15]
         ldy #0
@@ -253,7 +313,7 @@ interrupt:
 
         inc PHASE
         dec HOLDCNT
-!irq_done:
+irq_done:
         pla
         tay
         pla
@@ -315,3 +375,9 @@ ripple_palette:
 
 current_pal:
         .fill 16, 0
+
+// Reserved for upcoming radial fill animation — precomputed DEFEEST
+// per-cell chars. 1024 bytes (only 1000 used) at $c700-$cae7.
+* = $c700 "CharTable"
+char_table:
+        .fill 1024, 0
