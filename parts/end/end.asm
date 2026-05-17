@@ -8,13 +8,21 @@
 // Layout:
 //   $3000-$37FF  custom font (256 glyphs × 8 bytes, mostly zero;
 //                only the chars used by credit_text are populated)
-//   $3800-….     end code, IRQs, scroll state, credit text + tables
+//   $3800-….     end code, IRQ, scroll state, credit text + tables
 //
-// Visual: 38-column text mode. Credit text scrolls up 1 px / frame
+// Visual: 38-column text mode, sides + top/bottom borders pure black
+// to keep focus on the text. Credit text scrolls up 1 px / frame
 // (yscroll bits 0-2) with a 24-row block-move every 8 frames pulling
-// the next line in at row 24. The 8-px side strips (CSEL=0 extended
-// border) and top/bottom borders show a rainbow rasterbar via per-
-// line $d020 polling in the chained IRQ. Loops on the credit text.
+// the next line in at row 24. Colour-RAM rows hold a fixed cool
+// gradient (light-blue → cyan → light-green → white → back), so each
+// credit line slides UP through the gradient. Section headers ("code",
+// "music", …) flash yellow when they first appear at the bottom,
+// then dissolve into the gradient as they scroll past — colour RAM
+// doesn't shift with the screen content. $D016 xscroll wobbles the
+// whole text block left/right and an LP-filtered SID drone underpins
+// the roll. Loops the credit text forever.
+//
+// TODO: per-row vertical sine wobble (FLD-style yscroll per row).
 //==================================================================
 
 .const SCREEN     = $0400
@@ -30,20 +38,15 @@
 .const VIC_BORDER = $d020
 .const VIC_BG     = $d021
 
-.const zp_yscroll  = $f7         // current $d011 yscroll value, decrements each frame from 7→0 then wraps
+.const zp_yscroll  = $f7         // current $d011 yscroll bits (0-7), decrements each frame; wrap triggers scroll_rows_up
 .const zp_text_row = $f8         // index into credit_text (advances on hardware-scroll wrap)
-.const zp_frame    = $f9         // free-running frame counter (for bar palette drift)
+.const zp_frame    = $f9         // free-running frame counter (for $D016 wobble + SID filter sweep)
 .const zp_tmp      = $fa
-.const zp_fade     = $fb         // fade-in counter, 0..BAR_FADE_DONE, ticks each frame
-.const zp_wave     = $fc         // wave-phase LSB for $D016 wobble
+.const zp_fade     = $fb         // fade-in counter, 0..FADE_DONE, ticks each frame; drives SID volume + text reveal
 
 .const N_CREDIT_ROWS = 36        // KEEP IN SYNC with the .text blocks below
-.const BAR_TOP       = $32       // first display line; bars run BAR_TOP..BAR_BOT
-.const BAR_BOT       = $f8       // last bar line
-.const BAR_LINES     = BAR_BOT - BAR_TOP   // = 198
-.const BAR_REVEAL_RATE = 2       // lines per frame the bars roll in
-.const BAR_FADE_DONE  = BAR_LINES / BAR_REVEAL_RATE   // = 99 frames ~2s
-.const TEXT_REVEAL    = BAR_FADE_DONE                  // text pops in once bars are fully visible
+.const FADE_DONE     = 99        // fade-in completes after 99 frames (~2 sec @50Hz)
+.const TEXT_REVEAL   = FADE_DONE // colour RAM flips from black to the gradient at this fade tick
 
 
 //==================================================================
@@ -112,15 +115,15 @@
         .byte %00110000
         .byte %00110000
         .byte %00000000
-// $07 'g'
+// $07 'g'  — with descender so it doesn't read as a '9'
         .byte %00000000
         .byte %00000000
         .byte %01111110
         .byte %11000110
+        .byte %11000110
         .byte %01111110
         .byte %00000110
         .byte %01111100
-        .byte %00000000
 // $08 'h'
         .byte %11000000
         .byte %11000000
@@ -602,9 +605,9 @@ irq_top:
 
         inc zp_frame
 
-        // --- Fade-in counter: saturates at BAR_FADE_DONE (99 frames ~2s) ---
+        // --- Fade-in counter: saturates at FADE_DONE (99 frames ~2s) ---
         lda zp_fade
-        cmp #BAR_FADE_DONE
+        cmp #FADE_DONE
         beq !fade_done+
         inc zp_fade
         lda zp_fade
@@ -612,34 +615,6 @@ irq_top:
         bne !fade_done+
         jsr reveal_text
 !fade_done:
-
-        // --- Bar reveal: grow bar_end by BAR_REVEAL_RATE lines/frame ---
-        // Self-modifies the cpy operand in irq_bars so the rainbow rolls
-        // down from BAR_TOP toward BAR_BOT. BAR_REVEAL_RATE=2 means we
-        // multiply zp_fade by 2 (asl) — at zp_fade=BAR_FADE_DONE=99 the
-        // result is 198, +BAR_TOP=50 → 248=BAR_BOT (full reveal).
-        lda zp_fade
-        asl                     // *2 = lines revealed so far
-        clc
-        adc #BAR_TOP
-        cmp #BAR_BOT
-        bcc !bar_ok+
-        lda #BAR_BOT
-!bar_ok:sta bar_end+1
-
-        // --- Bar palette drift with sine modulation ---
-        // zp_frame/2 gives a steady drift; adding a sine term makes the
-        // bars breathe up-and-down.
-        lda zp_frame
-        lsr
-        sta zp_tmp              // base drift
-        lda zp_frame
-        tax
-        lda bar_offset_mod,x
-        lsr
-        clc
-        adc zp_tmp
-        sta bar_lda+1
 
         // --- SID: master volume fades in with zp_fade ---
         // Volume 0..$0f. $d418 bit 4 enables low-pass filter — voices
@@ -690,12 +665,8 @@ irq_top:
         ora #$18
         sta VIC_CTRL1
 
-        // Chain to bar IRQ.
-        lda #<irq_bars
-        sta $fffe
-        lda #>irq_bars
-        sta $ffff
-        lda #BAR_TOP
+        // Re-arm raster IRQ for line $00 of next frame (we are the only IRQ).
+        lda #$00
         sta VIC_RASTER
 
         pla
@@ -707,75 +678,21 @@ irq_top:
 
 
 //==================================================================
-// irq_bars — fires at line BAR_TOP. Tight per-line $d020 write loop
-// from BAR_TOP to BAR_BOT, indexing a 256-byte palette by raster +
-// zp_frame so the bars drift downward over time. Chains back to
-// irq_top at line $00.
-//==================================================================
-irq_bars:
-        pha
-        tya
-        pha
-        lda #$ff
-        sta VIC_IRQ
-
-        // bar_lda+1 (palette base lo byte) was already set in irq_top with
-        // sine modulation — no need to redo it here.
-
-        // 17-cy loop: ldy raster (4), lda pal,y (4), sta border (4),
-        // cpy end (2), bcc (3) = 17. Fits within badline budget.
-        // bar_end is self-modified in irq_top to roll the bars in.
-!loop:  ldy VIC_RASTER           // 4
-bar_lda:
-        lda bar_palette,y        // 4
-        sta VIC_BORDER           // 4
-bar_end:
-        cpy #BAR_BOT             // 2  (self-modified operand)
-        bcc !loop-               // 3
-
-        lda #$00
-        sta VIC_BORDER           // restore black border for safety
-
-        // Chain back to top.
-        lda #<irq_top
-        sta $fffe
-        lda #>irq_top
-        sta $ffff
-        lda #$00
-        sta VIC_RASTER
-
-        pla
-        tay
-        pla
-        rti
-
-
-//==================================================================
-// reveal_text — one-time blast of colour RAM rows 0-23 from $00 to $01.
-// Makes the credit text visible after the bars have finished rolling in.
-// Called from irq_top when zp_fade hits TEXT_REVEAL.
-// Timing: ~3000 cy (~48 lines) — fits in VBL before text display starts.
+// reveal_text — paint colour RAM rows 0-23 with the row_colour
+// gradient. Fired once from irq_top when zp_fade hits TEXT_REVEAL.
+// Row 24's colour is owned by push_next_credit_row (so each new
+// credit line can flash yellow on header rows). Unrolled per-row
+// fill races the beam: row K written by line ~6(K+1), VIC reads
+// row K colour at line 50+8K → safe margin every row.
 //==================================================================
 reveal_text:
-        ldx #0
-        lda #$01
-!c0:    sta COLRAM+$000,x
-        sta COLRAM+$100,x
-        sta COLRAM+$200,x
-        inx
-        bne !c0-
-        ldx #0
-!c1:    sta COLRAM+$300,x
-        inx
-        cpx #(24*40 - 768)      // 960 - 768 = 192 remaining bytes
-        bne !c1-
-        // Also reveal row 24 (the incoming credit line) — it was placed
-        // with colour $00 by push_next_credit_row during the fade phase.
-        ldx #0
-!c2:    sta COLRAM + 24*40, x
-        inx
-        cpx #40
-        bne !c2-
+        .for (var r = 0; r < 24; r++) {
+            lda row_colour + r
+            ldy #39
+        !l: sta COLRAM + r*40, y
+            dey
+            bpl !l-
+        }
         rts
 
 
@@ -825,15 +742,24 @@ push_next_credit_row:
         dey
         bpl !src-
 
-        // Write colour RAM for row 24: $01 (visible) if fade-in is complete,
-        // $00 (invisible) during the initial bar roll-in phase.
+        // Write colour RAM for row 24. During the fade phase ($00 = text
+        // invisible). After fade: $07 yellow if this credit row is a
+        // header (title or section), otherwise the bottom gradient
+        // colour. As the line scrolls up over the next 8 frames, colour
+        // RAM doesn't follow, so the yellow flash dissolves into the
+        // gradient — that's the desired header-pop effect.
         lda zp_fade
         cmp #TEXT_REVEAL
-        bcs !colour_on+
-        lda #$00
+        bcc !invisible+
+        lda is_header,x           // x still holds zp_text_row from above
+        bne !header+
+        lda row_colour+24         // body: bottom-row gradient colour
         jmp !write_col+
-!colour_on:
-        lda #$01
+!header:
+        lda #$07                  // header: yellow flash
+        jmp !write_col+
+!invisible:
+        lda #$00
 !write_col:
         ldy #39
 !col:   sta COLRAM + 24*40, y
@@ -850,21 +776,6 @@ push_next_credit_row:
 
 
 //==================================================================
-// bar_palette — 512-byte rainbow indexed by raster line (low byte).
-// 16 reps of the 32-entry ramp. The self-modified `bar_lda+1` offset
-// (frame/2 + sine/2) can reach ~158, plus y up to 248, lands inside
-// 512 cleanly without reading past into wave_xscroll.
-//==================================================================
-.align 256
-bar_palette:
-.for (var rep = 0; rep < 16; rep++) {
-        .byte $00, $06, $06, $0e, $0e, $03, $03, $01
-        .byte $01, $03, $03, $0e, $0e, $06, $06, $00
-        .byte $00, $02, $02, $0a, $0a, $07, $07, $01
-        .byte $01, $07, $07, $0a, $0a, $02, $02, $00
-}
-
-//==================================================================
 // wave_xscroll — 256-byte sine for $D016 horizontal wobble.
 // CSEL=0 (38-column), xscroll 0..7. The text rocks smoothly left/right.
 // Amplitude centred on 3.5 so the rounded range is exactly 0..7 with
@@ -876,13 +787,51 @@ wave_xscroll:
         .fill 256, round(3.5 + 3.5 * sin(toRadians(i * 360 / 256)))
 
 //==================================================================
-// bar_offset_mod — 256-byte sine for modulating the bar palette drift.
-// Added to zp_frame/2 so the bar colours breathe up and down.
-// Range 0..63, page-aligned for fast LDA abs,X.
+// row_colour — 25-entry cool gradient (light-blue → cyan → light-
+// green → white → back). reveal_text paints colour RAM rows 0-23
+// from this table; push_next_credit_row uses entry 24 as the
+// "body" colour for the bottom row (overridden to $07 yellow when
+// a header credit line is pushed).
 //==================================================================
-.align 256
-bar_offset_mod:
-        .fill 256, round(32 + 31 * sin(toRadians(i * 360 / 256)))
+row_colour:
+        .byte $0e, $0e, $0e        // rows  0- 2: light blue
+        .byte $03, $03, $03        // rows  3- 5: cyan
+        .byte $0d, $0d, $0d        // rows  6- 8: light green
+        .byte $0f, $0f, $0f        // rows  9-11: light grey
+        .byte $01, $01, $01        // rows 12-14: white (centre highlight)
+        .byte $0f, $0f, $0f        // rows 15-17: light grey
+        .byte $0d, $0d, $0d        // rows 18-20: light green
+        .byte $03, $03, $03        // rows 21-23: cyan
+        .byte $0e                  // row  24:    light blue (header-flash falls back to this)
+
+//==================================================================
+// is_header — flag per credit_text row: 1 if the row is a title or
+// section header (gets a yellow flash when pushed into row 24), 0
+// for body lines and blanks. KEEP IN SYNC with credit_text below.
+//==================================================================
+is_header:
+        .byte 0,0,0     // 0..2 blank
+        .byte 1         // 3 "defeest presents"
+        .byte 0         // 4 blank
+        .byte 1         // 5 "outline 2026 demo"
+        .byte 0,0,0     // 6..8 blank
+        .byte 1         // 9 "code"
+        .byte 0,0       // 10..11 names
+        .byte 0         // 12 blank
+        .byte 1         // 13 "music"
+        .byte 0         // 14 body
+        .byte 0         // 15 blank
+        .byte 1         // 16 "graphics"
+        .byte 0         // 17 body
+        .byte 0         // 18 blank
+        .byte 1         // 19 "tools"
+        .byte 0,0,0     // 20..22 body
+        .byte 0         // 23 blank
+        .byte 1         // 24 "greetings"
+        .byte 0,0,0,0   // 25..28 body
+        .byte 0,0       // 29..30 blank
+        .byte 1         // 31 "thanks for watching"
+        .byte 0,0,0,0   // 32..35 blank tail
 
 
 //==================================================================
