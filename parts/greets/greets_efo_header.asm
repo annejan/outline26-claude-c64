@@ -21,8 +21,8 @@
         .byte 'P', $80, $86
         // Inherit intro's music tables ($10-$12)
         .byte 'I', $10, $12
-        // Zero-page: $f4-$f8
-        .byte 'Z', $f4, $f8
+        // Zero-page: $f4-$f9 (extra byte for zp_kick_remain)
+        .byte 'Z', $f4, $f9
         // I/O safe
         .byte 'S'
         .byte $00

@@ -47,6 +47,11 @@
 .const zp_beat_count  = $f6
 .const zp_scroll_pos  = $f7
 .const zp_scroll_tick = $f8
+.const zp_kick_remain = $f9    // frames left in current kick window
+
+// Kick window: how long V3 stays in noise-percussion mode after a beat
+// before the music engine's arp resumes. ~120 ms.
+.const KICK_FRAMES = 6
 
 
 * = $8000 "Greets"
@@ -153,10 +158,18 @@ interrupt:
         sta VIC_IRQ
 
         jsr INTRO_MUSIC_PLAY
-        lda #$00
-        sta $d404
 
-        // beat counter
+        // Reassert master vol (my_music_play writes vol_in here every
+        // frame; without a re-write the SID would stay at $0F with no
+        // filter mode — fine for greets since we're going wide-open).
+        lda #$0f
+        sta $d418
+
+        // V1 (bass) plays naturally — this is the payoff. The previous
+        // mute (sta $d404) is gone, the bass returns with intro's
+        // punchy ADSR ($04 / $61) intact.
+
+        // ----- beat counter + V3 kick trigger -----
         inc zp_beat_phase
         lda zp_beat_phase
         cmp #BEAT_PERIOD
@@ -164,7 +177,36 @@ interrupt:
         lda #0
         sta zp_beat_phase
         inc zp_beat_count
+        // Beat hit — arm a new kick window on V3.
+        lda #KICK_FRAMES
+        sta zp_kick_remain
 !no_beat:
+
+        // V3 kick override: while kick window is active, force V3 to
+        // noise + percussive ADSR + low pitch. After the window, write
+        // back intro's arp ADSR ($00/$F0) so the arp resumes audibly.
+        // music_play already wrote V3 pulse + arp freq + gate above,
+        // so we're overriding those writes per frame inside the window.
+        lda zp_kick_remain
+        beq !no_kick+
+        dec zp_kick_remain
+        lda #$08
+        sta $d413                  // V3 AD: attack 0, decay fast
+        lda #$00
+        sta $d414                  // V3 SR: no sustain, no release
+        sta $d40e                  // V3 freq lo = 0
+        lda #$03
+        sta $d40f                  // V3 freq hi (low pitch kick)
+        lda #$81
+        sta $d412                  // V3 control: noise + gate on
+        jmp !kick_done+
+!no_kick:
+        // Restore intro's arp envelope so the arp sustains again.
+        lda #$00
+        sta $d413
+        lda #$f0
+        sta $d414
+!kick_done:
 
         // DYCP — advance wobble phase each frame
         inc zp_wobble_pos

@@ -124,8 +124,7 @@ setup:
 
         lda #$00
         sta VIC_BORDER          // black border
-        lda #logo.getBackgroundColor()
-        sta VIC_BG              // bitmap-mode bg (also used by bars/IRQ)
+        sta VIC_BG              // bitmap-mode bg STARTS BLACK — fade-in at irq_open uses zp_intro
 
         // Multicolour bitmap mode: D011=$3B (BMM+DEN+RSEL+yscroll=3),
         // D016=$D8 (MCM+CSEL+xscroll=0), D018=$18 (screen at $0400,
@@ -319,6 +318,16 @@ irq_open:
         beq !outromax+
         inc zp_outro
 !outromax:
+        // Visual fade-in: bg ramps from $00 to logo_bg over first 16 intro ticks.
+        // zp_intro ticks at 25 Hz (every 2 frames), so fade takes ~0.64s —
+        // completes well before sprites activate at T_BALLS=40.
+        lda zp_intro
+        cmp #16
+        bcs !fade_done+
+        tax
+        lda fade_bg,x
+        sta VIC_BG
+!fade_done:
         jsr reveal_column        // expose one more bitmap column from the left
 
         // Update sprite positions FIRST while raster is at line 1..~8.
@@ -786,6 +795,13 @@ rainbow_pal:
         // pink → purple → dark blue, then back. 16 entries.
         .byte $06, $0e, $03, $0d, $05, $07, $08, $0a
         .byte $02, $0a, $04, $0e, $03, $0d, $05, $07
+}
+
+// 17-entry fade from $00 to logo's background colour. Indexed by
+// zp_intro (0..16) in irq_open — ramp takes ~0.64 s to complete.
+fade_bg:
+.for (var i = 0; i < 17; i++) {
+        .byte floor(logo.getBackgroundColor() * i / 16)
 }
 
 

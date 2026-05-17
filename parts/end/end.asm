@@ -490,8 +490,19 @@
         .byte %11000110
         .byte %11000110
         .byte %00000000
-// $42..$44 — unused
-        .fill 8 * 3, 0
+// $42 — unused
+        .fill 8, 0
+// $43 'C'
+        .byte %01111110
+        .byte %11000110
+        .byte %11000000
+        .byte %11000000
+        .byte %11000000
+        .byte %11000110
+        .byte %01111110
+        .byte %00000000
+// $44 — unused
+        .fill 8, 0
 // $45 'E'
         .byte %11111110
         .byte %11000000
@@ -1098,7 +1109,7 @@ credit_text:
         row("              Kloot/deFEEST            ")
         row("              Anus/deFEEST              ")
         row("              Ranzbak/deFEEST           ")
-        row("              Kleuter/deFEEST           ")
+        row("              Cinder/deFEEST            ")
         row("                                        ")
         row("           music                        ")
         row("              composed and arranged     ")
