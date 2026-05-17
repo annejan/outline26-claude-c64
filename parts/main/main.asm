@@ -89,18 +89,21 @@
 
 .var logo  = LoadBinary("defeest.kla", BF_KOALA)
 
-// No BasicUpstart2 — Spindle's screenfill part JMPs to $0810 directly.
+// === Spindle 3.1 effect lifecycle ===
+// setup:     called once by pefchain with interrupts disabled. Inits
+//            VIC + sprites + scroll + music. Returns; pefchain enables
+//            IRQ which then fires `interrupt` (= irq_close, first in
+//            our raster chain).
+// interrupt: irq_close, which chains to irq_open / irq_fld / irq_bars
+//            via the standard $fffe write-and-rti pattern.
+// (no main, fadeout, cleanup — script transition condition watches
+// zp_outro for T_OUTRO_DONE = $f0 to know main has wrapped its outro.)
 .pc = $0810 "Main"
-start:
-        sei
-        lda #$35
-        sta $01
-
-        lda #$7f
-        sta $dc0d
-        sta $dd0d
-        bit $dc0d
-        bit $dd0d
+setup:
+        // pefchain disables CIA1 interrupts in early-setup, leaves $01
+        // at $35, and uses CIA2 NMI for the loader. We MUST NOT touch
+        // $dc0d/$dd0d here or we'll either re-enable interrupts we
+        // don't want or break pefchain's loader.
 
         jsr copy_chargen
         jsr clear_screen
@@ -134,44 +137,25 @@ start:
         lda #$18
         sta $d018
 
-        // raster IRQ chain
-        lda #<irq_close
-        sta $fffe
-        lda #>irq_close
-        sta $ffff
+        // Raster IRQ at line $f9 — pefchain installs $fffe from EFO
+        // header to point at `interrupt:` (= irq_close), and enables
+        // the raster IRQ during early-setup. We just set the line.
         lda #$f9
         sta VIC_RASTER
-        lda #$01
-        sta $d01a
-        lda #$ff
-        sta $d019
+        rts
 
-        cli
 
-forever:
-        // Poll for outro completion. zp_outro saturates at $ff once ticking
-        // starts so the cmp is safe even after the threshold passes.
-        lda zp_outro
-        cmp #T_OUTRO_DONE
-        bcc forever
-
-        // Outro complete: clean teardown, then chain to part 3 ("end").
-        sei
+//==================================================================
+// fadeout — pefchain calls this after the script transition condition
+// fires (we use "f6 = f0", i.e. zp_outro == T_OUTRO_DONE). At that
+// point main's IRQ-driven outro animation has already completed, so
+// fadeout just silences SID and returns carry set so pefchain moves on.
+//==================================================================
+fadeout:
         lda #0
-        sta $d01a               // disable VIC raster IRQ
-        lda #$ff
-        sta $d019               // ack pending VIC IRQ
-        lda #0
-        sta $d418               // silence SID (master vol = 0)
-        sta SPR_EN              // sprites off
-        sta VIC_BORDER          // border black
-        sta VIC_BG              // bg black
-
-        // End part loads font at $3000 + code at $3800, all inside main's
-        // now-dead bitmap area. Main's code at $0810 is untouched so this
-        // jmp survives the load. v3.1 loader entry is $0200 (was $0c90).
-        jsr $200
-        jmp $3800
+        sta $d418
+        sec
+        rts
 
 
 //==================================================================

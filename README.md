@@ -100,13 +100,13 @@ You need:
 - **KickAssembler** (jar in `kickass/KickAss.jar`, [download from theweb.dk](http://theweb.dk/KickAssembler/))
 - **VICE** with `x64sc` (`zypper in vice` on openSUSE)
 - **Spindle 3.1** — extract `spindle-3.1.zip` into the repo root; `build.sh`
-  invokes the prebuilt Linux binary at
-  `spindle-3.1/prebuilt-binaries/linux-x86_64/spin`. Download:
+  invokes the prebuilt Linux binaries
+  `spindle-3.1/prebuilt-binaries/linux-x86_64/{mkpef,pefchain}`. Download:
   ```
   curl -LO https://hd0.linusakesson.net/files/spindle-3.1.zip
   unzip spindle-3.1.zip
   ```
-  (xa65 only needed if you rebuild `spin` from source under `spindle-3.1/src/`.)
+  (xa65 only needed if you rebuild from source under `spindle-3.1/src/`.)
 - Java for the assembler
 
 Build the multi-part disk and run:
@@ -118,23 +118,47 @@ Build the multi-part disk and run:
                   #  server (for driving / inspecting from Claude)
 ```
 
-## Spindle script
+## Pefchain — Spindle 3.1 high-level framework
 
-`script` lists the paragraphs Spindle bakes into the .d64. Paragraph 0
-auto-loads at boot; each subsequent `jsr $200` advances to the next one
-and loads it into the listed addresses.
+Each part is a `.pef` (packaged effect) with an `EFO2` header pointing
+at `setup` / `interrupt` / `fadeout` routines plus memory-page tags.
+`pefchain_script` links them in sequence:
 
-> **Trap to remember:** every per-chunk byte-count in `script` is
-> hard-coded. When you grow a main.asm segment, **update the matching
-> `script` byte-count** to KickAssembler's reported segment size or
-> Spindle silently truncates the tail. The boot then runs into garbage
-> and dies at BASIC READY with no error from either tool — check the
-> Memory Map line in `./build.sh` output.
+```
+parts/screenfill/screenfill.pef     06 = 00
+parts/main/main.pef                 f6 = f0
+parts/end/end.pef                   stay
+```
+
+Each line: `<pef-file> <transition-condition>`. Pefchain background-
+loads the next part DURING the current one (via an NMI-driven loader)
+so transitions are seamless when memory layouts don't collide. When
+they do (main and end both use pages `$20-$47`), pefchain inserts a
+tiny blank part for the load — visible in `./build.sh` output. Each
+condition tells pefchain when to advance:
+
+- `06 = 00` — wait for zero-page `$06` (= screenfill's HOLDCNT) to hit 0.
+- `f6 = f0` — wait for `$f6` (= main's zp_outro) to reach `T_OUTRO_DONE`.
+- `stay`    — never advance (end runs forever).
 
 Spindle 3.1's resident loader sits at `$0200-$02FF` (+ buffer page
-`$0300-$03FF` and zero-page `$F4-$F8` during loads — the zp scratch is
-free to use between loader calls but is clobbered while a load runs).
-The demo keeps everything above `$0400`.
+`$0300-$03FF` and zero-page `$F4-$F8` during loads). The demo keeps
+everything above `$0400`.
+
+### Per-part build
+
+For each part the build pipeline is:
+
+1. KickAssembler `parts/<x>/<x>.asm` → `<x>.prg` + `<x>.sym`.
+2. KickAssembler `parts/<x>/<x>_efo_header.asm` with `-binfile` →
+   `<x>_efo_header.bin` (raw bytes, no PRG load-addr prefix). The
+   header imports `<x>.sym` so it can reference `setup`, `interrupt`,
+   and `fadeout` symbol addresses without hardcoding.
+3. `cat <x>_efo_header.bin <x>.prg > <x>.efo`.
+4. `mkpef -o <x>.pef <x>.efo`.
+
+Then `pefchain pefchain_script -o outline-64.d64` links the whole
+thing.
 
 ## Main-demo memory layout (VIC bank 0)
 

@@ -1,0 +1,13 @@
+# outline-64 — pefchain script (Spindle 3.1 high-level framework)
+#
+# Pefchain links the .pef effects below in sequence, background-loading
+# each upcoming part during the current one (via the NMI-driven loader).
+#
+# Transitions: each part has a condition for advancing to the next.
+#   06 = 00   wait until zp $06 == 0 (screenfill: HOLDCNT drained)
+#   f6 = f0   wait until zp $f6 == $f0 (main: zp_outro hit T_OUTRO_DONE)
+#   stay      never advance (end runs forever)
+
+parts/screenfill/screenfill.pef     06 = 00
+parts/main/main.pef                 f6 = f0
+parts/end/end.pef                   stay

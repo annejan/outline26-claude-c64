@@ -477,12 +477,15 @@
 //==================================================================
 .pc = $3800 "End"
 
-start:
-        sei
-        lda #$35
-        sta $01
+// === Spindle 3.1 effect lifecycle ===
+// setup:     called once with interrupts disabled, $01 already $35.
+//            Sets up VIC, music, scroll state.
+// interrupt: called every raster IRQ (vector installed by pefchain
+//            from EFO header). Runs the per-frame scroll + music tick.
+// (no main/fadeout/cleanup — credit roll loops forever via "stay")
 
-        // VIC bank 0 ($3c → $0000-$3FFF).
+setup:
+        // VIC bank 0 ($3c → $0000-$3FFF). pefchain leaves $01=$35.
         lda #$3c
         sta $dd02
 
@@ -539,38 +542,29 @@ start:
         sta zp_wrap_pending
         jsr push_next_credit_row
 
-        // --- SID: slow meandering version of main's chord+lead progression ---
-        // main.asm leaves its music tables resident at $1000-$125D after
-        // the end-part load (end writes $3000+ only). end_music_init
-        // sets pad-flavoured ADSR + LP filter; end_music_play (called
-        // from irq_top) reads main's chord_per_step / arp_notes /
-        // lead_pattern / sid_freq tables at a quarter the main tempo.
+        // --- SID: slow meandering chord/lead progression ---
+        // main.asm leaves its music tables resident at $1000-$125D
+        // after the end-part load (end writes $3000+ only).
+        // end_music_init sets pad-flavoured ADSR + LP filter;
+        // end_music_play (called from interrupt) reads main's
+        // chord_per_step / arp_notes / lead_pattern / sid_freq tables
+        // at a quarter the main tempo.
         jsr end_music_init
 
-        // Raster IRQ chain: irq_top@$00 (yscroll + maybe row-shift),
-        // then irq_bars@$32..$f8 for the side rainbow.
-        lda #<irq_top
-        sta $fffe
-        lda #>irq_top
-        sta $ffff
+        // Raster IRQ at line $00. Pefchain installs $fffe to point at
+        // `interrupt:` from the EFO header, and enables raster IRQ in
+        // its early-setup, so we just set the line.
         lda #$00
         sta VIC_RASTER
-        lda #$01
-        sta VIC_IRQEN
-        lda #$ff
-        sta VIC_IRQ
-        cli
-
-forever:
-        jmp forever
+        rts
 
 
 //==================================================================
-// irq_top — fires at raster $00. Tick yscroll down; on wrap, do a
+// interrupt — fires at raster $00. Tick yscroll down; on wrap, do a
 // hardware-scroll row-up and pull a fresh credit line into row 24.
-// Then chain to irq_bars at line $32.
+// Vector installed by pefchain from the EFO header.
 //==================================================================
-irq_top:
+interrupt:
         pha
         txa
         pha

@@ -34,17 +34,34 @@
 .const PHASE   = $05           // ripple phase (incremented per frame)
 .const HOLDCNT = $06           // remaining ripple frames
 
+// === Spindle 3.1 effect lifecycle ===
+// setup:     called once. Inits VIC, fills screen with DEFEEST pattern,
+//            initialises ripple state. Pefchain enables IRQ on return.
+// interrupt: per-frame raster IRQ. Runs one tick of the water-ripple +
+//            staged fadeout. When HOLDCNT hits 0 the work is over;
+//            interrupt becomes a no-op and pefchain's script condition
+//            ("06 = 0") triggers transition to main.
+// fadeout:   no-op (sec; rts) — transition already triggered by HOLDCNT.
+
 * = $c000 "ScreenFill"
-start:
-        sei
-        lda #$35
-        sta $01
+setup:
+        // pefchain leaves $01=$35 and CIAs configured for the loader,
+        // so we don't sei / write $01 / touch $dc0d / $dd0d.
 
         // VIC bank 0, screen $0400, lower-case chargen at $1800.
         lda #$3c
         sta $dd02
         lda #%00010111
         sta VIC_MEM
+
+        // Establish VIC state (don't trust the previous effect to have
+        // left it sensible): text mode + RSEL, 40-col, sprites off.
+        lda #$1b
+        sta $d011
+        lda #$08
+        sta $d016
+        lda #$00
+        sta $d015
 
         lda #$06                // border + bg both blue — solid background
         sta VIC_BORDER          // so the ripple reads edge-to-edge with no frame.
@@ -111,7 +128,7 @@ scroffset:
         // After page $07 we're past the screen — stop.
         lda scroffset+2
         cmp #$08
-        beq end_fill
+        beq fill_done
 !nowrap:
 
         inc CHARCNT
@@ -124,34 +141,50 @@ scroffset:
 
 
 //==================================================================
-// end_fill — run the water-ripple effect for ~3 sec then load main.
-//
-// Per frame:
-//   1. Vsync on line $ff.
-//   2. Build current_pal[i] = ripple_palette[(i - PHASE) & 15]
-//      (16 entries — recompute once per frame, then index by dist).
-//   3. For every colour-RAM byte, write current_pal[dist_table[c]].
-//      dist_table is a precomputed 1024-byte table of scaled radial
-//      distances from screen centre, range 0..15. Increasing PHASE
-//      walks the palette inward in cell-space which → rings appear
-//      to EXPAND outward (drop-on-water look).
-//
-// Cost per frame: ~18.5k cy (4×256 inner loop + 16-entry palette
-// build). Just fits a PAL frame; effectively updates at ~50 Hz.
+// fill_done — fall-through from the DEFEEST fill loop. Initialise
+// ripple state and arm the raster IRQ at line $ff (vsync). Pefchain
+// enables the IRQ on return from setup.
 //==================================================================
-end_fill:
+fill_done:
         lda #0
         sta PHASE
         lda #150
         sta HOLDCNT
-
-hold:
-        // Vsync (wait for line $ff to pass).
         lda #$ff
-!w1:    cmp $d012
-        bne !w1-
-!w2:    cmp $d012
-        beq !w2-
+        sta $d012                // raster line for IRQ (vsync)
+        rts
+
+
+//==================================================================
+// interrupt — fires at raster $ff (vsync). One ripple+fadeout tick.
+// When HOLDCNT == 0 the effect is done; we early-exit so pefchain
+// can sit idle waiting for the script's "06 = 0" condition.
+//
+// Per call:
+//   1. Build current_pal[i] = ripple_palette[(i - PHASE) & 15]
+//      (16 entries — recompute once per frame, then index by dist).
+//   2. For every colour-RAM byte, write current_pal[dist_table[c]].
+//      dist_table is a precomputed 1024-byte table of scaled radial
+//      distances from screen centre, range 0..15. Increasing PHASE
+//      walks the palette inward in cell-space → rings appear to
+//      EXPAND outward (drop-on-water look).
+//   3. Staged bg+border snap-to-black + palette fadetab.
+//
+// Cost: ~18.5k cy (4×256 inner loop + 16-entry palette build). Tight
+// against PAL frame budget — pefchain's NMI loader steals some cycles
+// too. Acceptable: if we miss vsync the ripple just advances one less.
+//==================================================================
+interrupt:
+        pha
+        txa
+        pha
+        tya
+        pha
+        lda #$ff
+        sta $d019                // ack IRQ
+
+        lda HOLDCNT
+        beq !irq_done+
 
         // current_pal[i] = ripple_palette[(i - PHASE) & 15]
         ldy #0
@@ -220,16 +253,23 @@ hold:
 
         inc PHASE
         dec HOLDCNT
-        beq !hold_done+
-        jmp hold
-!hold_done:
+!irq_done:
+        pla
+        tay
+        pla
+        tax
+        pla
+        rti
 
-        // Spindle: load next paragraph (main demo). v3.1 loader sits at
-        // $0200 (was $0c90 in v2.3).
-        jsr $200
 
-        // Jump to main demo entry.
-        jmp $0810
+//==================================================================
+// fadeout — no-op. The script transition condition ("06 = 0") fires
+// when HOLDCNT (= zp $06) hits 0; pefchain then calls fadeout in a
+// loop, expecting carry-set when ready. We return immediately.
+//==================================================================
+fadeout:
+        sec
+        rts
 
 // Hue-preserving fade-to-black table — only the colours that appear in
 // ripple_palette (plus their intermediate steps) walk toward black.

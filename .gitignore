@@ -1,6 +1,9 @@
 # Build artifacts
 *.prg
 *.sym
+*.bin
+*.efo
+*.pef
 outline-64.d64
 
 # Spindle (extracted/built locally per-checkout)
