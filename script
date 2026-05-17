@@ -1,14 +1,14 @@
-# outline-64 — Spindle load script
+# outline-64 — Spindle 3.1 load script
 #
-# First paragraph: auto-loaded by Spindle's boot loader, jumped to.
-# Subsequent paragraphs: loaded on each jsr $c90 from running code.
+# First paragraph: auto-loaded by Spindle's boot loader, jumped to
+# (entry = load address of first file = screenfill.prg's $c000).
+# Subsequent paragraphs: loaded on each `jsr $200` from running code.
 
 # Part 1: loading screen at $c000 — auto-loaded by Spindle's boot
-# loader. Hand-off to main: jsr $c90 + jmp $0810.
+# loader. Hand-off to main: jsr $200 + jmp $0810.
 parts/screenfill/screenfill.prg
 
-# Part 2: main demo, extracted as chunks from a single PRG so we don't
-# write through Spindle's resident loader at $0c00..$0dff. Byte counts
+# Part 2: main demo, extracted as chunks from a single PRG. Byte counts
 # MUST match KickAssembler's emitted segment sizes (see ./build.sh
 # output); if a segment grows past its count here the trailing bytes
 # are silently truncated and the demo crashes to BASIC READY at boot.
@@ -29,7 +29,7 @@ parts/main/main.prg   5400  5002   7bd
 
 # Part 3: end (credit roll). Single chunk: font at $3000 + code at
 # $3800, all inside main's now-dead bitmap area ($2000-$3F3F). Main's
-# outro hand-off (`jsr $c90 / jmp $3800`) lands at end's entry.
+# outro hand-off (`jsr $200 / jmp $3800`) lands at end's entry.
 # Byte count = (font_end - $3000) reported by KickAssembler memory
 # map for the End segment + $800; bump when end.asm grows.
 parts/end/end.prg     3000   2     15e8

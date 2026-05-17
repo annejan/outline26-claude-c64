@@ -18,7 +18,7 @@ Three sequenced parts loaded by [Spindle](https://hd0.linusakesson.net/spindle.p
 - Last second of hold snaps bg+border $06 → $00 (no `$0B` intermediate;
   on new-VIC `$0B` is brighter than blue, see [COLFADE v2](https://codebase.c64.org/lib/exe/fetch.php?media=vic:colfade_v2.pdf)) and walks the ripple
   palette through a hue-stable fadetab to black.
-- Hands off to main with `jsr $c90 / jmp $0810`.
+- Hands off to main with `jsr $200 / jmp $0810`.
 
 ### Part 2 — `parts/main/main.asm` (the demo)
 
@@ -79,7 +79,7 @@ Three sequenced parts loaded by [Spindle](https://hd0.linusakesson.net/spindle.p
   |  40  | `T_OUTRO_LOGO`   | logo un-wipes (column 39 → 0)        |
   | 120  | `T_OUTRO_BARS`   | rasterbars off                       |
   | 176  | `T_OUTRO_BALLS`  | sprite 7 despawns (then 6, 5, ... 0) |
-  | 240  | `T_OUTRO_DONE`   | hand-off to part 3 via `jsr $c90`    |
+  | 240  | `T_OUTRO_DONE`   | hand-off to part 3 via `jsr $200`    |
 
   SID master volume fades back to `$00` over the first ~5 sec of the
   outro window (`vol_intro - vol_outro`, clamped).
@@ -99,12 +99,14 @@ You need:
 
 - **KickAssembler** (jar in `kickass/KickAss.jar`, [download from theweb.dk](http://theweb.dk/KickAssembler/))
 - **VICE** with `x64sc` (`zypper in vice` on openSUSE)
-- **xa65** for Spindle (`zypper in xa` on openSUSE)
-- **Spindle v2.3** — first run `./build.sh` will fail with hints; build the `spin` tool via:
+- **Spindle 3.1** — extract `spindle-3.1.zip` into the repo root; `build.sh`
+  invokes the prebuilt Linux binary at
+  `spindle-3.1/prebuilt-binaries/linux-x86_64/spin`. Download:
   ```
-  curl -L https://hd0.linusakesson.net/files/spindle-2.3.tgz | tar xz
-  cd spindle-2.3/spindle && make
+  curl -LO https://hd0.linusakesson.net/files/spindle-3.1.zip
+  unzip spindle-3.1.zip
   ```
+  (xa65 only needed if you rebuild `spin` from source under `spindle-3.1/src/`.)
 - Java for the assembler
 
 Build the multi-part disk and run:
@@ -119,7 +121,7 @@ Build the multi-part disk and run:
 ## Spindle script
 
 `script` lists the paragraphs Spindle bakes into the .d64. Paragraph 0
-auto-loads at boot; each subsequent `jsr $c90` advances to the next one
+auto-loads at boot; each subsequent `jsr $200` advances to the next one
 and loads it into the listed addresses.
 
 > **Trap to remember:** every per-chunk byte-count in `script` is
@@ -129,19 +131,20 @@ and loads it into the listed addresses.
 > and dies at BASIC READY with no error from either tool — check the
 > Memory Map line in `./build.sh` output.
 
-Spindle's resident loader sits at `$0c00-$0dff` (+ scratch `$0e00-$0eff`
-and zero-page `$f4-$f7` during loads). The main demo keeps clear of that
-range — bitmap screen RAM moved to `$0400`.
+Spindle 3.1's resident loader sits at `$0200-$02FF` (+ buffer page
+`$0300-$03FF` and zero-page `$F4-$F8` during loads — the zp scratch is
+free to use between loader calls but is clobbered while a load runs).
+The demo keeps everything above `$0400`.
 
 ## Main-demo memory layout (VIC bank 0)
 
 | Range          | Contents                                       |
 | -------------- | ---------------------------------------------- |
+| `$0200-$03FF`  | **reserved for Spindle 3.1 resident + buffer** |
 | `$0400-$07e7`  | Bitmap-mode screen RAM (colour info)           |
 | `$07f8-$07ff`  | Sprite pointers                                |
 | `$0810-$0a46`  | Main code + IRQs (entry point: `$0810`)        |
 | `$0b00-$0b3f`  | Sprite shape data (block `$2c`)                |
-| `$0c00-$0dff`  | **reserved for Spindle's resident loader**     |
 | `$1000-$1275`  | Hand-written 3-voice SID player + patterns     |
 | `$2000-$3f3f`  | Logo bitmap (multicolour, 8000 bytes)          |
 | `$4000-$47ff`  | Page-aligned tables (palette, sines, bounce)   |

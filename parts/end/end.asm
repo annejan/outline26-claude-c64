@@ -1,7 +1,7 @@
 //==================================================================
 // outline-64 — Part 3: credit roll
 //
-// Loaded after main's outro via `jsr $c90 / jmp $3800`. Overwrites
+// Loaded after main's outro via `jsr $200 / jmp $3800`. Overwrites
 // main's now-dead bitmap area ($2000-$3F3F): custom 8x8 font goes to
 // $3000 (charset RAM in VIC bank 0), code follows at $3800.
 //

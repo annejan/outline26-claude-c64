@@ -7,10 +7,11 @@ set -e
 
 ROOT="$(dirname "$(readlink -f "$0")")"
 KICKASS="$ROOT/kickass/KickAss.jar"
-SPIN="$ROOT/spindle-2.3/spindle/spin"
+SPIN="$ROOT/spindle-3.1/prebuilt-binaries/linux-x86_64/spin"
 
 if [[ ! -f "$SPIN" ]]; then
-    echo "Spindle 'spin' tool not found. Run: cd spindle-2.3/spindle && make"
+    echo "Spindle 'spin' tool not found at $SPIN."
+    echo "Re-extract spindle-3.1.zip into the repo root."
     exit 1
 fi
 

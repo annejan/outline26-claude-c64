@@ -6,19 +6,20 @@
 // over the screen, choosing upper or lower case per cell via a
 // rotating bit-mask. After the fill, runs a water-ripple colour
 // cycle for ~3 sec — concentric rings expand from screen centre —
-// then triggers Spindle's loader (jsr $c90) and JMPs into the main
+// then triggers Spindle's loader (jsr $200) and JMPs into the main
 // demo at $0810.
 //
 // Lives at $c000 — well above main demo's $0810..$5bbc range so the
-// screenfill code SURVIVES the `jsr $c90` that loads main into RAM.
+// screenfill code SURVIVES the `jsr $200` that loads main into RAM.
 // Crucial: $4000-$47ff is main's Tables segment; an earlier $4000
 // placement got the screenfill code overwritten mid-load and `jmp
 // $0810` was replaced by palette bytes → CPU ran into garbage.
 //
-// Spindle conventions observed:
+// Spindle 3.1 conventions:
 //   - $01 stays at $35 (CPU sees full RAM)
-//   - VIC bank via $dd02 ($3c → bank 0)
-//   - leaves Spindle's resident loader at $0c00..$0dff intact
+//   - VIC bank via $dd02 ($3c → bank 0); DON'T touch $dd00
+//   - leaves Spindle's resident loader at $0200..$02FF intact, and
+//     keeps off zp $f4-$f8 across `jsr $200` calls
 //==================================================================
 
 .const VIC_MEM    = $d018
@@ -223,8 +224,9 @@ hold:
         jmp hold
 !hold_done:
 
-        // Spindle: load next paragraph (main demo).
-        jsr $c90
+        // Spindle: load next paragraph (main demo). v3.1 loader sits at
+        // $0200 (was $0c90 in v2.3).
+        jsr $200
 
         // Jump to main demo entry.
         jmp $0810
@@ -244,8 +246,8 @@ dtext:
 
 //==================================================================
 // Ripple data tables — placed at $c200 so they live well above the
-// code and don't conflict with Spindle's $0c00 loader or main's
-// $0400-$5dxx layout. They're only used BEFORE jsr $c90, so they
+// code and don't conflict with Spindle's $0200 loader or main's
+// $0400-$5dxx layout. They're only used BEFORE jsr $200, so they
 // don't need to survive the load.
 //==================================================================
 

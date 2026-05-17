@@ -3,9 +3,11 @@
 *.sym
 outline-64.d64
 
-# Spindle (built locally per-checkout)
+# Spindle (extracted/built locally per-checkout)
 spindle-2.3/
 spindle-2.3.tgz
+spindle-3.1/
+spindle-3.1.zip
 
 # Screenshots / scratch
 *.png

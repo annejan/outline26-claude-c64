@@ -21,8 +21,8 @@
 // Intro cascade: zp_intro ticks at 25 Hz and gates each element on at
 // its T_* threshold; balls spawn one-at-a-time at T_BALLS + N*8 ticks.
 // Outro cascade: zp_outro arms when scroll_text hits $ff and unwinds
-// the same elements in reverse, ending with `jsr $c90 / jmp $c000` to
-// hand off to part 3 (the "to be continued..." end card).
+// the same elements in reverse, ending with `jsr $200 / jmp $3800` to
+// hand off to part 3 (the credit roll).
 //==================================================================
 
 .const SPR_X        = $d000
@@ -41,14 +41,16 @@
 .const SPR_COL      = $d027
 
 .const SCREEN       = $0400        // text-mode screen (unused in bitmap mode)
-.const BMP_SCREEN   = $0400        // bitmap-mode colour-info screen RAM — moved
-                                   // here so Spindle's resident loader
-                                   // ($0c00-$0dff) stays intact across part loads.
+.const BMP_SCREEN   = $0400        // bitmap-mode colour-info screen RAM.
+                                   // Spindle 3.1's resident loader lives at
+                                   // $0200-$02FF + buffer page $0300-$03FF, so
+                                   // anywhere from $0400 up is fair game.
 .const BITMAP       = $2000        // 8000-byte bitmap data (VIC sees in bank 0)
 .const COLOUR_RAM   = $d800
 .const SPR_PTRS     = BMP_SCREEN + $3f8   // last 8 bytes of bitmap-mode screen ($07f8)
-.const SPR_DATA     = $0b00        // sprite shape block $2c (free area below
-                                   // $0c00; $1000-$1FFF is chargen ROM from VIC view!)
+.const SPR_DATA     = $0b00        // sprite shape block $2c. Free area above
+                                   // screen RAM ($07e8) and below the chargen
+                                   // ROM mirror ($1000-$1FFF in VIC view!)
 .const SPR_BLOCK    = SPR_DATA / 64
 .const FONT_BASE    = $4c00        // chargen ROM copy
 .const SCROLL_ROW_BMP = BITMAP + 0 * 40 * 8    // bitmap row 0: $2000..$213F
@@ -167,8 +169,8 @@ forever:
 
         // End part loads font at $3000 + code at $3800, all inside main's
         // now-dead bitmap area. Main's code at $0810 is untouched so this
-        // jmp survives the load.
-        jsr $c90
+        // jmp survives the load. v3.1 loader entry is $0200 (was $0c90).
+        jsr $200
         jmp $3800
 
 
