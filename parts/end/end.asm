@@ -45,7 +45,7 @@
 .const zp_fade     = $fb         // fade-in counter, 0..FADE_DONE, ticks each frame; drives SID volume + text reveal
 .const zp_wrap_pending = $fc     // set non-zero in irq_top when yscroll wraps; consumed later to fire scroll_rows_up
 
-.const N_CREDIT_ROWS = 44        // KEEP IN SYNC with the .text blocks below
+.const N_CREDIT_ROWS = 46        // KEEP IN SYNC with the .text blocks below
 .const FADE_DONE     = 99        // fade-in completes after 99 frames (~2 sec @50Hz)
 .const TEXT_REVEAL   = FADE_DONE // colour RAM flips from black to the gradient at this fade tick
 .const SCROLL_TICK_MASK = $03    // tick yscroll every (mask+1) frames — $03 = every 4 frames
@@ -364,8 +364,15 @@
         .byte %01100000
         .byte %00000000
 
-// $2f — unused
-        .fill 8, 0
+// $2f '/'
+        .byte %00000110
+        .byte %00001100
+        .byte %00011000
+        .byte %00110000
+        .byte %01100000
+        .byte %11000000
+        .byte %00000000
+        .byte %00000000
 
 // $30 '0'
         .byte %01111100
@@ -468,7 +475,82 @@
         .byte %01100000
         .byte %00000000
 
-// $3b..$ff — rest unused, zero fill up to $3800
+// $3b..$40 — unused gap before capitals
+        .fill 8 * ($41 - $3b), 0
+
+// Capital glyphs — only the ones credit_text needs (A E F K S T).
+// All other uppercase slots stay zero (invisible chars).
+
+// $41 'A'
+        .byte %00111000
+        .byte %01101100
+        .byte %11000110
+        .byte %11000110
+        .byte %11111110
+        .byte %11000110
+        .byte %11000110
+        .byte %00000000
+// $42..$44 — unused
+        .fill 8 * 3, 0
+// $45 'E'
+        .byte %11111110
+        .byte %11000000
+        .byte %11000000
+        .byte %11111100
+        .byte %11000000
+        .byte %11000000
+        .byte %11111110
+        .byte %00000000
+// $46 'F'
+        .byte %11111110
+        .byte %11000000
+        .byte %11000000
+        .byte %11111100
+        .byte %11000000
+        .byte %11000000
+        .byte %11000000
+        .byte %00000000
+// $47..$4a — unused
+        .fill 8 * 4, 0
+// $4b 'K'
+        .byte %11000110
+        .byte %11001100
+        .byte %11011000
+        .byte %11110000
+        .byte %11011000
+        .byte %11001100
+        .byte %11000110
+        .byte %00000000
+// $4c..$51 — unused
+        .fill 8 * 6, 0
+// $52 'R'
+        .byte %11111100
+        .byte %11000110
+        .byte %11000110
+        .byte %11111100
+        .byte %11011000
+        .byte %11001100
+        .byte %11000110
+        .byte %00000000
+// $53 'S'
+        .byte %01111110
+        .byte %11000000
+        .byte %11000000
+        .byte %01111100
+        .byte %00000110
+        .byte %00000110
+        .byte %11111100
+        .byte %00000000
+// $54 'T'
+        .byte %11111110
+        .byte %00011000
+        .byte %00011000
+        .byte %00011000
+        .byte %00011000
+        .byte %00011000
+        .byte %00011000
+        .byte %00000000
+// $55..$ff — rest unused, zero fill up to $3800
         .fill (FONT + $800) - *, 0
 
 
@@ -1007,8 +1089,10 @@ credit_text:
         row("                                        ")
         row("                                        ")
         row("           code                         ")
-        row("              anus                      ")
-        row("              kloot/deFEESST            ")
+        row("              Anus/deFEEST              ")
+        row("              Kloot/deFEEST            ")
+        row("              Ranzbak/deFEEST           ")
+        row("              Kleuter/deFEEST           ")
         row("                                        ")
         row("           music                        ")
         row("              ai-coded 3-voice sid      ")

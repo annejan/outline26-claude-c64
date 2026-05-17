@@ -46,9 +46,14 @@
 // Beat pacing — same 24 fr/beat tempo as interlude
 .const BEAT_PERIOD = 24
 
+// DYCP wobble — phase shift between adjacent sprites (in sine-table
+// steps). 32 = a full quarter-wave across the 8-sprite row.
+.const DYCP_PHASE_STEP = 24
+
 // Zero-page
-.const zp_beat_phase = $f4
-.const zp_beat_count = $f6         // script transitions on f6 = $20
+.const zp_beat_phase  = $f4
+.const zp_wobble_pos  = $f5        // global phase, advances each frame
+.const zp_beat_count  = $f6        // script transitions on f6 = $20
 
 
 * = $8000 "Greets"
