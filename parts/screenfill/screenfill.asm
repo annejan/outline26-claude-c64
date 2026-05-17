@@ -70,8 +70,14 @@ setup:
         lda #$00
         sta $d015
 
-        lda #$06                // border + bg both blue — solid background
-        sta VIC_BORDER          // so the ripple reads edge-to-edge with no frame.
+        // Bg → blue so the DEFEEST chars bloom over the BASIC text
+        // (which was blue/light-blue), but leave BORDER at BASIC's $0E
+        // (light blue). Border stays at the BASIC default through the
+        // entire radial-fill phase (~2.5 s) — the interrupt drops it
+        // to $06 once RADIUS hits 16 (ripple starts), then to $00 in
+        // the existing late-ripple fade. Avoids a jarring border-color
+        // snap immediately after RUN.
+        lda #$06
         sta VIC_BG
 
         // Colour RAM → light blue. (Ripple overwrites it during hold.)
@@ -241,6 +247,13 @@ interrupt:
 
 !do_ripple:
         // ===== RIPPLE + FADE =====
+        // First entry into ripple — drop border from BASIC's light-blue
+        // ($0E) to blue ($06) to match bg. Idempotent: writing $06 every
+        // subsequent ripple frame doesn't hurt until the late-fade snap
+        // to $00 takes over.
+        lda #$06
+        sta VIC_BORDER
+
         lda HOLDCNT
         beq irq_done
 
