@@ -609,22 +609,30 @@ bar_lda:
 
 
 //==================================================================
-// scroll_rows_up — shift rows 1..24 of SCREEN up by one row (into
-// rows 0..23). Row 24 is left as-is; push_next_credit_row overwrites
-// it immediately after. Cost: ~9000 cy per call, fires once every
-// 8 frames so amortizes to ~1100 cy/frame — well within budget.
+// scroll_rows_up — shift rows 1..24 of SCREEN up into 0..23. Row 24
+// is overwritten immediately after by push_next_credit_row. Done in
+// ROW-MAJOR order (full row 0 first, then row 1, …) so each row's
+// 40-byte write completes before VIC reads it for display.
+//
+// Timing (called from irq_top at line $00):
+//   - Per-row inner: ldy #39 + 40×(lda/sta/dey/bpl) ≈ 561 cy ≈ 9 lines
+//   - Row K destination written by line ~9(K+1)
+//   - VIC reads row K at line 50 + 8K
+//   - margin = 50 + 8K − (9K + 9) = 41 − K  (positive for K ≤ 23 ✓)
+//
+// Total ~13.5k cy (~213 lines) so the chained bar IRQ doesn't start
+// until ~line $D5 on shift frames — a brief 30-line strip at the
+// bottom is the only rainbow on those frames. Acceptable trade-off
+// to keep the text itself tear-free.
 //==================================================================
 scroll_rows_up:
-        ldx #39
-!loop:
         .for (var r = 0; r < 24; r++) {
-            lda SCREEN + (r+1)*40, x
-            sta SCREEN + r*40,     x
+            ldy #39
+        !l: lda SCREEN + (r+1)*40, y
+            sta SCREEN +    r *40, y
+            dey
+            bpl !l-
         }
-        dex
-        bmi !done+
-        jmp !loop-              // can't bpl back — unrolled body is past branch range
-!done:
         rts
 
 
