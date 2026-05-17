@@ -27,7 +27,9 @@ parts/main/main.prg   4000  3c02   800
 # BmpScroll renderer + scroll text  ($5400..$5bbc = $7bd bytes)
 parts/main/main.prg   5400  5002   7bd
 
-# Part 3: end ("to be continued..." placeholder). Loads at $c000,
-# overwriting the dead screenfill region. Main's outro hand-off
-# (`jsr $c90 / jmp $c000`) lands here.
-parts/end/end.prg     c000   2     6d
+# Part 3: end (credit roll). Single chunk: font at $3000 + code at
+# $3800, all inside main's now-dead bitmap area ($2000-$3F3F). Main's
+# outro hand-off (`jsr $c90 / jmp $3800`) lands at end's entry.
+# Byte count = (font_end - $3000) reported by KickAssembler memory
+# map for the End segment + $800; bump when end.asm grows.
+parts/end/end.prg     3000   2     1200

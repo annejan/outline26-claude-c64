@@ -165,10 +165,11 @@ forever:
         sta VIC_BORDER          // border black
         sta VIC_BG              // bg black
 
-        // End part loads at $c000 (overwriting the now-dead screenfill
-        // area; doesn't touch main's code so this jmp survives).
+        // End part loads font at $3000 + code at $3800, all inside main's
+        // now-dead bitmap area. Main's code at $0810 is untouched so this
+        // jmp survives the load.
         jsr $c90
-        jmp $c000
+        jmp $3800
 
 
 //==================================================================
