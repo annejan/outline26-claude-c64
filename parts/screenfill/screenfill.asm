@@ -9,9 +9,9 @@
 // then triggers Spindle's loader (jsr $c90) and JMPs into the main
 // demo at $0810.
 //
-// Lives at $c000 — well above main demo's $0810..$5dc3 range so the
+// Lives at $c000 — well above main demo's $0810..$5bbc range so the
 // screenfill code SURVIVES the `jsr $c90` that loads main into RAM.
-// Crucial: $4000-$46ff is main's Tables segment; an earlier $4000
+// Crucial: $4000-$47ff is main's Tables segment; an earlier $4000
 // placement got the screenfill code overwritten mid-load and `jmp
 // $0810` was replaced by palette bytes → CPU ran into garbage.
 //

@@ -1,10 +1,11 @@
 //==================================================================
-// outline-64 — Outline 2026 demo
+// outline-64 — Outline 2026 demo, part 2 (main)
 //
 // Layout (top to bottom):
 //   open top border       lines $00..$32  (HCL trick)
-//   bitmap row 0 scroller lines $33..$3A  (fixed, zig-zag scroll)
-//   FLD stretch zone      lines $3B..$3B+K  (K = bounce_total)
+//   bitmap row 0 scroller lines $33..$3A  (cycles left / right / zig-zag
+//                                          via $fe sentinels in scroll_text)
+//   FLD stretch zone      lines $3B..$3B+K  (K = bounce_total[frame])
 //   logo wipe-reveal      rows 8..16, sliding down by K px
 //   rainbow rasterbars    lines $80..$EB  (behind logo, with sides)
 //   open bottom border    lines $EC..$FF  (HCL trick)
@@ -14,7 +15,14 @@
 //
 // Sprite blink fix: balls 0..2 disabled in irq_close (line $F9) so
 // their Y+256 wrap duplicates between $F9 and next-frame $01 don't
-// re-fire. Re-enabled in irq_open along with 3..7.
+// re-fire. Re-enabled in irq_open via the per-frame calc_active_count
+// mask (3..7 take the same cascade gating).
+//
+// Intro cascade: zp_intro ticks at 25 Hz and gates each element on at
+// its T_* threshold; balls spawn one-at-a-time at T_BALLS + N*8 ticks.
+// Outro cascade: zp_outro arms when scroll_text hits $ff and unwinds
+// the same elements in reverse, ending with `jsr $c90 / jmp $c000` to
+// hand off to part 3 (the "to be continued..." end card).
 //==================================================================
 
 .const SPR_X        = $d000

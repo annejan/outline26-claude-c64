@@ -3,27 +3,31 @@
 # First paragraph: auto-loaded by Spindle's boot loader, jumped to.
 # Subsequent paragraphs: loaded on each jsr $c90 from running code.
 
-# Part 1: loading screen at $4000 (away from main demo's $0810..).
+# Part 1: loading screen at $c000 — auto-loaded by Spindle's boot
+# loader. Hand-off to main: jsr $c90 + jmp $0810.
 parts/screenfill/screenfill.prg
 
-# Part 2: main demo, extracted as chunks from the single PRG so we
-# don't write through Spindle's resident loader at $0c00..$0dff.
+# Part 2: main demo, extracted as chunks from a single PRG so we don't
+# write through Spindle's resident loader at $0c00..$0dff. Byte counts
+# MUST match KickAssembler's emitted segment sizes (see ./build.sh
+# output); if a segment grows past its count here the trailing bytes
+# are silently truncated and the demo crashes to BASIC READY at boot.
 # Format: <file>  <load_addr>  <file_offset>  <byte_count>
 # main.prg's PRG load address is $0400, data starts at offset $02.
 # BitmapScreenRAM (1000 bytes)
 parts/main/main.prg   400   2      3e8
-# Main code + IRQs
+# Main code + IRQs                  ($0810..$0a46 = $237 bytes)
 parts/main/main.prg   810   412    237
-# Music (SID player + patterns)
+# Music (SID player + patterns)     ($1000..$1275 = $276 bytes)
 parts/main/main.prg   1000  c02    276
 # Bitmap (logo data, 8000 bytes)
 parts/main/main.prg   2000  1c02   1f40
 # Tables (palette, sines, bounce, rainbow_pal)
 parts/main/main.prg   4000  3c02   800
-# BmpScroll renderer + scroll text
-parts/main/main.prg   5400  5002   9c4
+# BmpScroll renderer + scroll text  ($5400..$5bbc = $7bd bytes)
+parts/main/main.prg   5400  5002   7bd
 
 # Part 3: end ("to be continued..." placeholder). Loads at $c000,
-# overwriting the dead screenfill region. Main's halt sequence
-# (`jsr $c90 / jmp $c000`) hands off here.
-parts/end/end.prg     c000   2     200
+# overwriting the dead screenfill region. Main's outro hand-off
+# (`jsr $c90 / jmp $c000`) lands here.
+parts/end/end.prg     c000   2     6d

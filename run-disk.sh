@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run outline-64.d64 in system VICE (x64sc) — visual only.
-# For MCP-driven testing, see run-mcp.sh (loads rasterbars.prg, the
-# single-PRG legacy build).
+# For MCP-driven testing (with the embedded MCP server build of VICE),
+# see run-mcp.sh.
 set -e
 
 ROOT="$(dirname "$(readlink -f "$0")")"
