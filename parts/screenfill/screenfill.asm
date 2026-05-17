@@ -45,9 +45,8 @@ start:
         lda #%00010111
         sta VIC_MEM
 
-        lda #$00                // border black
-        sta VIC_BORDER
-        lda #$06                // bg blue
+        lda #$06                // border + bg both blue — solid background
+        sta VIC_BORDER          // so the ripple reads edge-to-edge with no frame.
         sta VIC_BG
 
         // Colour RAM → light blue. (Ripple overwrites it during hold.)
@@ -189,13 +188,30 @@ hold:
         iny
         bne !r4-
 
-        // Fadeout: in the last 48 frames of hold, every 8 frames apply
-        // fadetab to ripple_palette. After ~6 steps every entry reaches
-        // $00, so the ripple keeps animating but dims smoothly to black.
+        // ----- staged fadeout -----
+        // Stage 1 (during ripple, HOLDCNT=100): bg+border $06 → $0B
+        // Stage 2 (during ripple, HOLDCNT=70):  bg+border $0B → $00
+        // Stage 3 (HOLDCNT < 70): step ripple_palette through fadetab
+        //         every 8 frames. fadetab only walks within blue/grey
+        //         family ($01→$0F→$0C→$0B→$00, $03→$0E→$06→$00, etc.)
+        //         so the dim doesn't dart through green/yellow.
         lda HOLDCNT
-        cmp #48
+        cmp #100
+        bne !nb1+
+        lda #$0b
+        sta VIC_BG
+        sta VIC_BORDER
+!nb1:
+        lda HOLDCNT
+        cmp #70
+        bne !nb2+
+        lda #$00
+        sta VIC_BG
+        sta VIC_BORDER
+!nb2:
+        lda HOLDCNT
+        cmp #70
         bcs !nofade+
-        lda HOLDCNT
         and #$07
         bne !nofade+
         ldy #15
@@ -204,21 +220,13 @@ hold:
         sta ripple_palette,y
         dey
         bpl !fl-
-        // Bg fades through the same table so the whole screen dims
-        // together rather than text-on-blue → snap-to-black.
-        ldx VIC_BG
-        lda fadetab,x
-        sta VIC_BG
 !nofade:
 
         inc PHASE
         dec HOLDCNT
-        bne hold
-
-        // Snap bg to black so the gap between here and main's first
-        // VIC writes is clean black, not blue.
-        lda #$00
-        sta VIC_BG
+        beq !hold_done+
+        jmp hold
+!hold_done:
 
         // Spindle: load next paragraph (main demo).
         jsr $c90
@@ -226,12 +234,12 @@ hold:
         // Jump to main demo entry.
         jmp $0810
 
-// Fade-to-black table. Every colour walks one step darker per apply;
-// all paths converge to $00 within ~4 iterations. Used by the ripple
-// fadeout at end of hold.
+// Hue-preserving fade-to-black table — only the colours that appear in
+// ripple_palette (plus their intermediate steps) walk toward black.
+// Paths: $01→$0F→$0C→$0B→$00, $03→$0E→$06→$00, $0E→$06→$00, $06→$00.
 fadetab:
-        .byte $00, $0c, $09, $0e, $06, $09, $0b, $08
-        .byte $09, $0b, $08, $00, $0b, $0c, $06, $0c
+        .byte $00, $0f, $00, $0e, $00, $00, $00, $00
+        .byte $00, $00, $00, $00, $0b, $00, $06, $0c
 
 // "DEFEEST" as upper-case screencodes in screencode_mixed:
 // D=$44 E=$45 F=$46 E=$45 E=$45 S=$53 T=$54
