@@ -310,7 +310,7 @@ irq_open:
         lda spr_count_mask,x
         sta SPR_EN
 
-        inc zp_frame            // global animation tick (was in do_scroll)
+        inc zp_frame            // global animation tick
 
         // Intro counter ticks every 2 frames (bit 0 of zp_frame = 0).
         // Saturates at $ff = ~10 sec total intro window.
@@ -1347,7 +1347,9 @@ update_bmp_scroll:
         lda zp_smooth
         cmp #8
         beq !advance+
-        rts                     // not a step boundary — bail (was bne !done+, now out of branch range)
+        rts                     // not a step boundary — bail. Inline rts
+                                // because the !done: label below is out of
+                                // bne branch range from here.
 !advance:
         lda #0
         sta zp_smooth
