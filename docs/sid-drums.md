@@ -27,6 +27,46 @@ overriding V3 for the kick window; after the window, arp resumes.
 
 ## Drum recipes
 
+### ⚠️ Hard restart — required to retrigger envelopes
+
+Before any drum recipe will WORK, you have to understand that the
+6581 SID **silently drops new attacks** if the gate is already high.
+Writing `$D412 = $81` (noise + gate) when the gate was already 1
+just changes the waveform — the envelope stays at whatever level it
+was already at. This is why our first kick attempt was inaudible:
+the music engine writes V3 control = `$41` (pulse + gate) every
+frame, so V3's gate has been HIGH continuously since intro.
+
+The fix is the **"hard restart"** technique:
+- Set gate to 0 + zero AD/SR registers, hold for ≥ 1 frame
+- Then write new ADSR + waveform + gate ON — rising edge triggers
+  the attack cleanly
+
+In our voice-sharing setup the music engine writes V3 control = `$41`
+EVERY frame. To force a retrigger we need to override that with a
+gate-off + zero-ADSR write for at least one full frame BEFORE
+gating the new sound:
+
+```kickass
+; Frame 1 (HARD RESTART)
+lda #$00
+sta $D413          ; AD = 0
+sta $D414          ; SR = 0
+sta $D412          ; control = 0 (gate off, no wave)
+; envelope drops to 0 during this frame
+
+; Frame 2 (ATTACK)
+lda #$09 / sta $D413           ; AD = new (attack 0, decay 9)
+lda #$00 / sta $D414           ; SR = new (no sustain)
+... set freq ...
+lda #$81 / sta $D412           ; noise + gate ON — clean attack
+```
+
+This is what `greets.asm` implements via `zp_kick_state` — state 1
+is hard-restart, state 2 is the audible attack, states 3..N are
+sweep frames. Without this, all of the recipes below produce
+nothing audible when sharing a voice with a gated melody engine.
+
 ### Kick — pitch-swept pulse (Jeroen Tel / 808-style)
 
 The defining sound of "epic" SID drums. Pulse wave with a fast
@@ -178,6 +218,43 @@ lda #$00 / sta $D413              ; restore arp AD
 lda #$F0 / sta $D414              ; restore arp SR
 kick_done:
 ```
+
+## The "4th channel" question — `$D418` digi
+
+The SID has 3 hardware voices. Drum-heavy tunes often want a
+dedicated channel that doesn't conflict with bass/lead/arp. The
+classic answer is the **`$D418` digi** trick:
+
+- SID's `$D418` register has the master volume in its low 4 bits.
+- Writing different values at audio rate creates a tiny DC offset
+  on the audio output (the master volume directly attenuates the
+  voice mix, but also has a small leakage path that produces signal
+  even when no voice is sounding).
+- Stream 4-bit samples through `$D418` at ~8 kHz from a timer IRQ
+  and you get audible PCM that doesn't use any of the three voices.
+
+**The catch — chip revision matters:**
+
+- **6581 (original SID)**: digi loud and clear. This is what
+  Hubbard/Galway/Tel exploited for sample-based drums.
+- **8580 (later SID, most modern C64s)**: the leakage path was
+  "fixed" — digi is barely audible without **digiboost** (a hardware
+  mod adding a small voltage offset on the audio output).
+- **VICE**: digi works in 6581 emulation, partial in 8580 mode
+  unless `SidResidDigiBoost = 1` is set. Demos targeting real
+  hardware are usually conservative.
+
+For this demo we use the **voice-share + hard-restart pattern** (see
+above) instead of `$D418` digi, for portability across SID revisions
+and to keep the IRQ budget free. We get one "drum channel" by
+time-slicing V3 between arp and percussion frames — what most
+4-channel-feel SID tunes actually do (Cybernoid II, Wizball, Commando
+all share V3 like this).
+
+If we needed BIG drum sounds (sampled snare, full hi-hat patterns)
+we'd add a `$D418` digi player as a timer IRQ that streams a 4-bit
+PCM buffer, accepting we'd need a digiboost'd 8580 or a 6581 to
+hear it properly. For now, the voice-share kick is the right call.
 
 ## Recommended listening (real C64 SIDs to study)
 

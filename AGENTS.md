@@ -24,7 +24,7 @@ Five parts loaded by Spindle's pefchain framework:
 |---|-----|------|----------------|
 | 1 | `parts/screenfill/`  | Loading screen — radial DEFEEST bloom + water ripple + fade-to-black | `$06 = $00` (HOLDCNT drained) |
 | 2 | `parts/intro/`       | Logo bounce, scroller, rasterbars, 8 sprites, 3-voice SID | `$F6 = $F0` (`zp_outro` hits `T_OUTRO_DONE`) |
-| 3 | `parts/interlude/`   | Pad-only breather → bass return + filter sweep build-up | `$F6 = $20` (beat counter) |
+| 3 | `parts/interlude/`   | Text-mode plasma + 6 raster bars over pad→build-up arc | `$F6 = $20` (beat counter) |
 | 4 | `parts/greets/`      | DYCP sprite-font scroller with sine wobble | `$F6 = $20` |
 | 5 | `parts/end/`         | Credit roll, side bars, slow chord/lead reprise | `stay` (loops) |
 
@@ -97,6 +97,11 @@ outline-64/
 │   └── end/      {end.asm,      end_efo_header.asm}
 ├── tools/
 │   └── png_to_koala.py  ← PNG → multicolour C64 bitmap
+├── docs/
+│   ├── timing.md         ← frame-by-frame event timeline for all 5 parts
+│   ├── pefchain-notes.md
+│   ├── sid-drums.md
+│   └── sound-arc.md
 └── outline-64.d64       ← build output
 ```
 
@@ -311,15 +316,17 @@ In rough order of likelihood:
 
 ---
 
-## Pending work (live status — see TaskList for current)
+## Pending work
 
-- Sinusstuff-style sines/image part (new — slot between greets and end?)
-- Music arc polish (build to climax, wind-down in end credits)
-- Real graphics / artwork pass (replace placeholder sprite font,
+- **Sinusstuff-style sines/image part** (new slot between greets and end?)
+- **Music arc polish** (build to climax, wind-down in end credits)
+- **Real graphics / artwork pass** (replace placeholder sprite font,
   improve logo, custom font polish, end-screen background)
+- **Interlude visual polish** (plasma speed/colours, bar bob, textures)
+- **Intro transition** — border/bg fade-in at screenfill→intro now smooth;
+  verify through all emulator/hardware targets
 
-The board lives in TaskList; check there for current ownership /
-status before starting work.
+See `docs/timing.md` for current frame-by-frame event timeline.
 
 ---
 

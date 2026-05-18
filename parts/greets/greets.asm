@@ -47,15 +47,24 @@
 .const zp_beat_count  = $f6
 .const zp_scroll_pos  = $f7
 .const zp_scroll_tick = $f8
-.const zp_kick_remain = $f9    // frames left in current kick window
+.const zp_kick_state  = $f9    // V3 kick state machine (0=idle)
 
-// Pitch-swept kick (808/Tel-style): noise+gate for the first frame
-// gives a percussive transient, then pulse with a fast downward
-// pitch sweep over the rest of the window for the deep thump.
-// Total ≈ 200 ms, plenty of body to land on the beat.
-.const KICK_FRAMES   = 10
-.const KICK_FREQ_HI  = $20     // starting freq hi byte (mid-bass)
-.const KICK_SWEEP    = $03     // freq hi decrement per frame
+// Pitch-swept kick state machine. Required because SID 6581 needs
+// "hard restart" to retrigger an envelope: gate must drop LOW for
+// >= 1 frame before going HIGH again or the new attack is silently
+// dropped (we hit this — previous static-pitch noise burst wrote
+// gate=1 over an already-gated V3 and produced no audible kick).
+//
+// State values:
+//   0       = idle (let music engine's arp run on V3)
+//   1       = HARD RESTART frame: gate off + ADSR cleared (silent)
+//   2       = ATTACK frame: gate on with noise + new ADSR + freq
+//   3..N    = SUSTAIN frames: pulse + pitch sweep down
+//   on the beat-detect we set zp_kick_state = 1 so the audible
+//   attack lands ~20 ms after the beat — close enough.
+.const KICK_LAST_FRAME = 12      // sustain frames run 3..LAST inclusive
+.const KICK_FREQ_HI    = $30     // starting freq hi byte (mid-bass)
+.const KICK_SWEEP      = $04     // freq hi decrement per frame
 
 
 * = $8000 "Greets"
@@ -173,7 +182,7 @@ interrupt:
         // mute (sta $d404) is gone, the bass returns with intro's
         // punchy ADSR ($04 / $61) intact.
 
-        // ----- beat counter + V3 kick trigger -----
+        // ----- beat counter + V3 kick state machine -----
         inc zp_beat_phase
         lda zp_beat_phase
         cmp #BEAT_PERIOD
@@ -181,59 +190,74 @@ interrupt:
         lda #0
         sta zp_beat_phase
         inc zp_beat_count
-        // Beat hit — arm a new kick window on V3.
-        lda #KICK_FRAMES
-        sta zp_kick_remain
+        // Beat hit — arm hard-restart (state 1). The audible attack
+        // lands on state 2 (next frame, ~20 ms after the beat — close
+        // enough to feel on the beat).
+        lda #1
+        sta zp_kick_state
 !no_beat:
 
-        // V3 kick override (pitch-sweep style). While the kick window
-        // is active, we override the music engine's V3 writes:
-        //   • Frame N=KICK_FRAMES (just-armed): noise wave + gate +
-        //     short percussive AD/SR for the attack transient.
-        //   • Frames N-1..1: pulse wave + gate, freq swept down
-        //     (mid → sub) for the deep body.
-        //   • Frame N=0: idle — restore intro's arp ADSR so the
-        //     engine's next V3 freq/control write resumes the arp.
-        lda zp_kick_remain
-        beq !no_kick+
-        cmp #KICK_FRAMES
-        bne !kick_sustain+
+        lda zp_kick_state
+        beq !kick_arp+               // 0 = idle, leave V3 to the arp
 
-        // First frame of kick: noise transient + reset envelope.
+        cmp #1
+        bne !chk_attack+
+        // STATE 1 — HARD RESTART: gate off, zero AD/SR. V3 envelope
+        // drops to 0 over the frame so the next gate-on triggers a
+        // proper attack instead of being ignored.
         lda #$00
-        sta $d413                  // V3 AD = $00 (instant attack/decay)
-        lda #$30
-        sta $d414                  // V3 SR = $30 (mid sustain for body)
+        sta $d413                    // V3 AD = 0
+        sta $d414                    // V3 SR = 0
+        sta $d412                    // V3 control = 0 (gate off, no wave)
+        inc zp_kick_state
+        jmp !kick_done+
+
+!chk_attack:
+        cmp #2
+        bne !kick_sustain+
+        // STATE 2 — ATTACK: set kick ADSR, freq, noise + gate on.
+        // Rising edge triggers the new envelope cleanly.
+        lda #$09
+        sta $d413                    // AD: attack 0 (2ms), decay 9 (~240ms)
         lda #$00
-        sta $d40e                  // V3 freq lo = 0
+        sta $d414                    // SR: no sustain (drops to 0 after decay)
+        sta $d40e                    // freq lo
         lda #KICK_FREQ_HI
-        sta $d40f
-        lda #$81                   // noise wave + gate on
+        sta $d40f                    // freq hi (mid-bass)
+        lda #$81                     // noise + gate on
         sta $d412
-        jmp !kick_tick+
+        inc zp_kick_state
+        jmp !kick_done+
 
 !kick_sustain:
-        // Subsequent frames: switch to pulse, sweep pitch down each
-        // frame so it goes from mid-bass to sub.
-        lda #$81                   // (was already noise+gate; flip to pulse)
-        and #$7f                   // clear bit 7 (noise) — leaves gate alone
-        ora #$41                   // pulse + gate on
+        // STATES 3..KICK_LAST_FRAME — switch to pulse + pitch sweep.
+        cmp #KICK_LAST_FRAME
+        bcs !kick_end+
+        lda #$41                     // pulse + gate (still high — wave change)
         sta $d412
-        // Sweep: subtract KICK_SWEEP from freq hi each frame.
         lda $d40f
         sec
         sbc #KICK_SWEEP
         bcs !sweep_ok+
-        lda #$01                   // floor at $0100 so it stays audible
+        lda #$01                     // floor at $0100 so it stays audible
 !sweep_ok:
         sta $d40f
-
-!kick_tick:
-        dec zp_kick_remain
+        inc zp_kick_state
         jmp !kick_done+
 
-!no_kick:
-        // Restore intro's arp envelope so the arp resumes audibly.
+!kick_end:
+        // Kick done — restore intro's arp envelope so the arp resumes.
+        // Leave gate alone (music engine writes $41 each frame anyway).
+        lda #$00
+        sta $d413
+        lda #$f0
+        sta $d414
+        sta zp_kick_state            // back to idle (0)
+        jmp !kick_done+
+
+!kick_arp:
+        // Idle — make sure arp ADSR stays at intro's settings every
+        // frame (defensive, in case something else clobbered it).
         lda #$00
         sta $d413
         lda #$f0
