@@ -21,9 +21,5 @@ parts/screenfill/screenfill.pef     06 = 00
 parts/intro/intro.pef               f6 = f0
 parts/interlude/interlude.pef       f6 = 20
 parts/greets/greets.pef             f6 = 20
-#parts/sinus/sinus.pef               f6 = 30
-#  ↑ commented out for now — pefchain MAXEFFECTS and memory-layout
-#    conflicts (sinus claims $08 which intro uses for screen RAM, and
-#    'I' inherit of $10-$12 needs more pefchain effect slots). Wire
-#    it back in after fixing those.
+parts/sinus/sinus.pef               f6 = 30
 parts/end/end.pef                   stay
