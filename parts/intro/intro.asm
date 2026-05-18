@@ -81,9 +81,24 @@
 // has armed, ~20 s into intro). Continues through interlude + greets
 // via my_music_play residency. End uses its own music_play, no drums.
 .const DRUM_LEN    = 10          // V3 drum window in frames (~200 ms thump)
-.const DRUM_FREQ_HI = $20        // starting noise pitch (mid-bass)
-.const DRUM_SWEEP   = $03        // hi-byte decrement per frame (sweep $20→sub)
-.const DRUM_FLOOR   = $03        // ~46 Hz floor (sub-bass body)
+// Noise frequency on SID controls LFSR step rate — HIGH freq sounds
+// hi-hat-y, LOW freq is bass rumble (per Codebase64 noise-waveform
+// notes). The earlier $20→$03 sweep spent most of its window in
+// hat territory and only briefly touched rumble at the end, giving
+// the kick a swept-crash character instead of a thump.
+//
+// Stay in rumble: start at $10 (bass-band noise, still has some
+// transient snap on the first frame) and sweep fast to $02 (deep
+// sub rumble). All 10 frames are kick-band — no hat-tail.
+//
+// ADSR is left at the arp's $00/$F0 (sustain pinned at peak) so V3
+// can flip back to pulse for the arp without an envelope reset —
+// a real envelope shape would force a hard-restart that kills the
+// arp's recovery on this shared voice. The "kick body" is therefore
+// painted entirely by waveform + freq sweep, not by amplitude.
+.const DRUM_FREQ_HI = $10        // starting pitch — already in bass-band
+.const DRUM_SWEEP   = $02        // steeper fall: $10→$02 over 7 frames
+.const DRUM_FLOOR   = $02        // deep sub-rumble body
 
 // Outro phase thresholds (in zp_outro ticks; mirror intro pacing).
 // Outro starts when scroll_text hits $ff. Scroller stops immediately (gate

@@ -39,17 +39,54 @@
 .const COL_RAM    = $d800
 
 .const SID_VOL    = $d418
+.const SID_V3_FREQLO = $d40e
+.const SID_V3_FREQHI = $d40f
+.const SID_V3_PULSEL = $d410
+.const SID_V3_PULSEH = $d411
+.const SID_V3_CTRL = $d412
+.const SID_V3_AD = $d413
+.const SID_V3_SR = $d414
 
 .const N_FRAMES   = 250               // ~10 s at the half-rate divider
                                       // (250 ticks @ 25 Hz)
 
+// Coda V3 kick — coda has the unique luxury of "owning" V3 for the
+// duration of the part (zp_outro=0 keeps intro's drum gate closed,
+// and we override the arp's per-frame writes every IRQ). So we can
+// use a real kick ADSR and a proper hard-restart cycle without
+// breaking the arp recovery the way it would in intro/interlude.
+//
+// Technique (a simplified take on lft's "new hard-restart" idea —
+// the full stabiliseRC3 dance is overkill for a single sub-bass kick
+// at 60 BPM):
+//   beat frame   :  CTRL = $10  (triangle, gate OFF) → envelope
+//                   releases through R=0 = instant down to 0.
+//                   Set freq HIGH (the click transient).
+//   next frame   :  CTRL = $11  (triangle, gate ON)  → fresh attack,
+//                   envelope rises A=0 to peak, then D=8 decay.
+//   body frames  :  sweep freq down for the 808 thump.
+//
+// V3's ADSR is set once in setup ($d413=$08, $d414=$00) and stays
+// kick-shaped for the whole part — there's no arp on V3 here to
+// fight with.
+.const KICK_PERIOD  = 50              // ~1 s between kicks @ 50 Hz (60 BPM)
+.const KICK_LEN     = 12              // body frames
+.const KICK_FREQ_HI = $18             // start pitch (~360 Hz click)
+.const KICK_FLOOR   = $03             // end pitch (~46 Hz body)
+.const KICK_SWEEP   = $02             // hi-byte decrement per frame
+
 .const INTRO_MUSIC_PLAY = $119e
 
-.const zp_timer    = $f6              // transition: set to $30 to trigger pefchain
-.const zp_subtick  = $fb              // half-rate divider toggle
-.const zp_frame    = $fc              // animation tick (0..N_FRAMES-1)
+.const zp_timer       = $f6           // transition: set to $30 to trigger pefchain
+.const zp_kick_count  = $f7           // IRQ countdown to next beat
+.const zp_kick_state  = $f8           // 0=idle, KICK_LEN+1=hard-restart frame,
+                                      //         1..KICK_LEN=body frames
                                       // Avoid $f9/$fa — intro's my_music_play
                                       // clobbers them every JSR.
+.const zp_subtick     = $fb           // half-rate divider toggle
+.const zp_frame       = $fc           // animation tick (0..N_FRAMES-1)
+                                      // zp_kick_freq lives in code RAM (not zp)
+                                      // since we're tight on $F6..$FC zp.
 
 
 * = $0800 "Coda"
@@ -63,8 +100,28 @@ setup:
         sta zp_timer
         sta zp_subtick
         sta zp_frame
+        sta zp_kick_state                // idle until first beat
+
+        // Coda owns V3 — pre-load the kick ADSR shape so each beat
+        // gets a real attack→decay envelope. The arp (V3) would
+        // normally fight with this, but in coda we never let it run:
+        // the IRQ overrides $D40E/$D40F/$D412 every frame.
+        lda #$08                        // A=0, D=8 → ~150 ms decay
+        sta SID_V3_AD
+        lda #$00                        // S=0, R=0 → silence between hits
+        sta SID_V3_SR
+        // Triangle waveform, gate off — V3 is silent until first beat.
+        lda #$10
+        sta SID_V3_CTRL
+        // Float kick_freq sentinel so the first body frame paints it.
+        sta kick_freq
+        // First kick fires after a short lead-in so the title is up
+        // before the first thump lands.
+        lda #25                         // ~0.5 s lead-in
+        sta zp_kick_count
 
         // Sprites off (greets had 8 enabled)
+        lda #$00
         sta $d015
 
         // VIC: text mode, ROM chargen $1000 (uppercase), screen $0400.
@@ -157,7 +214,9 @@ fadeout:
 // interrupt — per-frame raster IRQ.
 //
 // Per frame:
-//   - jsr INTRO_MUSIC_PLAY (drums silent because $F6 = 0)
+//   - jsr INTRO_MUSIC_PLAY (chord pad + lead on V1/V2, V3 arp is
+//     about to get overwritten by our kick)
+//   - kick state machine on V3 (hard-restart per beat, sweep body)
 //   - half-rate tick: zp_frame only advances every 2nd IRQ
 //   - if zp_frame >= N_FRAMES, set $F6 = $30 (transition)
 //   - else border = col_tab[zp_frame] for slow sine colour cycle
@@ -165,7 +224,9 @@ fadeout:
 interrupt:
         jsr INTRO_MUSIC_PLAY
 
-        // half-rate divider — same pattern as sinus would use
+        jsr coda_kick
+
+        // half-rate divider
         lda zp_subtick
         eor #1
         sta zp_subtick
@@ -191,6 +252,84 @@ interrupt:
         lda #$ff
         sta VIC_IRQ
         rti
+
+
+//==================================================================
+// coda_kick — V3 percussion state machine.
+//
+// Runs every IRQ AFTER intro's my_music_play has written its arp
+// freq into V3. We overwrite V3 freq + ctrl, so the arp doesn't
+// sound. Envelope state is owned by us via V3's ADSR (set in setup).
+//
+// State machine:
+//   zp_kick_state == 0       : idle. Decrement zp_kick_count; when
+//                              it reaches 0, arm a new beat by
+//                              writing CTRL = $10 (triangle, gate
+//                              OFF) — this starts the envelope's
+//                              release (R=0 → instant to zero) so
+//                              the next frame's gate=1 gives a
+//                              clean fresh attack.
+//   zp_kick_state == KICK_LEN: body frame 0 — the FIRST tick after
+//                              hard restart. Set fresh freq, write
+//                              CTRL = $11 (triangle + gate ON). The
+//                              envelope sees a 0→1 transition and
+//                              starts a fresh attack from zero.
+//   zp_kick_state in 1..KL-1 : body frames. Sweep freq down, keep
+//                              CTRL = $11 (no waveform retrigger,
+//                              envelope decays naturally per AD).
+//   zp_kick_state == 0 again : body done. Reset zp_kick_count for
+//                              next beat. V3 envelope sits at S=0.
+//==================================================================
+coda_kick:
+        lda zp_kick_state
+        bne !body+
+        // ---- idle phase: count down to next beat ----
+        dec zp_kick_count
+        bne !done+
+        // arm: hard restart this frame, body starts next frame
+        lda #KICK_LEN
+        sta zp_kick_state
+        lda #KICK_FREQ_HI
+        sta kick_freq
+        lda #$10                        // triangle + gate OFF
+        sta SID_V3_CTRL
+        // Reset the period counter NOW so it's already armed for the
+        // beat after this one.
+        lda #KICK_PERIOD
+        sta zp_kick_count
+        rts
+!body:
+        // ---- body phase: drive V3 freq + gate ----
+        cmp #KICK_LEN
+        beq !first+
+        // body frame 1..KICK_LEN-1 — sweep freq down
+        lda kick_freq
+        sec
+        sbc #KICK_SWEEP
+        cmp #KICK_FLOOR
+        bcs !sweep_ok+
+        lda #KICK_FLOOR
+!sweep_ok:
+        sta kick_freq
+        jmp !write+
+!first:
+        // body frame 0 (first audible tick) — keep starting freq
+!write:
+        lda #$00
+        sta SID_V3_FREQLO
+        lda kick_freq
+        sta SID_V3_FREQHI
+        lda #$11                        // triangle + gate ON
+        sta SID_V3_CTRL
+        dec zp_kick_state
+!done:
+        rts
+
+
+// Kick freq shadow — lives in code RAM rather than zp because the
+// zp_f6..f8 window is already crowded.
+kick_freq:
+        .byte 0
 
 
 //==================================================================
