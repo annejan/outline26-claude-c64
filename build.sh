@@ -52,6 +52,7 @@ build_part parts/intro      intro
 build_part parts/interlude  interlude
 build_part parts/greets     greets
 build_part parts/sinus      sinus
+build_part parts/coda       coda
 build_part parts/end        end
 
 echo ">>> linking with pefchain"
