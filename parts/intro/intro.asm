@@ -77,6 +77,10 @@
 .const T_BARS      = 120         // bars enable     (~4.8 sec)
 .const T_LOGO      = 200         // logo wipe begins (~8 sec) — reveal_column uses (zp_intro - T_LOGO)
 .const T_SCROLLER  = 240         // scroller enable (~9.6 sec)
+.const T_DRUM      = 250         // drums kick in (~10 sec, last 5 sec of intro
+                                 //   buildup; carries through interlude + greets
+                                 //   via my_music_play residency)
+.const DRUM_LEN    = 4           // V3 drum window in frames (~80 ms noise burst)
 
 // Outro phase thresholds (in zp_outro ticks; mirror intro pacing).
 // Outro starts when scroll_text hits $ff. Scroller stops immediately (gate
@@ -693,7 +697,9 @@ my_music_play:
         inc mu_frame
         lda mu_frame
         cmp #STEP_FRAMES
-        bne !done+
+        beq !is_step+
+        jmp !done+                // bne range exceeded since drum block added
+!is_step:
 
         lda #0
         sta mu_frame
@@ -755,8 +761,45 @@ my_music_play:
         jmp !v2_done+
 !v2_skip:
 !v2_done:
+        // --- V3 DRUM trigger (step boundary, on every 4th step =
+        // every 24 frames ≈ 125 BPM beat). Only after T_DRUM so the
+        // percussion enters late in the intro buildup and carries
+        // through interlude + greets (both call my_music_play).
+        lda zp_intro
+        cmp #T_DRUM
+        bcc !drum_done+
+        lda mu_step
+        and #$03
+        bne !drum_done+
+        // BEAT — arm a new kick window.
+        lda #DRUM_LEN
+        sta drum_state
+!drum_done:
 !done:
+        // --- V3 DRUM tick (every frame, including non-step frames).
+        // While drum_state > 0, override V3 with noise wave + low-mid
+        // pitch — envelope is already sustaining at peak (arp SR=$F0)
+        // so this is LOUD. When drum_state hits 0, next music_play
+        // call writes V3 ctrl=$41 (pulse) and the arp resumes (the
+        // envelope stays at peak so no audible silence).
+        lda drum_state
+        beq !drum_skip+
+        dec drum_state
+        lda #$00
+        sta $d40e                 // V3 freq lo
+        lda #$30
+        sta $d40f                 // V3 freq hi (mid-low noise pitch)
+        lda #$81
+        sta $d412                 // V3: noise wave + gate on
+!drum_skip:
         rts
+
+
+// V3 drum window remaining frames. Lives inside intro's music
+// segment so every part that inherits the music ($10-$12 'I' tag)
+// can drive it. Set non-zero to fire a kick.
+drum_state:
+        .byte 0
 
 // Compact logo bitmap rows 8-16 — extracted from defeest.kla at build
 // time. Stored at $1300 to avoid the runtime-cleared $2000-$3FFF bitmap

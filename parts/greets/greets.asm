@@ -183,7 +183,8 @@ interrupt:
         // mute (sta $d404) is gone, the bass returns with intro's
         // punchy ADSR ($04 / $61) intact.
 
-        // ----- beat counter + V3 kick state machine -----
+        // ----- beat counter (only — drums now live in intro's
+        // my_music_play and carry through every part) -----
         inc zp_beat_phase
         lda zp_beat_phase
         cmp #BEAT_PERIOD
@@ -191,64 +192,7 @@ interrupt:
         lda #0
         sta zp_beat_phase
         inc zp_beat_count
-        // Beat hit — arm kick window (state 1) + reset freq shadow.
-        lda #1
-        sta zp_kick_state
-        lda #KICK_FREQ_HI
-        sta zp_kick_freq
 !no_beat:
-
-        lda zp_kick_state
-        beq !kick_arp+
-        cmp #(KICK_LAST_FRAME + 1)
-        beq !kick_end+
-        bcs !kick_arp+               // > LAST_FRAME+1 = idle
-
-        // ACTIVE KICK FRAME (states 1..KICK_LAST_FRAME).
-        // Force V3 to noise + peak vol + gate ON every frame so the
-        // sound is dead obvious. We override music_play's V3 writes:
-        //   AD = $00 (instant attack, instant decay)
-        //   SR = $F0 (sustain = 15 = peak, release = 0)
-        //   freq from zp_kick_freq shadow (sweeps down)
-        //   ctrl = $81 (noise wave + gate on)
-        lda #$00
-        sta $d413
-        lda #$f0
-        sta $d414
-        lda #$00
-        sta $d40e
-        lda zp_kick_freq
-        sta $d40f
-        sec
-        sbc #KICK_SWEEP
-        cmp #KICK_FLOOR
-        bcs !sweep_ok+
-        lda #KICK_FLOOR
-!sweep_ok:
-        sta zp_kick_freq
-        lda #$81
-        sta $d412
-        inc zp_kick_state
-        jmp !kick_done+
-
-!kick_end:
-        // RELEASE FRAME — gate off (envelope releases), restore arp ADSR.
-        lda #$00
-        sta $d412                    // gate off
-        sta $d413                    // arp AD = $00
-        lda #$f0
-        sta $d414                    // arp SR = $F0
-        lda #$00
-        sta zp_kick_state            // back to idle
-        jmp !kick_done+
-
-!kick_arp:
-        // Idle — keep V3 AD/SR at intro's arp settings every frame.
-        lda #$00
-        sta $d413
-        lda #$f0
-        sta $d414
-!kick_done:
 
         // DYCP — advance wobble phase each frame
         inc zp_wobble_pos
