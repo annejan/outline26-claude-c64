@@ -25,6 +25,10 @@ fi
 
 build_part() {
     local dir="$1" name="$2"
+    shift 2
+    # Any remaining args are extra data files for mkpef, e.g. "foo.bin,2800".
+    # These ride alongside the main .efo so the KA PRG can stay contiguous.
+    local extras=("$@")
     echo ">>> building $name.pef"
     (
         cd "$ROOT/$dir"
@@ -41,8 +45,8 @@ build_part() {
         # Concatenate header + prg → .efo
         cat "${name}_efo_header.bin" "$name.prg" > "$name.efo"
 
-        # mkpef → .pef
-        "$MKPEF" -o "$name.pef" "$name.efo" >/dev/null
+        # mkpef → .pef (plus any extra binaries at fixed load addresses)
+        "$MKPEF" -o "$name.pef" "$name.efo" "${extras[@]}" >/dev/null
         [[ -f "$name.pef" ]] || { echo "  mkpef failed"; exit 1; }
     )
 }
@@ -52,7 +56,11 @@ build_part parts/intro      intro
 build_part parts/interlude  interlude
 build_part parts/greets     greets
 build_part parts/sinus      sinus
-build_part parts/coda       coda
+# Coda's Kloot star sprite shapes ride as a separate data file pinned at
+# $2800 so the main KA PRG doesn't have to span the $0C00-$27FF gap as
+# zero-padding — that gap would otherwise be background-loaded by pefchain
+# during greets and collide with greets' $20-$27 sprite font.
+build_part parts/coda       coda  kloot_star.bin,2800
 build_part parts/end        end
 
 echo ">>> linking with pefchain"

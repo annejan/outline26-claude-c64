@@ -132,7 +132,9 @@ so we never touch CIA2 `$DD00` after the initial Spindle setup.
 | `$1000-$125D`  | —          | **resident music tables + `my_music_play` — inherited by interlude / sinus / greets / coda; end uses its own player** ||||||
 | `$1300-$1FFF`  | —          | compact logo_rows | —    | —         | —         | —         | —         |
 | `$2000-$23FF`  | —          | logo bitmap (multicolour) | — | —    | sprite font | —      | —         |
-| `$2400-$3F3F`  | —          | (logo bitmap continues) | — | —     | —         | —         | end font + code |
+| `$2400-$27FF`  | —          | (logo bitmap continues) | — | —     | —         | —         | —         |
+| `$2800-$2BFF`  | —          | (logo bitmap continues) | — | —     | —         | Kloot-star sprite shapes (16 frames) | — |
+| `$2C00-$3F3F`  | —          | (logo bitmap continues) | — | —     | —         | —         | end font + code |
 | `$4000-$47FF`  | —          | rainbow palette + sine + bounce tables | — | — | — | — | — |
 | `$4C00-$53FF`  | —          | chargen-ROM copy (for scroll) | — | — | — | — | — |
 | `$5400-$5BBC`  | —          | bitmap scroller + scroll text + extra sprite shape | — | — | — | — | — |
@@ -141,8 +143,16 @@ so we never touch CIA2 `$DD00` after the initial Spindle setup.
 
 Coda reuses the same `$0800-$0AFF` pages sinus claimed earlier in the
 chain — sinus is long gone by the time coda loads, so the bytes are
-free to repurpose. Greets' sprite font at `$2000-$23FF` overlaps the
-area intro used for its bitmap; again, intro is gone by then.
+free to repurpose. Greets' sprite font at `$2000-$23FF` and coda's
+Kloot-star shapes at `$2800-$2BFF` both overlap the area intro used
+for its bitmap; again, intro is gone by then.
+
+The Kloot-star shapes don't live in coda's `.prg` (which would force
+a contiguous KA PRG spanning the `$0C00-$27FF` zero-padding gap and
+collide with greets' pages during background loading). Instead the
+binary `parts/coda/kloot_star.bin` is passed to `mkpef` as a second
+data file at address `$2800` (see `build.sh`). The 1 KB chunk becomes
+its own pefchain payload entry alongside coda's main `.efo`.
 
 ### Zero-page
 

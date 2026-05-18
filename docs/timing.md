@@ -149,11 +149,13 @@ Only ~128 of 864 text characters scroll through before the
 
 | Frame | Time | Event |
 |-------|------|-------|
-| 0 | 0 s | Setup: text mode, ROM uppercase chargen at `$1000`, screen `$0400`. Title text painted on rows 11 and 13. V3 ADSR pre-loaded with kick shape (`AD=$08, SR=$00`). `$F6` zeroed → drums from intro's `my_music_play` silenced. |
+| 0 | 0 s | Setup: text mode, ROM uppercase chargen at `$1000`, screen `$0400`. Title text painted on rows 11 and 13. V3 ADSR pre-loaded with kick shape (`AD=$08, SR=$00`). `$F6` zeroed → drums from intro's `my_music_play` silenced. Sprite 0 configured (X=64, Y=139, colour `$08`, pointer `$A0` = first Kloot-star frame at `$2800`) but `$D015 = 0` keeps it hidden. |
 | 0 → 24 | 0 → 0.5 s | Lead-in: `zp_kick_count = 25` counts down before the first beat lands, so the title is up before the first thump. |
+| 13 (half-rate) ≈ 26 raw | 0.52 s | First audible V3 kick. Same frame, `$D015 |= $01` reveals the Kloot star next to "KLOOT" in the title. |
 | 25 + every 50 frames | every 1.0 s (~60 BPM) | V3 kick: gate-off (hard restart) → fresh gate-on with `$D40F = $18` → 12-frame body sweeping freq hi down to `$03` (`$D40F -= 2` per frame). |
+| each zp_frame tick | 25 Hz | Kloot star shape advances: `kloot_shape = (kloot_shape + 1) & $0F`; sprite pointer `$07F8 = $A0 + kloot_shape`. 16 frames span 0°-90°; 4-fold symmetry makes the cycle seamless. Full visual rotation ≈ 0.64 s. |
 | 0 → 249 | 0 → 10.0 s | Border colour cycles through `col_tab` (256-entry slow sine through black / blue / light-blue / light-grey). Background stays black. |
-| **250** | **10.0 s** | IRQ writes `$F6 = $30`, border snaps to black; pefchain's `f6 = 30` condition fires, end loads. |
+| **250** | **10.0 s** | IRQ writes `$F6 = $30`, border snaps to black, `$D015 = $00` hides the star before handing off; pefchain's `f6 = 30` condition fires, end loads. |
 
 Per-frame: `INTRO_MUSIC_PLAY` (chord pad + lead on V1/V2 keep
 drifting), then `coda_kick` overwrites V3 freq + control so the arp
@@ -162,8 +164,12 @@ increments `zp_frame`, halving the effective animation rate.
 
 **EFO ownership**: `'P', $08, $0A` (3 pages: code + col_tab; driver
 overflow lands at `$0B00-$0B1F` — fine because end's payload doesn't
-need `$0B`). `'I', $10, $12` inherits intro's resident music. Reuses
-the same pages sinus claimed earlier in the chain.
+need `$0B`). `'P', $28, $2B` (4 pages of pre-rendered Kloot-star sprite
+shapes, 16 frames × 64 bytes). `'I', $10, $12` inherits intro's resident
+music. Sprite data is loaded by passing `kloot_star.bin,2800` as a
+second data file to `mkpef` (see `build.sh`) — keeps the KA PRG
+contiguous within `$0800-$0AFF` so pefchain doesn't have to handle a
+7 KB zero-padded gap across greets' pages.
 
 ---
 

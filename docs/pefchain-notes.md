@@ -205,6 +205,21 @@ like `0800-5BDC "intro:intro.efo+intro:(drv)": 21469 bytes crunched to
   even needs the bytes there. KickAssembler PRGs are contiguous, so
   big gaps in your segment layout end up as zero-padded bytes that
   pefchain dutifully streams from disk.
+- **For data far from your main segment, use mkpef's multi-file mode.**
+  `mkpef` accepts trailing `<file>,<addr>` arguments after the `.efo`
+  and treats each as its own payload entry — no zero-padding gap. Coda
+  uses this for its Kloot-star sprite shapes at `$2800-$2BFF` while
+  its code lives at `$0800-$0AFF`; without it, KA's contiguous PRG
+  would have dragged a 7 KB zero-padded chunk that collided with
+  greets' `$20-$27` pages during background loading. Build.sh's
+  `build_part` accepts trailing `<file>,<addr>` args and forwards
+  them; see the coda invocation:
+  ```
+  build_part parts/coda coda  kloot_star.bin,2800
+  ```
+  Symptom that signals you need this: pefchain spams `Warning:
+  Inserting blank filler because '...' and 'YOUR_PART' share pages
+  X-Y` and eventually errors out with `pefchain: Increase MAXEFFECTS!`.
 
 ## VIC quirk to clear in every part's setup
 

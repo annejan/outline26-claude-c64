@@ -185,6 +185,16 @@ trigger. The end card is the only "stay" loop.
   X 2026" on row 13. Text mode, ROM uppercase chargen at `$1000`. The
   breather where the story lands between greets' scroller and end's
   credit roll.
+- **Kloot star** — an orange (`$08`) 4-point sparkle sprite sits to the
+  left of "KLOOT" on row 11, signing the title like an AI co-author
+  signature. 16 pre-rendered rotation frames at `$2800-$2BFF` (sprite
+  pointers `$A0..$AF`), advanced 1 shape per `zp_frame` tick. The star's
+  4-fold symmetry makes the loop seamless — visually reads as a smooth
+  continuous rotation, full 360° in ~0.64 s. Fades in at half-rate
+  `zp_frame == 13`, synced with the first audible V3 kick. Sprite shape
+  data is built by `tools/render_kloot_star.py` and pinned at `$2800`
+  via a second mkpef data file so KA's contiguous PRG doesn't drag a
+  7 KB zero-padded chunk across greets' pages.
 - **Slow border colour cycle** through a 256-entry calm palette (black /
   blue / light-blue / light-grey), driven by `col_tab[zp_frame]`.
 - **Dedicated V3 kick** — coda "owns" V3 (no arp competing), so it sets
@@ -198,8 +208,9 @@ trigger. The end card is the only "stay" loop.
 - Inherits intro's music pages (`'I', $10, $12`). Drums from intro's
   `my_music_play` are silenced (`zp_outro` gate stays zero because coda's
   setup zeros `$f6`); only the coda's own V3 kick sounds.
-- Reuses `$0800-$0AFF` — same physical pages sinus claimed earlier in
-  the chain; sinus is long gone by then.
+- Reuses `$0800-$0AFF` (code + col_tab, same pages sinus claimed earlier)
+  and claims `$2800-$2BFF` for the star sprite shapes — all free during
+  coda's run.
 
 ### Part 7 — `parts/end/end.asm` (credit roll)
 
