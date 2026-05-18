@@ -230,6 +230,39 @@ This is why removing the `vol_out` subtraction in `my_music_play`
 (see [`sound-arc.md`](./sound-arc.md)) was so important: a single
 change to the shared routine affected every part that inherited it.
 
+## ⚠️ The "claim every page" rule
+
+The single nastiest bug in the project's history: sinus once shipped
+with `'P', $08, $08` declaring ownership of only one page, but its
+code + sine_tab + col_tab + bg_tab actually spanned `$0800-$0CE7`
+(five pages). Pefchain saw `$09-$0C` as unclaimed and **put its
+driver wait-loop there**, overwriting sinus's data tables. Two
+catastrophic consequences:
+
+1. `irq_sine` reading `col_tab,y` got CPU opcodes (`$A5`/`$F6`/`$C9`
+   /`$30`/`$D0`/`$FA` — the wait-loop's `LDA $F6 / CMP #$30 / BNE`)
+   interpreted as VIC colours. Screen showed wild garbage stripes
+   that LOOKED like a feature.
+2. `irq_top`'s write of `$30` to `$F6` to trigger the transition
+   actually wrote to the same MEMORY holding the wait-loop code,
+   NOT to `$F6` itself. Pefchain's polling never saw the trigger.
+   Sinus ran forever.
+
+**Always declare every page your code + tables occupy.** Build with
+`java -jar kickass/KickAss.jar parts/<x>/<x>.asm` and check the
+Memory Map output:
+
+```
+Default-segment:
+  $0800-$0949 Sinus
+  $0A00-$0AFF SineTab
+  $0B00-$0BC7 ColTab
+  $0C00-$0CC7 BgTab
+```
+
+Every range must be inside a `'P'` tag in the EFO header. For
+sinus that means `'P', $08, $0C` (or two tags if disjoint).
+
 ## When you grow a part past its budget
 
 If you add code to a part and it suddenly silently breaks:

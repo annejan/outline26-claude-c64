@@ -13,10 +13,19 @@ If you're a human reader: same goes — this is the practical
 
 ## What this project is
 
-`outline-64` is a Commodore 64 demo for the Outline 2026 demoparty,
-written by `Kloot/deFEEST` (the AI half of the team) and
+`outline-64` (working title **"Kloot and the Breadbin"**) is a
+Commodore 64 demo by `deFEEST`, releasing at **X 2026**. Work
+started at Outline 2026 — about a month of dev total. Written by
+`Kloot/deFEEST` (the AI half of the team, Claude) and
 `Anus/deFEEST` (the human). KickAssembler 6510 source, Spindle 3.1
 linker, runs on stock PAL hardware (verified in VICE x64sc).
+
+The narrative arc — a human who hadn't had time to code the breadbin
+in years sat down one evening with an AI pair-programmer — is woven
+into the demo itself: interlude's plasma shows "FOR YEARS NO TIME
+FOR BREADBIN CODE" then "BUT THEN KLOOT WALKED IN" when the bass
+returns; greets' DYCP scroller tells the full story; end credits
+close with "see you at Evoke".
 
 Six parts loaded by Spindle's pefchain framework:
 
@@ -243,6 +252,16 @@ an IRQ. Either put `.align` after `rts` or fill with `$EA` (NOP).
 
 ## Spindle 3.1 / pefchain gotchas
 
+### ⚠️ Claim ALL pages your part actually spans
+
+Sinus once shipped with `'P', $08, $08` but spans `$0800-$0CE7` (5
+pages). Pefchain put its driver wait-loop in `$09-$0C`, overwriting
+sinus's `sine_tab`/`col_tab`/`bg_tab` — VIC then read CPU opcodes
+as colours, AND `irq_top`'s write of `$30` to `$F6` actually went
+into the wait-loop code instead of `$F6` itself, so the transition
+never fired. **Always claim every page your code + tables occupy.**
+See `docs/pefchain-notes.md`.
+
 ### Script byte-counts
 
 The pefchain script (and Spindle's older bootloader script) hardcodes
@@ -359,18 +378,22 @@ In rough order of likelihood:
 
 ## Pending work
 
-- **Music arc polish** (build to climax, wind-down in end credits)
-- **Real graphics / artwork pass** (replace placeholder sprite font,
-  improve logo, custom font, sinus charset image, end-screen background)
-- **Interlude visual polish** (plasma speed/colours, bar bob, textures)
-- **Intro transition** — border/bg fade-in at screenfill→intro now smooth;
-  verify through all emulator/hardware targets
+- **Real graphics / artwork pass** (improve logo, custom font polish,
+  sinus image swap from DEFEEST tile to something more artful,
+  end-screen background)
 
-**Completed recent work:**
-- Interlude plasma + raster bars merged
-- Bitmap memory optimisation (clear_bitmap + copy_logo) merged
-- Logo PNG round-trip workflow (koala_to_logo_png.py + logo_png_to_asm.py) merged
-- Sinus part (char-mode wobble + colour cycling + filter sweep) merged
+**Completed recent work (all shipped to main):**
+- 6-part structure: screenfill → intro → interlude → greets → sinus → end
+- Drums in intro's `my_music_play` gated on `zp_outro != 0` so they
+  enter late in intro and carry through interlude + greets
+- Story interleave in interlude (sad text on plasma → tease text at
+  bass return), greets DYCP scroller telling personal arc
+- Sinus rewritten from stripe placeholder to repeating DEFEEST text
+  with `$D016` wobble + colour cycling + LP fade
+- End credits: title + Evoke closer + Anus/Kloot/Ranzbak/Cinder credits
+- Logo PNG round-trip workflow + bitmap trim (PR #3 / #4)
+- All major bugs squashed (KA `>label+N` precedence, sinus EFO
+  page-claim mismatch, `$D011` bit 7 trap, sinus CSEL preservation)
 
 See `docs/timing.md` for current frame-by-frame event timeline.
 

@@ -118,15 +118,24 @@ Only ~128 of 864 text characters scroll through before the
 
 | Frame | Time | Event |
 |-------|------|-------|
-| 0 | 0 s | Setup: char mode, charset $2000, screen $0400, border black. |
-| 0→249 | 0→5.0 s | Per-scanline `$D016` fine scroll wobble (sine table 0–7 px). Colour cycling on border/bg. |
+| 0 | 0 s | Setup: text mode, chargen ROM at $1000, screen $0400, border black. |
+| 0 | 0 s | Screen filled with repeating "DEFEEST" (1024 cells via `defeest_codes` table). Colour RAM = light cyan ($03). |
+| 0→249 | 0→5.0 s | Per-scanline `$D016` fine scroll wobble (sine table 0–7 px, OR'd with `$08` to preserve CSEL). Border + bg colour cycling per scanline. |
 | 0→199 | 0→4.0 s | LP filter sweep: cutoff $70→$08 over 200 frames. Re-asserted after each `my_music_play`. |
-| 200→249 | 4.0→5.0 s | Volume fade: SID vol $0F→$00 over last 50 frames. |
-| **250 (= $30+$20+$30)** | **5.0 s** | zp_timer stalls at $30+; pefchain triggers on `f6 = 30`. |
+| 200→249 | 4.0→5.0 s | Volume fade: SID vol $0F→$00 over last 50 frames. Border/bg also snap to black. |
+| **250** | **5.0 s** | `irq_top` sets zp_timer = `$30`; pefchain's `f6 = 30` condition fires. |
 
-Per-frame: `my_music_play` with LP filter re-assertion, colour ramps,
-sine-table application to $D016. Current artwork is placeholder
-(vertical stripe test pattern).
+Per-frame: `my_music_play` (drums silent in sinus because setup
+zeroed `$F6` so `zp_outro` gate fails), LP filter re-assertion,
+colour cycling, sine-table application to `$D016`. The repeating
+DEFEEST text connects visually back to the screenfill bloom that
+opened the demo — a sinus-style swimming-text effect over the
+inherited intro chords.
+
+**EFO ownership**: `'P', $08, $0C` claims all 5 pages of code +
+sine_tab + col_tab + bg_tab. Earlier `'P', $08, $08` caused
+pefchain to overwrite sinus's tables with its driver wait-loop;
+see `docs/pefchain-notes.md`.
 
 ---
 

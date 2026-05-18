@@ -45,7 +45,7 @@
 .const zp_fade     = $fb         // fade-in counter, 0..FADE_DONE, ticks each frame; drives SID volume + text reveal
 .const zp_wrap_pending = $fc     // set non-zero in irq_top when yscroll wraps; consumed later to fire scroll_rows_up
 
-.const N_CREDIT_ROWS = 63        // KEEP IN SYNC with the .text blocks below
+.const N_CREDIT_ROWS = 68        // KEEP IN SYNC with the .text blocks below
 .const FADE_DONE     = 99        // fade-in completes after 99 frames (~2 sec @50Hz)
 .const TEXT_REVEAL   = FADE_DONE // colour RAM flips from black to the gradient at this fade tick
 .const SCROLL_TICK_MASK = $03    // tick yscroll every (mask+1) frames — $03 = every 4 frames
@@ -1054,38 +1054,42 @@ row_colour:
 is_header:
         .byte 0,0,0         //  0..2  blank
         .byte 1             //  3     you were watching
-        .byte 0             //  4     defeest
-        .byte 1             //  5     x 2026
-        .byte 0             //  6     blank
-        .byte 1             //  7     a little story
-        .byte 0,0           //  8..9  of two minds / and one breadbin
-        .byte 0,0           // 10..11 blank
-        .byte 1             // 12     code
-        .byte 0,0,0,0       // 13..16 four code credits
-        .byte 0             // 17     blank
-        .byte 1             // 18     music
-        .byte 0,0,0         // 19..21 composed/by Anus/with help
-        .byte 0             // 22     blank
-        .byte 1             // 23     graphics
-        .byte 0,0           // 24..25 defeest.nl / hand pixeled with love
-        .byte 0             // 26     blank
-        .byte 1             // 27     tools
-        .byte 0,0,0,0,0     // 28..32 five tools
-        .byte 0             // 33     blank
-        .byte 1             // 34     documentation
-        .byte 0,0,0,0       // 35..38 codebase / spindle / every demo / before this
-        .byte 0             // 39     blank
-        .byte 1             // 40     greetings
-        .byte 0,0,0,0,0     // 41..45 five greet lines
-        .byte 0             // 46     blank
-        .byte 1             // 47     thanks
-        .byte 0,0           // 48..49 dutch lines
-        .byte 0             // 50     blank
-        .byte 1             // 51     and one last thought
-        .byte 0,0,0         // 52..54 forty years / breadbin / and so do we
-        .byte 0             // 55     blank
-        .byte 0,0,0         // 56..58 thank you / from anus / see you
-        .byte 0,0,0,0       // 59..62 blank tail
+        .byte 0             //  4     blank
+        .byte 1             //  5     Kloot and
+        .byte 0             //  6     the Breadbin
+        .byte 0             //  7     blank
+        .byte 0             //  8     by deFEEST
+        .byte 0             //  9     for x 2026
+        .byte 0             // 10     blank
+        .byte 1             // 11     started at outline
+        .byte 0,0           // 12..13 one month later / this happened
+        .byte 0             // 14     blank
+        .byte 1             // 15     code
+        .byte 0,0,0,0       // 16..19 four code credits
+        .byte 0             // 20     blank
+        .byte 1             // 21     music
+        .byte 0,0,0         // 22..24 composed/by Anus/with help
+        .byte 0             // 25     blank
+        .byte 1             // 26     graphics
+        .byte 0,0           // 27..28 defeest.nl / hand pixeled with love
+        .byte 0             // 29     blank
+        .byte 1             // 30     tools
+        .byte 0,0,0,0,0     // 31..35 five tools
+        .byte 0             // 36     blank
+        .byte 1             // 37     documentation
+        .byte 0,0,0,0       // 38..41 codebase / spindle / every demo / before this
+        .byte 0             // 42     blank
+        .byte 1             // 43     greetings
+        .byte 0,0,0,0,0     // 44..48 five greet lines
+        .byte 0             // 49     blank
+        .byte 1             // 50     thanks
+        .byte 0,0           // 51..52 dutch lines
+        .byte 0             // 53     blank
+        .byte 1             // 54     and one last thought
+        .byte 0,0,0         // 55..57 forty years / breadbin / and so do we
+        .byte 0             // 58     blank
+        .byte 0,0,0         // 59..61 thank you / from anus / see you
+        .byte 0,0,0,0,0,0   // 62..67 blank tail
 
 
 //==================================================================
@@ -1106,13 +1110,16 @@ credit_text:
         row("                                        ")
         row("                                        ")
         row("              you were watching         ")
-        row("                  defeest               ")
-        row("                  x 2026                ")
         row("                                        ")
-        row("           the demo                     ")
-        row("              i never had time          ")
-        row("              to make                   ")
-        row("              until now                 ")
+        row("           Kloot and                    ")
+        row("              the Breadbin              ")
+        row("                                        ")
+        row("              by deFEEST                ")
+        row("              for x 2026                ")
+        row("                                        ")
+        row("           started at outline           ")
+        row("              one month later           ")
+        row("              this happened             ")
         row("                                        ")
         row("           code                         ")
         row("              Kloot/deFEEST            ")

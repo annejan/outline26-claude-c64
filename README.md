@@ -1,7 +1,12 @@
-# outline26-claude-c64
+# outline26-claude-c64 — Kloot and the Breadbin
 
-A C64 demo for the Outline 2026 demoparty, written together with Claude.
-KickAssembler 6510, tested on VICE x64sc (PAL).
+A C64 demo by **deFEEST**, releasing at **X 2026**. Work started at
+Outline 2026; about a month of development total. Written together
+with Claude. KickAssembler 6510 source, tested on VICE x64sc (PAL).
+
+The arc: a human (`Anus/deFEEST`) hadn't had time to code the
+breadbin in years. Sat down one evening with `Kloot` (a Claude AI
+pair-programmer). Five weeks later this is what came out.
 
 ## How this was built
 

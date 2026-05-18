@@ -190,6 +190,71 @@ Frame 30 : HAT
 
 Very 808. V3 gets hat'd to death — arp barely audible.
 
+## How this demo wires it up
+
+The drum implementation lives in **intro's `my_music_play`**, NOT
+in the parts that "look" like they have drums (greets, interlude).
+Because every later part calls `INTRO_MUSIC_PLAY = $119E` via the
+resident-music inheritance, the drum code propagates automatically.
+
+Two zp-style bytes live in intro's music segment (around `$128A`):
+
+- `drum_state` — countdown of remaining frames in current kick window
+- `drum_freq` — shadow of V3 freq hi (SID `$D40F` is write-only)
+
+Trigger condition (inside `my_music_play`):
+
+```kickass
+lda zp_outro
+beq !drum_done+       ; ⚠️ gating — drums only fire if zp_outro != 0
+lda mu_step
+and #$03
+bne !drum_done+       ; only every 4th step = ~125 BPM beat
+lda #DRUM_LEN
+sta drum_state
+lda #DRUM_FREQ_HI
+sta drum_freq
+!drum_done:
+```
+
+Per-frame tick (also inside `my_music_play`):
+
+```kickass
+lda drum_state
+beq !drum_skip+
+dec drum_state
+lda drum_freq
+sec / sbc #DRUM_SWEEP        ; pitch sweep down
+cmp #DRUM_FLOOR
+bcs !sweep_ok+
+lda #DRUM_FLOOR              ; floor at sub-bass
+!sweep_ok:
+sta drum_freq
+lda #$00 / sta $D40E         ; V3 freq lo
+lda drum_freq / sta $D40F    ; V3 freq hi (sweeping)
+lda #$81 / sta $D412         ; V3: noise + gate on
+!drum_skip:
+```
+
+Current constants:
+
+| Constant | Value | Effect |
+|----------|-------|--------|
+| `DRUM_LEN` | 10 frames (~200 ms) | Kick window length — long enough to "land" |
+| `DRUM_FREQ_HI` | `$20` (~488 Hz) | Start pitch — mid-bass attack |
+| `DRUM_SWEEP` | `$03` per frame | Sweep speed — fast 808-style dive |
+| `DRUM_FLOOR` | `$03` (~46 Hz) | Sub-bass body floor |
+
+No hard restart in this implementation — V3's envelope was set to
+`AD=$00, SR=$F0` by intro's `my_music_init` (sustained-at-peak arp)
+and the kick relies on that to be LOUD. The waveform switches from
+pulse (arp) to noise (kick) without re-gating; envelope stays at
+peak the whole time so noise plays at full volume.
+
+After the kick window ends, music_play's next V3 ctrl write puts
+the waveform back to pulse and the arp resumes audibly — envelope
+never released, so no click.
+
 ## Engine considerations
 
 The shared resident `my_music_play` writes V3 freq + control + gate

@@ -78,6 +78,40 @@ the byte to a value that doesn't satisfy the next condition**:
 satisfies the new condition and pefchain transitions immediately —
 the new part flashes for one frame and then we skip to its successor.
 
+## ⚠️ Claim ALL pages your part actually spans
+
+The single nastiest bug we've shipped — and one of the few that
+silently produces "demo runs forever in a part without transitioning."
+
+**Sinus's EFO header originally declared `'P', $08, $08` — only ONE
+page.** But the actual code + sine_tab + col_tab + bg_tab span
+`$0800-$0CE7` (five pages). Pefchain saw `$09-$0C` as unclaimed and
+put its driver wait-loop there. The wait-loop opcodes happened to
+overlap sinus's per-scanline colour tables, so:
+
+- `irq_sine` reading `col_tab,y` got `$A5` (LDA), `$F6` (operand),
+  `$C9` (CMP), `$30` (immediate), `$D0` (BNE), `$FA` (offset). These
+  bytes interpreted as VIC colours produced WILD multicolour stripes
+  on the DEFEEST text — looked like a feature, was actually opcodes.
+- More importantly, `irq_top` writing `$30` to `$F6` to trigger the
+  transition actually wrote to the SAME memory holding the wait-loop
+  code, NOT to `$F6` itself. So pefchain's `LDA $F6 / CMP #$30 / BNE`
+  loop never saw the transition value. Sinus ran forever.
+
+**Always declare every page your code + tables actually occupy.**
+Run `./build.sh` and read the `Default-segment:` lines — every
+range needs to be covered by some `'P'` tag (or inherited via `'I'`).
+
+```kickass
+// sinus claims all 5 pages it actually uses
+.byte 'P', $08, $0C
+```
+
+If you're unsure, run `java -jar kickass/KickAss.jar parts/<x>/<x>.asm`
+and look at the Memory Map output. Any segment NOT covered by a `'P'`
+or `'I'` tag is fair game for pefchain's driver and will be silently
+overwritten.
+
 ## Background loading
 
 While part N runs, Spindle's NMI-driven loader streams part N+1 into
@@ -110,6 +144,31 @@ like `0800-5BDC "intro:intro.efo+intro:(drv)": 21469 bytes crunched to
   even needs the bytes there. KickAssembler PRGs are contiguous, so
   big gaps in your segment layout end up as zero-padded bytes that
   pefchain dutifully streams from disk.
+
+## VIC quirk to clear in every part's setup
+
+`$D011` bit 7 is the high bit of the raster-compare register (NOT
+the current-raster-hi which is what the READ returns). If a previous
+part left bit 7 set (typically true if it ran any IRQ chain past
+line 255), and your setup writes `$D012 = 49` for a raster IRQ at
+line 49, the actual compare value is `$131 = 305` — well past visible
+screen. The IRQ never fires at the line you wanted.
+
+Standard fix in every part's setup:
+
+```kickass
+lda VIC_CTRL1
+and #%01111111            // clear bit 7 = compare-raster-hi
+sta VIC_CTRL1
+lda #FIRST_LINE - 1
+sta VIC_RASTER
+lda #$01
+sta VIC_IRQEN
+```
+
+The read-modify-write looks expensive but matters: just writing
+`$1B` blindly would also work, BUT only if no per-frame state in
+`$D011` (like `BMM` for bitmap mode) is supposed to persist.
 
 ## The silent-truncate trap
 

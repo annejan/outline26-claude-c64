@@ -18,11 +18,11 @@ overlays** on top of that continuous music.
 | Part        | What you hear                                                       |
 |-------------|---------------------------------------------------------------------|
 | screenfill  | (silence — SID untouched, music engine isn't running yet)           |
-| intro       | Full mix: bass (V1) + lead (V2) + arp (V3). Master vol fades in.    |
-| interlude   | Pad only (lead + arp). V1 muted. Last 8 beats: V1 returns + LP sweep |
-| greets       | Full mix returns. V1 = bass, no filter. The "payoff" loudness.       |
-| sinus        | Full mix, but LP filter closes ($D418 re-asserted) and vol fades out over last 50 frames. |
-| end          | end_music_init re-inits SID for slow chord/lead reprise. PWM + filter sweep. |
+| intro       | Bass + lead + arp build in. Drums kick in late (when `zp_outro != 0` — intro's outro animation starts, ~20 s in). |
+| interlude   | Pad-only first 11 s (V1 muted). Last 4 s: V1 returns + LP cutoff sweeps open. Drums continue from intro. |
+| greets      | Full mix + drums. The "payoff" loudness with the DYCP scroller telling the personal story. |
+| sinus       | LP filter closes ($D418 re-asserted) and vol fades out over last 50 frames. Drums silent (sinus zeros `$F6 = zp_outro`). |
+| end         | `end_music_init` re-inits SID for slow chord/lead reprise. PWM + filter sweep. No drums. |
 
 ## Why my_music_play is special
 
@@ -82,6 +82,66 @@ sta $D418
 See `parts/interlude/interlude.asm` — its build-up filter sweep relies
 on LP mode being asserted every frame.
 
+## Drums in `my_music_play`
+
+Percussion lives inside intro's `my_music_play` and propagates to
+every later part that calls it (interlude / greets — sinus also
+calls it, but its setup zeros `$F6` which gates the drums off).
+
+Architecture:
+
+```kickass
+; --- V3 drum trigger (at step boundary) ---
+lda zp_outro
+beq !drum_done+       ; gated: drums only fire if zp_outro != 0
+lda mu_step
+and #$03
+bne !drum_done+       ; only every 4th chord step = every 24 frames = ~125 BPM
+lda #DRUM_LEN
+sta drum_state        ; arm a new kick window
+lda #DRUM_FREQ_HI
+sta drum_freq         ; shadow of V3 freq hi (SID regs write-only)
+!drum_done:
+
+; --- V3 drum tick (every frame, end of my_music_play) ---
+lda drum_state
+beq !drum_skip+
+dec drum_state
+lda drum_freq
+sec / sbc #DRUM_SWEEP
+... sweep down to DRUM_FLOOR, store back ...
+sta $D40F
+lda #$00 / sta $D40E
+lda #$81 / sta $D412   ; noise + gate
+!drum_skip:
+```
+
+The two-byte `drum_state` + `drum_freq` live in intro's music
+segment (around `$128A`), so every part inheriting `'I', $10, $12`
+sees the same state.
+
+### The `zp_outro != 0` gate
+
+Drums fire only when `zp_outro` is non-zero. This means:
+
+- Intro's first ~20 s: `zp_outro = 0` → no drums (clean buildup)
+- Intro's outro animation (sprites despawn, etc.): `zp_outro` ticks
+  from `1` toward `$F0` → DRUMS ENTER LATE
+- Interlude/greets: `$F6` repurposed as their own counters but
+  always > 0 once setup runs → drums continue
+- Sinus: setup zeros `$F6` (which is `zp_timer` there), kept at 0
+  until the very last frame → **drums silent** = the comedown
+- End: doesn't call `my_music_play` (uses its own routine) → no drums
+
+### Why this gating works for "cohesive music"
+
+Story interleave depends on this:
+- Sad pad in interlude (after a brief drum exit at transition):
+  drums quickly return at beat 1 because `$F6` ticks to 1 fast
+- Greets climax: drums in their natural place
+- Sinus visual breather: drums genuinely STOP for ~5 s, giving the
+  ear a moment before end's reprise
+
 ## Per-voice muting trick
 
 `my_music_play` re-writes V1/V2/V3 freq + control at chord-step
@@ -108,16 +168,21 @@ alone elsewhere.
 There's no audio fade between parts — the music carries continuously.
 The "feeling of transition" is carried by:
 
+- **Drums ENTERING late in intro** (when `zp_outro` arms — the
+  outro cascade visually mirrors the audio escalation)
 - **Visual cascade in intro's outro** (sprites despawn one by one,
   bars off, logo un-wipes)
-- **V1 mute drop into interlude's pad** — the sudden absence of bass
-  signals "we're in the breather now"
-- **V1 return + LP cutoff sweep in interlude's last 8 beats** —
-  rising tension into greets
-- **Full-vol bass + no filter in greets** — the payoff
-- **LP filter closing + vol fade in sinus** — the afterglow comedown
-- **end's own music_init re-init** with PWM + filter sweep for the
-  credit roll reprise
+- **V1 mute drop + the "FOR YEARS NO TIME FOR BREADBIN CODE" text
+  appearing on interlude's plasma** — the sudden bass drop +
+  sad admission together
+- **V1 return + LP cutoff sweep + "BUT THEN KLOOT WALKED IN" tease
+  appearing in interlude's last 4 s** — rising tension into greets
+- **DYCP scroller telling the full story in greets** — the climax
+  with drums + bass + lead + arp + the personal arc
+- **Drums STOP + LP filter close + vol fade in sinus** — the
+  afterglow comedown, ear-cleansing break
+- **end's own `music_init` re-init** with PWM + filter sweep for the
+  credit roll reprise — quiet, no drums
 
 If you're tweaking the score, work WITHIN this rhythm rather than
 adding hard cuts. Volume drops anywhere on the resident path leak
