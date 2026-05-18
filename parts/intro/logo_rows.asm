@@ -1,6 +1,6 @@
-;; Auto-generated from /tmp/logo_edited.png
-;; background = $00
-;; 2880 bytes of bitmap data (rows 8-16)
+// Auto-generated from /tmp/logo_edited.png
+// background = $00
+// 2880 bytes of bitmap data (rows 8-16)
 logo_rows:
   .byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
   .byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00

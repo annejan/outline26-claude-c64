@@ -179,9 +179,9 @@ def main():
 
     # Write logo_rows.asm
     with open(out_asm, 'w') as f:
-        f.write(f";; Auto-generated from {in_png}\n")
-        f.write(f";; background = ${bg:02x}\n")
-        f.write(f";; {len(all_bitmap)} bytes of bitmap data (rows {FIRST_CHAR_ROW}-{LAST_CHAR_ROW})\n")
+        f.write(f"// Auto-generated from {in_png}\n")
+        f.write(f"// background = ${bg:02x}\n")
+        f.write(f"// {len(all_bitmap)} bytes of bitmap data (rows {FIRST_CHAR_ROW}-{LAST_CHAR_ROW})\n")
         f.write("logo_rows:\n")
         for i in range(0, len(all_bitmap), 16):
             chunk = all_bitmap[i:i + 16]
