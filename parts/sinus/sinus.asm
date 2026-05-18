@@ -67,67 +67,61 @@ setup:
         sta zp_line
         sta zp_frame
 
-        // Fill screen RAM with char indices: alternating columns
-        // to make the $D016 wobble visible.
-        ldx #0
-!lp_s:  txa
-        and #$01                       // 0,1,0,1,... per column
-        sta SCREEN,x
-        sta SCREEN + 40,x
-        sta SCREEN + 80,x
-        sta SCREEN + 120,x
-        sta SCREEN + 160,x
-        sta SCREEN + 200,x
-        sta SCREEN + 240,x
-        sta SCREEN + 280,x
-        sta SCREEN + 320,x
-        sta SCREEN + 360,x
-        sta SCREEN + 400,x
-        sta SCREEN + 440,x
-        sta SCREEN + 480,x
-        sta SCREEN + 520,x
-        sta SCREEN + 560,x
-        inx
-        cpx #40
-        bne !lp_s-
-
-        // Fill colour RAM
-        ldx #0
-        lda #$01
-!lp_c:  sta COL_RAM,x
-        sta COL_RAM + 250,x
-        sta COL_RAM + 500,x
-        sta COL_RAM + 750,x
-        inx
-        cpx #250
-        bne !lp_c-
-
-        // Build charset: char 0 = vertical stripe (even cols white, odd black)
-        // Char 1 = vertical stripe opposite (even cols black, odd white)
-        // This creates a vertical stripe pattern that wobbles horizontally.
-        ldy #0
-        // Char 0: %11,%00,%11,%00 = white, black, white, black
-!ch0:   lda #$c0                       // %11000000
-        sta CHARSET,y
-        lda #$30                       // %00110000  (shifted by 2)
-        sta CHARSET + 1,y
-        lda #$0c                       // %00001100
-        sta CHARSET + 2,y
-        lda #$03                       // %00000011
-        sta CHARSET + 3,y
-        // Char 1: %00,%11,%00,%11 = black, white, black, white
+        // Disable sprites (greets may have left them enabled)
         lda #$00
-        sta CHARSET + 4,y
-        lda #$c0
-        sta CHARSET + 5,y
-        lda #$30
-        sta CHARSET + 6,y
-        lda #$0c
-        sta CHARSET + 7,y
+        sta $d015
 
-        iny                             // next group of 8 bytes
-        cpy #$0800 / 8
-        bne !ch0-
+        // Fill screen RAM with repeating "DEFEEST" using ROM chargen
+        // at $1000 (uppercase). Connects visually back to the screenfill
+        // bloom that opened the demo. 1024 cells written (24 extra past
+        // visible area into sprite-ptr region — harmless since sprites
+        // are disabled). Each char takes 7 cycles: D E F E E S T.
+        ldx #0
+        ldy #0
+!p1:    lda defeest_codes,y
+        sta SCREEN,x
+        iny
+        cpy #7
+        bne !sk1+
+        ldy #0
+!sk1:   inx
+        bne !p1-
+!p2:    lda defeest_codes,y
+        sta SCREEN + $100,x
+        iny
+        cpy #7
+        bne !sk2+
+        ldy #0
+!sk2:   inx
+        bne !p2-
+!p3:    lda defeest_codes,y
+        sta SCREEN + $200,x
+        iny
+        cpy #7
+        bne !sk3+
+        ldy #0
+!sk3:   inx
+        bne !p3-
+!p4:    lda defeest_codes,y
+        sta SCREEN + $300,x
+        iny
+        cpy #7
+        bne !sk4+
+        ldy #0
+!sk4:   inx
+        bne !p4-
+
+        // Colour RAM — light cyan everywhere. Letters appear as cyan
+        // foreground on black background. Border/bg cycle via raster
+        // IRQ for movement.
+        ldx #0
+        lda #$03
+!cr:    sta COL_RAM,x
+        sta COL_RAM + $100,x
+        sta COL_RAM + $200,x
+        sta COL_RAM + $2e8,x
+        inx
+        bne !cr-
 
         // Init SID — LP filter mode + volume
         lda #$1f
@@ -139,12 +133,13 @@ setup:
         lda #$00
         sta SID_FILT_CUT_LO
 
-        // Multicolour character mode
+        // Text mode, ROM chargen at $1000 (uppercase), no MCM.
+        // Letters are foreground colour (from colour RAM) on black bg.
         lda #$1b                        // DEN=1, RSEL=1, YSCROLL=3
         sta VIC_CTRL1
-        lda #$18                        // screen $0400, charset $2000
+        lda #$14                        // screen $0400, chargen $1000 (ROM)
         sta VIC_MEM
-        lda #$c8                        // MCM=1, CSEL=1, xscroll=0
+        lda #$08                        // CSEL=1, no MCM, xscroll cleared
         sta VIC_CTRL2
         lda #$00
         sta VIC_BORDER
@@ -281,6 +276,13 @@ irq_sine:
         lda #$ff
         sta VIC_IRQ
         rti
+
+
+//==================================================================
+// DEFEEST screencodes (uppercase chargen at $1000): D E F E E S T.
+//==================================================================
+defeest_codes:
+        .byte $04, $05, $06, $05, $05, $13, $14
 
 
 //==================================================================
