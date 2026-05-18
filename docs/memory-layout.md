@@ -148,8 +148,9 @@ so we never touch CIA2 `$DD00` after the initial Spindle setup.
 | `$F4` | beat phase | interlude, greets |
 | `$F5` | filter cutoff / scratch | interlude, sinus |
 | **`$F6`** | **inter-part transition condition byte** — every part either reaches a specific value here to trigger the next part, or its setup resets it to start counting | always |
-| `$F7-$FA` | beat counter / scroll pos / kick state / shadow freq | varies per part |
-| `$FB-$FE` | text pointers / smooth scroll / frame counter | intro, end |
+| **`$F9`, `$FA`** | **clobbered by intro's `my_music_play` on every JSR** — zp_tmp / zp_msb in intro's namespace. Any part that calls `$119E` (interlude, sinus, greets) MUST NOT park persistent state here. | every JSR `$119E` |
+| `$F7`, `$F8` | beat counter / scroll pos / kick state | varies per part |
+| `$FB-$FE` | sinus frame counter ($FC), intro text pointers / smooth scroll / frame counter | sinus, intro, end |
 
 ### Why bytes are placed where they are (concrete examples)
 

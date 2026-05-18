@@ -34,13 +34,16 @@ screenfill ──5.6s──→ intro ──73s──→ interlude ──15s─�
 
 | When | Event | Detail |
 |------|-------|--------|
-| 0.0 s | setup | Build char table, init ripple counters. Border = BASIC light-blue ($0E). |
-| 0.0–2.6 s | **Radial fill** | 16 rings × 8 frames = 128 frames. DEFEEST characters bloom over the BASIC screen. |
-| 2.6 s | **Ripple starts** | RADIUS ≥ 16. Border drops to blue ($06). HOLDCNT = 150. |
-| 2.6–4.3 s | **Ripple, blue border** | HOLDCNT → 85. Concentric colour waves from screen centre. |
-| 4.3 s | **Snap to black** | HOLDCNT = 85. BG + border → black ($00). |
-| 4.3–5.6 s | **Text fadeout** | ripple_palette steps through fadetab every 8 frames. |
-| 5.6 s | **HOLDCNT = 0** | pefchain loads intro part. |
+| -0.2 s | bootstrap-blank load | Pefchain's auto-inserted leading blank effect runs `lda #$00 sta $D011/$D020/$D015` — display off, ~270 ms while screenfill loads. |
+| -0.0 s | **prepare** | Runs in main context after the load completes, before switchover. Restores BASIC: bank 0, $D011=$1B, $D018=$15, border $0E, bg $06, sprites off. BASIC text reappears briefly. |
+| 0.0 s | setup | $D018→$17 (chargen swaps to lowercase ROM, BASIC text re-renders in lowercase). Build char table, init ripple counters. |
+| 0.0–2.6 s | **Radial fill** | 16 rings × 8 frames = 128 frames. DEFEEST characters bloom over the BASIC screen. Border stays light-blue ($0E). |
+| 2.6 s | **Ripple starts** | RADIUS hits 16 — one-shot border $0E → $06 (NOT per-frame, would clobber the late snap). HOLDCNT = 150. |
+| 2.6–4.0 s | **Ripple, blue border** | Concentric colour waves from screen centre. HOLDCNT counts down 150 → 86. |
+| 4.0–4.3 s | **Fade begins** | HOLDCNT < 85. Every 8 frames the text palette steps through `fadetab` ($01→$0F→$0C→$0B→$00 etc.). |
+| 4.3 s | **bg + border snap together** | HOLDCNT = 72 (mid-fade, after 1 palette tick). Both write $00. Rings continue fading visibly on a black bg for the remaining ticks at 64 & 56. |
+| 4.3–5.6 s | **Tail / hold** | All-black with the final palette ticks completing the ripple fade. |
+| 5.6 s | **HOLDCNT = 0** | pefchain transitions to intro. |
 
 ---
 

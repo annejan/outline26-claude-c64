@@ -42,6 +42,50 @@ load-addr prefix) and concatenated in front of the part's `.prg`:
 - **`'S'` (Safe)**: You leave `$01 = $35` during interrupts. Required
   for Spindle's resident loader to work.
 
+## The auto-inserted leading "blank" — and the screenfill prepare
+
+Pefchain auto-inserts a blank effect ahead of the very first part
+(it lives at `$0800-$08AB` in our build — see the sector map
+`./build.sh` prints). The blank's auto-generated setup writes:
+
+```
+lda #$00
+sta $D011        ; DEN=0, display disabled
+sta $D020        ; border black
+sta $D015        ; sprites off
+lda #$F0
+sta $D012        ; raster line for the blank's IRQ
+rts
+```
+
+That `$D011 = $00` is what produces the ~270 ms black flash between
+BASIC's `RUN` and screenfill's setup — DEN off means the entire
+visible area shows border colour, which is also black. It runs
+while screenfill loads from disk in the background.
+
+There is no Spindle flag to suppress this. The blank's setup is
+emitted directly by `pefchain.c` (`create_blank_effect`).
+
+What we DO is add a `prepare` routine to screenfill that restores
+BASIC's defaults (`$D011=$1B`, `$D018=$15` ROM uppercase chargen,
+`$D020=$0E` light-blue border, `$D021=$06` blue bg, sprites off).
+Prepare runs in main context after the load completes and BEFORE
+the switchover to screenfill's setup — so the BASIC text + light-
+blue/blue colour scheme reappears at the latest possible moment
+before the radial fill kicks in.
+
+The handbook warns "do not write VIC registers in prepare" because
+prepare races with the previous part's IRQ. That warning doesn't
+apply here: the leading blank's IRQ only calls the music player
+and never touches VIC. Safe.
+
+If you ever add a part that's loaded onto a memory range overlapping
+its predecessor's, pefchain will insert another blank between them
+and the same load gap will appear in the middle of the demo. The
+fix is the same pattern: give the affected next-part a `prepare`
+that paints whatever it wants visible during the load — provided
+the inserted blank's IRQ truly does nothing visible.
+
 ## Transition conditions
 
 The `pefchain_script` is a sequence of `<pef-file> <condition>` lines:
@@ -50,8 +94,8 @@ The `pefchain_script` is a sequence of `<pef-file> <condition>` lines:
 parts/screenfill/screenfill.pef     06 = 00
 parts/intro/intro.pef               f6 = f0
 parts/interlude/interlude.pef       f6 = 20
-parts/greets/greets.pef             f6 = 20
 parts/sinus/sinus.pef               f6 = 30
+parts/greets/greets.pef             f6 = 20
 parts/end/end.pef                   stay
 ```
 
@@ -68,10 +112,23 @@ the byte to a value that doesn't satisfy the next condition**:
 - intro's `zp_outro` ticks from `0` to `$F0` (transition: `f6 = f0`)
 - interlude's setup resets `$F6 = 0`, then beat counter ticks to `$20`
   (transition: `f6 = 20`)
-- sinus' setup resets `$F6 = 0`, then `irq_top` sets `$F6 = $30` once
-  zp_frame ≥ N_FRAMES (~5 s) (transition: `f6 = 30`)
+- sinus' setup resets `$F6 = 0`, then its IRQ sets `$F6 = $30` once
+  `$FC` (the actual frame counter — `$F9` is unsafe, see below) ≥
+  N_FRAMES (~5 s). Transition: `f6 = 30`.
 - greets' setup resets `$F6 = 0`, then beat counter ticks to `$20`
   (transition: `f6 = 20`)
+
+#### Watch out: `$F9` and `$FA` are clobbered every `my_music_play`
+
+Intro's `my_music_play` (still resident, called from every later part
+via `$119E`) uses `$F9` and `$FA` as its internal scratch bytes
+(`zp_tmp`, `zp_msb`). Every JSR overwrites them. Sinus originally
+parked its frame counter at `$F9` and the part never transitioned —
+each increment was silently wiped on the next music call. The fix:
+move it to `$FC`, which intro's namespace doesn't touch. **For any
+later part that calls `my_music_play`, treat `$F9`/`$FA` as live
+clobber zones across the JSR; pick a different zp for state that
+must survive frames.**
 
 **If you forget to reset `$F6` in setup**, the prior part's value
 satisfies the new condition and pefchain transitions immediately —

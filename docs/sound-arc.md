@@ -19,10 +19,10 @@ overlays** on top of that continuous music.
 |-------------|---------------------------------------------------------------------|
 | screenfill  | (silence — SID untouched, music engine isn't running yet)           |
 | intro       | Bass + lead + arp build in. Drums kick in late (when `zp_outro != 0` — intro's outro animation starts, ~20 s in). |
-| interlude   | Pad-only first 11 s (V1 muted). Last 4 s: V1 returns + LP cutoff sweeps open. Drums continue from intro. |
-| greets      | Full mix + drums. The "payoff" loudness with the DYCP scroller telling the personal story. |
-| sinus       | LP filter closes ($D418 re-asserted) and vol fades out over last 50 frames. Drums silent (sinus zeros `$F6 = zp_outro`). |
-| end         | `end_music_init` re-inits SID for slow chord/lead reprise. PWM + filter sweep. No drums. |
+| interlude   | Pad-only first 11 s (V1 muted). Last 4 s: V1 returns + LP cutoff sweeps open. Drums continue from intro. The "BUT THEN KLOOT WALKED IN" tease. |
+| sinus       | **Breakdown.** LP filter closes ($D418 re-asserted) and vol fades over the last 50 frames. Drums silent (sinus zeros `$F6 = zp_outro` — the gating byte). The eye of the storm before the drop. |
+| greets      | **Climax / drop.** Drums return (greets' setup re-arms `$F6`), full mix + lead + arp. DYCP scroller tells the personal arc on top of the loudest moment. |
+| end         | `end_music_init` re-inits SID for slow chord/lead reprise. PWM + filter sweep. No drums. The coda. |
 
 ## Why my_music_play is special
 
@@ -176,13 +176,15 @@ The "feeling of transition" is carried by:
   appearing on interlude's plasma** — the sudden bass drop +
   sad admission together
 - **V1 return + LP cutoff sweep + "BUT THEN KLOOT WALKED IN" tease
-  appearing in interlude's last 4 s** — rising tension into greets
-- **DYCP scroller telling the full story in greets** — the climax
-  with drums + bass + lead + arp + the personal arc
+  appearing in interlude's last 4 s** — rising tension, the build
 - **Drums STOP + LP filter close + vol fade in sinus** — the
-  afterglow comedown, ear-cleansing break
+  breakdown / breather, the calm before the drop. Visual is a
+  hypnotic sine wobble of repeating DEFEEST text.
+- **DYCP scroller telling the full story in greets** — the climax
+  with drums returning + bass + lead + arp + the personal arc on
+  the loudest moment of the demo
 - **end's own `music_init` re-init** with PWM + filter sweep for the
-  credit roll reprise — quiet, no drums
+  credit roll reprise — quiet, no drums, settles to the title card
 
 If you're tweaking the score, work WITHIN this rhythm rather than
 adding hard cuts. Volume drops anywhere on the resident path leak

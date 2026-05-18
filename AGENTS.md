@@ -34,8 +34,8 @@ Six parts loaded by Spindle's pefchain framework:
 | 1 | `parts/screenfill/`  | Loading screen — radial DEFEEST bloom + water ripple + fade-to-black | `$06 = $00` (HOLDCNT drained) |
 | 2 | `parts/intro/`       | Logo bounce, scroller, rasterbars, 8 sprites, 3-voice SID | `$F6 = $F0` (`zp_outro` hits `T_OUTRO_DONE`) |
 | 3 | `parts/interlude/`   | Text-mode plasma + 6 raster bars over pad→build-up arc | `$F6 = $20` (beat counter) |
-| 4 | `parts/greets/`      | DYCP sprite-font scroller with sine wobble + kick drums | `$F6 = $20` |
-| 5 | `parts/sinus/`       | Afterglow: sine-wobble image + colour cycling, LP filter close | `$F6 = $30` (frame timer) |
+| 4 | `parts/sinus/`       | Comedown: sine-wobble DEFEEST + colour cycling, LP filter close, drums silent | `$F6 = $30` (set when `$FC` frame counter hits 250) |
+| 5 | `parts/greets/`      | Climax: DYCP sprite-font scroller with sine wobble + kick drums returning | `$F6 = $20` |
 | 6 | `parts/end/`         | Credit roll, side bars, slow chord/lead reprise | `stay` (loops) |
 
 Read `README.md` for full per-part descriptions. The
