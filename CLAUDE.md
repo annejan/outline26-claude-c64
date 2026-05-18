@@ -18,6 +18,10 @@ The deeper guides live under [`docs/`](./docs/):
 - [`docs/sid-drums.md`](./docs/sid-drums.md) — classic SID percussion
   techniques (pitched kick, noise+pulse layering, snare, hat, voice-
   sharing patterns) and how we apply them in greets.
+- [`docs/memory-layout.md`](./docs/memory-layout.md) — the C64 memory
+  constraints (VIC banks, chargen ROM hole, $D018 packing) and how
+  they shape this demo's per-part layout. Read this before adding a
+  new part or moving any data around.
 
 If you're updating long-form guidance, prefer editing those files
 over creating new top-level docs.
