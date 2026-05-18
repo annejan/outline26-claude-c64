@@ -77,12 +77,12 @@
 .const T_BARS      = 120         // bars enable     (~4.8 sec)
 .const T_LOGO      = 200         // logo wipe begins (~8 sec) — reveal_column uses (zp_intro - T_LOGO)
 .const T_SCROLLER  = 240         // scroller enable (~9.6 sec)
-.const T_DRUM      = 250         // drums kick in (~10 sec, last 5 sec of intro
-                                 //   buildup; carries through interlude + greets
-                                 //   via my_music_play residency)
-.const DRUM_LEN    = 10          // V3 drum window in frames (~200 ms — audible thump)
+// Drums fire only once zp_outro is non-zero (intro's outro animation
+// has armed, ~20 s into intro). Continues through interlude + greets
+// via my_music_play residency. End uses its own music_play, no drums.
+.const DRUM_LEN    = 10          // V3 drum window in frames (~200 ms thump)
 .const DRUM_FREQ_HI = $20        // starting noise pitch (mid-bass)
-.const DRUM_SWEEP   = $03        // hi-byte decrement per frame (sweep from $20→sub)
+.const DRUM_SWEEP   = $03        // hi-byte decrement per frame (sweep $20→sub)
 .const DRUM_FLOOR   = $03        // ~46 Hz floor (sub-bass body)
 
 // Outro phase thresholds (in zp_outro ticks; mirror intro pacing).
@@ -764,13 +764,13 @@ my_music_play:
         jmp !v2_done+
 !v2_skip:
 !v2_done:
-        // --- V3 DRUM trigger (step boundary, on every 4th step =
-        // every 24 frames ≈ 125 BPM beat). Only after T_DRUM so the
-        // percussion enters late in the intro buildup and carries
-        // through interlude + greets (both call my_music_play).
-        lda zp_intro
-        cmp #T_DRUM
-        bcc !drum_done+
+        // --- V3 DRUM trigger (step boundary, every 4th step = ~125 BPM)
+        // Only after zp_outro != 0, i.e. once the intro's outro
+        // animation has armed (~20 s into intro). Drums then continue
+        // through interlude + greets via my_music_play residency. End
+        // uses its own music routine — no drums there.
+        lda zp_outro
+        beq !drum_done+
         lda mu_step
         and #$03
         bne !drum_done+
