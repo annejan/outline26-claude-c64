@@ -80,7 +80,10 @@
 .const T_DRUM      = 250         // drums kick in (~10 sec, last 5 sec of intro
                                  //   buildup; carries through interlude + greets
                                  //   via my_music_play residency)
-.const DRUM_LEN    = 4           // V3 drum window in frames (~80 ms noise burst)
+.const DRUM_LEN    = 10          // V3 drum window in frames (~200 ms — audible thump)
+.const DRUM_FREQ_HI = $20        // starting noise pitch (mid-bass)
+.const DRUM_SWEEP   = $03        // hi-byte decrement per frame (sweep from $20→sub)
+.const DRUM_FLOOR   = $03        // ~46 Hz floor (sub-bass body)
 
 // Outro phase thresholds (in zp_outro ticks; mirror intro pacing).
 // Outro starts when scroll_text hits $ff. Scroller stops immediately (gate
@@ -771,34 +774,51 @@ my_music_play:
         lda mu_step
         and #$03
         bne !drum_done+
-        // BEAT — arm a new kick window.
+        // BEAT — arm a new kick window + reset freq shadow to start
+        // pitch so the next sweep begins from the top.
         lda #DRUM_LEN
         sta drum_state
+        lda #DRUM_FREQ_HI
+        sta drum_freq
 !drum_done:
 !done:
         // --- V3 DRUM tick (every frame, including non-step frames).
-        // While drum_state > 0, override V3 with noise wave + low-mid
-        // pitch — envelope is already sustaining at peak (arp SR=$F0)
-        // so this is LOUD. When drum_state hits 0, next music_play
-        // call writes V3 ctrl=$41 (pulse) and the arp resumes (the
-        // envelope stays at peak so no audible silence).
+        // Override V3 with noise + pitch-swept freq for the kick
+        // window. Envelope is at peak sustain (SR=\$F0 from arp init)
+        // so noise is LOUD. When drum_state hits 0 we stop overriding;
+        // next music_play call writes V3 ctrl=\$41 (pulse) and the arp
+        // resumes — envelope stays at peak, no audible silence.
         lda drum_state
         beq !drum_skip+
         dec drum_state
+        // Pitch sweep: drum_freq starts at DRUM_FREQ_HI on beat, ramps
+        // down by DRUM_SWEEP per frame to DRUM_FLOOR. Gives the deep
+        // "boom" thwump characteristic of an 808-style kick.
+        lda drum_freq
+        sec
+        sbc #DRUM_SWEEP
+        cmp #DRUM_FLOOR
+        bcs !sweep_ok+
+        lda #DRUM_FLOOR
+!sweep_ok:
+        sta drum_freq
         lda #$00
         sta $d40e                 // V3 freq lo
-        lda #$30
-        sta $d40f                 // V3 freq hi (mid-low noise pitch)
+        lda drum_freq
+        sta $d40f                 // V3 freq hi (sweeping down)
         lda #$81
         sta $d412                 // V3: noise wave + gate on
 !drum_skip:
         rts
 
 
-// V3 drum window remaining frames. Lives inside intro's music
-// segment so every part that inherits the music ($10-$12 'I' tag)
-// can drive it. Set non-zero to fire a kick.
+// V3 drum state. drum_state = countdown (0=idle, 1..N=active frame).
+// drum_freq = shadow of V3 freq hi (SID regs are write-only).
+// Both live in intro's music segment so every part that inherits
+// the music ('I', $10, $12) can drive them.
 drum_state:
+        .byte 0
+drum_freq:
         .byte 0
 
 // Compact logo bitmap rows 8-16 — extracted from defeest.kla at build
