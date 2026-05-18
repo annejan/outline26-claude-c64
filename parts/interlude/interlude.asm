@@ -92,6 +92,23 @@ setup:
         inx
         bne !clr-
 
+        // ----- story overlay (interleaves with the sad pad music) -----
+        // Centered two-line message in rows 11 + 13. The plasma keeps
+        // running in cells around the letters (they're filled with $A0
+        // solid block); the letter cells show their glyph shape in the
+        // plasma colour. Reads as colour-tinted text floating over the
+        // colour wash.
+        //
+        // Row 11 ($0400 + 11*40 = $05B8): "FOR YEARS NO TIME FOR BREADBIN CODE"
+        // Row 13 ($0400 + 13*40 = $0608): blank for now (a second line
+        //   could ramp in during the build-up beats — future polish)
+        ldx #0
+!st1:   lda story_line_a,x
+        sta $05B8 + 2,x           // 35 chars centered in 40-col row
+        inx
+        cpx #35
+        bne !st1-
+
         // fill ALL 25 color RAM rows
         lda #0
         sta zp_plasma_tgl
@@ -416,3 +433,22 @@ bar_base_colors:
 // Work area (in code space, not ZP)
 row_base: .byte 0
 row_cnt:  .byte 0
+
+// Story overlay text — uppercase chargen at $1000, codes $01..$1A
+// for letters, $20 for space. 35 chars to fit centered in a 40-col
+// row (col 2 .. col 36).
+//
+// "FOR YEARS NO TIME FOR BREADBIN CODE"
+//   F=06 O=0F R=12   sp=20   Y=19 E=05 A=01 R=12 S=13   sp=20
+//   N=0E O=0F   sp=20   T=14 I=09 M=0D E=05   sp=20
+//   F=06 O=0F R=12   sp=20
+//   B=02 R=12 E=05 A=01 D=04 B=02 I=09 N=0E   sp=20
+//   C=03 O=0F D=04 E=05
+story_line_a:
+        .byte $06, $0F, $12, $20             // FOR_
+        .byte $19, $05, $01, $12, $13, $20   // YEARS_
+        .byte $0E, $0F, $20                  // NO_
+        .byte $14, $09, $0D, $05, $20        // TIME_
+        .byte $06, $0F, $12, $20             // FOR_
+        .byte $02, $12, $05, $01, $04, $02, $09, $0E, $20  // BREADBIN_
+        .byte $03, $0F, $04, $05             // CODE

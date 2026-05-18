@@ -312,24 +312,29 @@ sine_table:
 // scrolling message
 //==================================================================
 // Greets text — uppercase only (font is A-Z + blank).
-// Story-flavored: lineage + shout-outs framed by gratitude.
+// The real story: never had time to code the breadbin, then AI made
+// it possible. Tongue in cheek, grateful, and shout-outs to the
+// folks whose tools / inspiration got us here.
 message:
-.text "      IN THE BEGINNING THERE WAS BASIC      "
-.text "      AND THE BLINKING READY PROMPT         "
-.text "      THEN HUBBARD GALWAY AND TEL           "
-.text "      SHOWED US WHAT THIS BREADBIN CAN DO   "
-.text "      FORTY YEARS LATER                     "
-.text "      A HUMAN AND AN AI SAT DOWN TOGETHER   "
-.text "      TO TRY THE SAME TRICKS                "
-.text "      ON THE SAME SILICON                   "
-.text "      THIS LITTLE DEMO IS WHAT CAME OUT     "
-.text "      GREETINGS TO EVERY DEMOSCENER         "
-.text "      WHO STILL CODES THE BREADBIN          "
-.text "      TO LINUS AKESSON FOR SPINDLE          "
+.text "      FOR YEARS I WANTED TO MAKE A DEMO     "
+.text "      FOR THIS LOVELY LITTLE PARTY          "
+.text "      LIFE GOT IN THE WAY                   "
+.text "      CODE NEVER GOT WRITTEN                "
+.text "      THE BREADBIN SAT IN THE CORNER        "
+.text "      GATHERING DUST                        "
+.text "      THEN ONE EVENING I SAT DOWN           "
+.text "      WITH KLOOT                            "
+.text "      A LITTLE AI WITH BIG OPINIONS         "
+.text "      AND WE STARTED POKING REGISTERS       "
+.text "      SOMEHOW THIS HAPPENED                 "
+.text "      FINALLY SOMETHING DECENT              "
+.text "      TO BRING TO OUTLINE                   "
+.text "      GREETINGS TO EVERYONE                 "
+.text "      STILL CODING THE BREADBIN             "
+.text "      LINUS AKESSON FOR SPINDLE             "
 .text "      MADS NIELSEN FOR KICKASSEMBLER        "
 .text "      CODEBASE FOR REMEMBERING THE TRICKS   "
-.text "      AND THE OUTLINE CREW                  "
-.text "      FOR KEEPING THE PARTY ALIVE           "
+.text "      THE OUTLINE CREW FOR HOSTING          "
 .text "      SCS   TRC   FOCUS   FAIRLIGHT         "
 .text "      BONZAI   GENESIS PROJECT   EXTEND     "
 .text "      TRSI   OXYRON   BYTERAPERS            "
@@ -344,9 +349,9 @@ message:
 .text "      SUCCESS   ARTLINE   RESOURCE          "
 .text "      OFFENCE   AND ALL THE QUIET CODERS    "
 .text "      WHO NEVER PUT THEIR NAME ON ANYTHING  "
-.text "      WE STAND ON YOUR SHOULDERS            "
-.text "      AND ON A FORTY YEAR OLD CHIP          "
-.text "      THANK YOU FOR EVERYTHING              "
+.text "      AND ESPECIALLY KLOOT                  "
+.text "      FOR FINALLY GETTING ME HERE           "
+.text "      THANK YOU EVERYONE                    "
 .text "                                            "
 .byte $00
 
