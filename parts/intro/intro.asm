@@ -1615,18 +1615,18 @@ scroll_text:
         .text "                                        "
         // ---- block 1: mode 0 (left scroll, normal) ----
         .text " deFEEST presents a little C64 demo for X2026.. "
-        .text "Anus and Claude Opus 4.7 using codebase.c64.org                                    "
+        .text "Anus and Claude Opus 4.7 using codebase.c64.org                                       "
         .byte $fe
         // ---- block 2: mode 1 (right scroll) ----
         // update_bmp_scroll walks zp_text_ptr backwards across this
         // block (block2_end-1 → block2_start) so the source reads
         // forward despite chars sliding rightward off cell 0.
 block2_start:
-        .text "                             Open borders, FLD-bounce logo, rainbow bars, 8-sprite balls, hand-written SID."
+        .text "                           Open borders, FLD-bounce logo, rainbow bars, 8-sprite balls, hand-written SID."
         .byte $fe
 block2_end:
         // ---- block 3: mode 2 (zig-zag split) ----
-        .text "  Greetings to everyone who still codes the breadbin and thanks to the X crew.                     "
+        .text "  Greetings to everyone who still codes the breadbin                    "
         .byte $ff
 
 
