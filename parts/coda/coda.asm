@@ -126,7 +126,8 @@
 // the first audible kick (zp_kick_count=25 → raw frame 26 ≈ zp_frame 13).
 .const KLOOT_X_CENTRE = 160           // midpoint of KLOOT_X_LEFT and KLOOT_X_RIGHT
 .const KLOOT_Y_CENTRE = 129           // midpoint of KLOOT_Y_TOP and KLOOT_Y_BOT
-.const KLOOT_REVEAL_FRAMES = 12       // 0..11 interpolating, 12+ final positions
+.const KLOOT_REVEAL_FRAMES = 24       // 0..23 interpolating, 24+ final positions
+                                      // ≈ 960 ms at 25 Hz — slow enough to read
 
 // Coda V3 kick — coda has the unique luxury of "owning" V3 for the
 // duration of the part (zp_outro=0 keeps intro's drum gate closed,
@@ -193,9 +194,10 @@ setup:
         sta SID_V3_CTRL
         // Float kick_freq sentinel so the first body frame paints it.
         sta kick_freq
-        // First kick fires after a short lead-in so the title is up
-        // before the first thump lands.
-        lda #25                         // ~0.5 s lead-in
+        // First kick fires after a longer lead-in so the animate-in
+        // reveal (KLOOT_REVEAL_FRAMES × 2 raw frames ≈ 960 ms) has
+        // time to complete before the first thump lands.
+        lda #55                         // ~1.1 s lead-in
         sta zp_kick_count
 
         // ---- Kloot star quad — 96×84 12-lobe Claude burst (Stage B+D) ----
@@ -595,21 +597,22 @@ kloot_y_bot_table:
 // state value SAMPLED before coda_kick runs means index 12 = first
 // audible kick frame (peak dip), index 0 = idle (no dip). Sprite Y
 // values get this added so the star "drops" on each kick and
-// recovers over the body window.
+// recovers over the body window. Max dip is 12 px — about 14% of
+// the 84-px tall sprite quad, clearly visible.
 bob_table:
         .byte 0     // state 0 — idle, no dip
         .byte 0     // state 1 — last body frame, settled
-        .byte 0     // state 2
-        .byte 1     // state 3
-        .byte 1     // state 4
-        .byte 2     // state 5
-        .byte 3     // state 6
-        .byte 3     // state 7
-        .byte 4     // state 8
-        .byte 5     // state 9
-        .byte 5     // state 10
-        .byte 6     // state 11
-        .byte 6     // state 12 — first audible kick frame, peak dip
+        .byte 1     // state 2
+        .byte 2     // state 3
+        .byte 3     // state 4
+        .byte 4     // state 5
+        .byte 5     // state 6
+        .byte 7     // state 7
+        .byte 8     // state 8
+        .byte 9     // state 9
+        .byte 10    // state 10
+        .byte 11    // state 11
+        .byte 12    // state 12 — first audible kick frame, peak dip
 
 
 //==================================================================
