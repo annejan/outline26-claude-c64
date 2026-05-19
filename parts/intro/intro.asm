@@ -5,13 +5,18 @@
 //   open top border       lines $00..$32  (HCL trick)
 //   bitmap row 0 scroller lines $33..$3A  (cycles left / right / zig-zag
 //                                          via $fe sentinels in scroll_text)
-//   FLD stretch zone      lines $3B..$3B+K  (K = bounce_total[frame])
-//   logo wipe-reveal      rows 8..16, sliding down by K px
+//   bitmap rows 1..4      lines $3B..$5A  (rows 1-3 empty bg; row 4 carries
+//                                          the fade-band text — fixed Y)
+//   FLD stretch zone      lines $5B..$5B+K  (K = bounce_total[frame],
+//                                            freezes empty bitmap row 5)
+//   logo wipe-reveal      rows 8..16, sliding down by K px (logo at $73+K)
 //   rainbow rasterbars    lines $80..$EB  (behind logo, with sides)
 //   open bottom border    lines $EC..$FF  (HCL trick)
 //
-// IRQ chain: irq_close@$F9 → irq_open@$01 → irq_fld@$3B
+// IRQ chain: irq_close@$F9 → irq_open@$01 → irq_fld@$5B
 //          → irq_bars@$80 → irq_close@$F9.
+// Music (my_music_play) runs at the end of irq_fld after the FLD loop;
+// K_max is sized so FLD-end + music finishes before BAR_TOP=$80.
 //
 // Sprite blink fix: balls 0..2 disabled in irq_close (line $F9) so
 // their Y+256 wrap duplicates between $F9 and next-frame $01 don't
@@ -54,7 +59,7 @@
 .const SPR_BLOCK    = SPR_DATA / 64
 .const FONT_BASE    = $4c00        // chargen ROM copy
 .const SCROLL_ROW_BMP = BITMAP + 0 * 40 * 8    // bitmap row 0: $2000..$213F
-                                                // Row 0 displays at $33..$3A — before FLD trigger ($3B) → no bounce.
+                                                // Row 0 displays at $33..$3A — well above FLD trigger ($5B) → no bounce.
 
 
 .const BAR_TOP      = $80       // first line of bar zone (after FLD + music)
@@ -364,14 +369,14 @@ irq_open:
         // frame at raster ~282. This window is safe → no tearing.
         jsr move_sprites
 
-        // Chain to irq_fld at line $3B. Scroller letters get their
+        // Chain to irq_fld at line $5B. Scroller letters get their
         // rainbow colours from per-cell color RAM (updated each frame
         // in irq_close), not from per-scanline $D021 writes.
         lda #<irq_fld
         sta $fffe
         lda #>irq_fld
         sta $ffff
-        lda #$3b
+        lda #$5b
         sta VIC_RASTER
 
         pla
@@ -383,16 +388,19 @@ irq_open:
 
 
 //==================================================================
-// irq_fld — fires at line $3B (row 1's natural badline). Row 0 has
-// already displayed at $33..$3A and the scroller in row 0 is locked
-// in place. Canonical HCL FLD pattern: write yscroll=5 before $3C
-// cycle 14, then loop "increment yscroll and write" once per line.
-// Late-write trick: each iteration's $D011 update lands at cy ~24
-// (AFTER VIC's cy-14 check), so the change is seen by the NEXT
-// line's cy-14 check, where yscroll now matches line%8 → VIC fires
-// a SPURIOUS badline that restarts row 1 with VCBASE pinned. After
-// K writes, row 1 has been stretched K times and row 2+ slide down
-// by K pixels. Bitmap shifts from $73 (K=0) to $73+K (K=28).
+// irq_fld — fires at line $5B (row 5's natural badline). Rows 0..4
+// (scroller at row 0, fade-band text at row 4) have already displayed
+// at $33..$5A and are locked in place — they do NOT bounce. Canonical
+// HCL FLD pattern: write yscroll=5 before $5C cycle 14, then loop
+// "increment yscroll and write" once per line. Late-write trick: each
+// iteration's $D011 update lands at cy ~24 (AFTER VIC's cy-14 check),
+// so the change is seen by the NEXT line's cy-14 check, where yscroll
+// now matches line%8 → VIC fires a SPURIOUS badline that restarts the
+// frozen row with VCBASE pinned. After K writes, row 5 (empty bg) has
+// been stretched K times and row 6+ slide down by K pixels. Bitmap
+// shifts from $73 (K=0) to $73+K (K=22 max) for the logo at row 8.
+// Music plays at the end of this IRQ; K_max=22 keeps FLD-end + music
+// finishing before BAR_TOP=$80.
 //==================================================================
 irq_fld:
         pha
@@ -408,13 +416,13 @@ irq_fld:
         tax
         beq !skip+
 
-        // Wait for raster to leave $3B (= we're now at $3C).
-        lda #$3b
+        // Wait for raster to leave $5B (= we're now at $5C).
+        lda #$5b
 !w1:    cmp VIC_RASTER
         beq !w1-
 
-        // First write at $3C cycle ~11 (BEFORE cycle 14): yscroll=5.
-        // $3C%8=4, ys=5 → diff=1 → no badline at $3C.
+        // First write at $5C cycle ~11 (BEFORE cycle 14): yscroll=5.
+        // $5C%8=4, ys=5 → no badline at $5C (mismatch).
         lda #$3d                // BMM + DEN + RSEL + yscroll=5
         sta VIC_CTRL1
 
@@ -427,7 +435,8 @@ irq_fld:
         beq !w2-
         // Per-line write at cy ~24 (AFTER cy 14). The PREVIOUS line's
         // yscroll therefore matches THIS line's line%8 at cy 14 → a
-        // spurious badline fires, restarting row 2 with VCBASE pinned.
+        // spurious badline fires, restarting the frozen row with
+        // VCBASE pinned.
         clc
         lda VIC_CTRL1
         adc #$01
@@ -1125,12 +1134,14 @@ sprite_yphase: .byte 0, 80, 160, 40, 120, 200, 56, 184
 
 // Anchor HCL FLD bounce: K = number of yscroll writes per frame.
 // With the late-write per-line loop, each write causes the NEXT
-// line's cy-14 check to fire a spurious badline that restarts row 2.
-// Empirical shift function: 0 for K=0, K+1 for K=1..28. Smooth.
+// line's cy-14 check to fire a spurious badline that restarts the
+// frozen row. K range capped at 22 so irq_fld's FLD-loop + music_play
+// finish before BAR_TOP=$80 (trigger $5B → FLD end $5B+K, plus
+// ~13 lines worst-case music_play → must fit before $80).
 // 3× sine frequency → ~1.7s per cycle.
 .align 256
 bounce_total:
-        .fill 256, round(14 + 14 * sin(toRadians(i * 1080 / 256)))
+        .fill 256, round(11 + 11 * sin(toRadians(i * 1080 / 256)))
 
 
 //==================================================================
@@ -1156,12 +1167,15 @@ text_ptr_odd:
 
 
 //==================================================================
-// Fade-band text (MVP) — "open my borders" rendered into bitmap row 5
+// Fade-band text (MVP) — "open my borders" rendered into bitmap row 4
 // (cells 12-26), fade in/out via colour-RAM cycling on those cells.
 //
-// Bitmap row 5 starts at $2000 + 5*40*8 = $2640. Cells 12-26 occupy
-// $26A0-$2717 (15 cells × 8 bytes). Colour RAM for row 5 starts at
-// $D800 + 5*40 = $D8C8; cells 12-26 = $D8D4-$D8E2.
+// Bitmap row 4 starts at $2000 + 4*40*8 = $2500. Cells 12-26 occupy
+// $2560-$25D7 (15 cells × 8 bytes). Colour RAM for row 4 starts at
+// $D800 + 4*40 = $D8A0; cells 12-26 = $D8AC-$D8BA.
+//
+// Row 4 displays at lines $53..$5A — above the FLD trigger at $5B,
+// so the text stays put while the logo (row 8+) bounces with K.
 //
 // Bitmap encoding: each chargen byte (8 hires pixels) is OR-paired
 // to 4 MC pixels using code 11 — so the pixel colour is driven by
@@ -1170,8 +1184,8 @@ text_ptr_odd:
 // which sits at $00 (black) in the rows above the logo.
 //==================================================================
 
-.const TEXT_BITMAP_DST = BITMAP + 5 * 40 * 8 + 12 * 8    // $26A0
-.const TEXT_COL_RAM    = $D800 + 5 * 40 + 12             // $D8D4
+.const TEXT_BITMAP_DST = BITMAP + 4 * 40 * 8 + 12 * 8    // $2560
+.const TEXT_COL_RAM    = $D800 + 4 * 40 + 12             // $D8AC
 
 text_phrase:
         // "open my borders" — 15 chars, screencode_mixed lowercase

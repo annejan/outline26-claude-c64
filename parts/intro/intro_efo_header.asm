@@ -22,16 +22,16 @@
         //   $0B     Sprite shape
         //   $10-$12 Music
         //   $20-$3F Bitmap
-        //   $40-$47 Tables
+        //   $40-$48 Tables (bounce_total is page-aligned at $4800)
         //   $4C-$53 Chargen-ROM copy (built at runtime in copy_chargen)
-        //   $54-$5B BmpScroll
+        //   $54-$5D BmpScroll (scroll_text at $5C00, sprite_shape at $5D62)
         .byte 'P', $04, $09
         .byte 'P', $0B, $0B
         .byte 'P', $10, $12
         .byte 'P', $20, $3F
-        .byte 'P', $40, $47
+        .byte 'P', $40, $48
         .byte 'P', $4C, $53
-        .byte 'P', $54, $5B
+        .byte 'P', $54, $5D
         // Zero-page: $f5..$fe
         .byte 'Z', $f5, $fe
         // I/O safe (interrupts leave $01 at $35)
