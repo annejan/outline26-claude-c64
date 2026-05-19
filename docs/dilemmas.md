@@ -47,7 +47,27 @@ which is already the scroller.
 2. **Keep FLD at `$3B`, put fade-text into a bouncing row**.
    - The fade-text now travels with the logo as a single visual unit.
    - Text + logo bounce together; eye reads them as one composite.
-   - **Verdict**: chosen. Trade accepted in commit `23eb8e3`.
+   - **Verdict**: intermediate compromise. Replaced by (3).
+
+3. **Symmetric FLD** (the answer all along) — top FLD does K writes
+   *before* the logo, bottom FLD does (K_max − K) writes *after* it.
+   Total FLD stretch per frame is constant (= K_max = 28). The logo
+   bounces inside a 28-line arc, and **everything past the bottom
+   FLD lands at the same raster position every frame** regardless of
+   K. Fade-text moves to bitmap row 19 (= raster `$E3`, fixed Y) and
+   no longer bounces.
+   - **Pro**: bounce arc preserved at K_max=28, fade-text fixed,
+     yscroll ends at constant `(4 + K_max) % 8 = 0` so the chain
+     transitions cleanly into `irq_close`.
+   - **Con**: bars zone shrinks from `$80..$EB` (108 lines) to
+     `$80..$C1` (66 lines) — bars must end before bottom-FLD's
+     earliest trigger at `$C3`. Acceptable trade: bars still span
+     the logo in both bouncing extremes.
+   - **Verdict**: shipped. See `irq_fld_bottom` in `intro.asm` and
+     the IRQ-chain comment at the top of the file.
+   - **Reference**: this is exactly Jesder's symmetric-FLD pattern
+     from `ranzbak/defeest-demo-lft-loader/badline`. See the
+     "external references" section at the bottom of this file.
 
 ### Levers we kept on the table but didn't use
 
@@ -55,9 +75,6 @@ which is already the scroller.
   pinned to the ball cascade (Y-wrap mitigation). Adding a 9th+
   via multiplexing costs ~80 cy/frame in the IRQ chain and is
   fragile under the existing chain's tight FLD/bars handover.
-- **Open-bottom-border FLD trick** to expose a fixed-Y strip below
-  the logo. Adds a second FLD-style IRQ at line `$EC`, doubling
-  the FLD-related complexity for one strip.
 - **HIRES bitmap mode swap for one cell row**: would need a mid-
   frame `$D011 / $D016` toggle and per-row colour control. Worth
   it for a HUD, overkill for a 1.28 s fade-band.
@@ -67,14 +84,16 @@ which is already the scroller.
 ## IRQ-chain budget: who gets the slack?
 
 The IRQ chain is `irq_close@$F9 → irq_open@$01 → irq_fld@$3B →
-irq_bars@$80 → irq_close@$F9`. Each stage's window:
+irq_bars@$80 → irq_fld_bottom@$C3+K → irq_close@$F9`. Each stage's
+window:
 
 | Stage | Window | Lines | Cycles |
 |-------|--------|-------|--------|
 | irq_close → irq_open | `$F9 → $01` | 64 | ~4032 |
 | irq_open → irq_fld | `$01 → $3B` | 58 | ~3654 |
 | irq_fld → irq_bars | `$3B → $80` | 69 | ~4347 |
-| irq_bars → irq_close | `$80 → $F9` | 121 | ~7623 (raster-locked bar loop runs to `$EC`) |
+| irq_bars → irq_fld_bottom | `$80 → $C3+K` | 67..95 | ~4222..5985 |
+| irq_fld_bottom → irq_close | `$C3+K → $F9` | 22..54 | ~1386..3402 |
 
 Total per frame: 312 lines × 63 cy = 19,656 cy.
 
@@ -273,3 +292,61 @@ you write/read at runtime**, including page-aligned tables.
   the 2.56 s × 3 phrases cycle barely fits before intro outro
   triggers. Phrase 0 + 1 always show; phrase 2 ("the breadbin felt
   it") may be cut short or skipped.
+
+---
+
+## External references — code we learned from
+
+These aren't ours; they're the public C64 demos / reference code we
+read or borrowed techniques from. Listed here so future-us doesn't
+have to re-find them.
+
+### `ranzbak/defeest-demo-lft-loader`
+
+`https://github.com/ranzbak/defeest-demo-lft-loader`
+
+A 2018 deFEEST demo by `ranzbak`, multi-part chained by lft's loader.
+Useful subdirectories:
+
+- **`defeest-intro/`** — sprite-letters bouncing-wave intro. 7 multi-
+  colour sprites each carry one hand-drawn letter of "deFEEST". Five-
+  IRQ chain, phase-offset Y bounce per sprite, text-mode bottom-row
+  scroller. The notable trick is **shape-sharing**: sprites 1, 3, 4
+  all point at sprite block `$3040` (= letter 'e') — three 'e's in
+  "deFEEST", one block. Worth borrowing for any letter-as-sprite
+  effect we add later.
+
+- **`badline/`** — Jesder/0xc64-tutorial-derived FLD intro with a
+  koala bitmap and a 4×4 scroller at the bottom. **This is where the
+  symmetric-FLD pattern in our intro comes from.** Their
+  `logo_bounce_heights[]` cycles K = 0..15; per frame they do K top-
+  FLD writes (`render_bitmap_start`) and (16 − K) bottom-FLD writes
+  (`render_bitmap_end`), with the bottom-FLD raster trigger self-
+  modified to `177 + K`. Constant 16-line total stretch → header
+  text above and 4×4 scroller below stay pinned. Also has an
+  `apply_interrupt` tail-call helper worth stealing if our IRQ
+  chain grows further.
+
+### `ranzbak/speedcode`
+
+`https://github.com/ranzbak/speedcode`
+
+Reference for speedcode techniques (long unrolled raster work) —
+not yet borrowed. On the watchlist if we ever need to fit something
+big into a tight raster window (HIRES mode toggle, full-screen
+plasma, etc.).
+
+### Jesder / 0xc64 — 4×4 dynamic text scroller
+
+`http://www.0xc64.com/2017/02/12/tutorial-4x4-dynamic-text-scroller/`
+
+The 4×4 scroller in ranzbak's `badline` follows this tutorial.
+Probably overkill for our intro (we have a full-width bitmap
+scroller already) but worth knowing about for greets or other
+parts that want fancier glyphs in a small footprint.
+
+### `codebase.c64.org`
+
+The general C64 codebase reference. We default to it for any new
+VIC or 6510 routine per repo convention (see `feedback-codebase64-
+first.md` in memory).
