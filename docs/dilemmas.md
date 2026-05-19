@@ -345,6 +345,20 @@ Probably overkill for our intro (we have a full-width bitmap
 scroller already) but worth knowing about for greets or other
 parts that want fancier glyphs in a small footprint.
 
+### Janne Hellsten — BINTRIS series part 5: bad lines and FLD
+
+`https://nurpax.github.io/posts/2018-06-19-bintris-on-c64-part-5.html`
+
+Excellent write-up of the bad-line condition `(RASTER & 7) == YSCROLL`
+and how FLD uses it to scroll the screen down. The big stability
+lesson we took from this: **FLD timing must not depend on adjacent
+IRQs' workload**. Music play with variable cycle cost (step-boundary
+frames) inside or right after the FLD chain produces jitter even
+when the FLD loop itself is cycle-tight. Fix: move variable-cost
+work (music, scroller updates) into a different IRQ with a separate,
+generous window. Also documents the realistic ~20–22 usable cycles
+on a bad line (not the often-quoted 23).
+
 ### `codebase.c64.org`
 
 The general C64 codebase reference. We default to it for any new
