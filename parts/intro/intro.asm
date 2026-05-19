@@ -244,10 +244,13 @@ init_sprites:
         sta SPR_YEXP            // Y-expanded → round balls
         lda #0
         sta SPR_MC
-        // Top sprites 0,1,2 pass behind the scroller letters: their
-        // foreground-priority bit set means the bitmap %01/%10/%11
-        // pixels (letter strokes) overdraw the sprite where they meet.
-        lda #%00000111
+        // Sprite-foreground priority ($D01B): ALL sprites BEHIND bitmap.
+        // Set bit = sprite passes under bitmap %01/%10/%11 pixels.
+        // This gives: balls swim through the gaps in the logo / fade-text /
+        // scroller letters but never occlude them. The result is the
+        // "all touching" effect — balls drift between the foreground
+        // pixels rather than over them.
+        lda #%11111111
         sta SPR_FORE
 
         // 8 distinct colours
@@ -2145,10 +2148,13 @@ update_bmp_scroll:
 !done:
         rts
 
-// Sprite Y for top-border sprites — range 14..30
+// Sprite Y for top-border sprites — range 14..50.
+// Amplitude 18 chosen so top sprites' display (Y..Y+41 with
+// Y-expand) ends at Y=91 at peak — just touching mid sprites'
+// minimum display Y=90, mirroring the mid↔bot kiss.
 .align 256
 sine_top:
-        .fill 256, 14 + round(8 * (1 - cos(toRadians(i * 360 / 256))))
+        .fill 256, 14 + round(18 * (1 - cos(toRadians(i * 360 / 256))))
 
 // Sprite Y for display-area sprites — range 90..200.
 // Floor 90 keeps mid sprites out of the FLD zone ($3C..$58 max):
