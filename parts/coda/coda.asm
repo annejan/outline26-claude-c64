@@ -66,8 +66,21 @@
 // full-rotation period: ~0.64 s — same as before, just bigger.
 .const KLOOT_SHAPE_BASE = $a0         // $2800 / 64
 .const KLOOT_SHOW_FRAME = 13          // half-rate frame at first kick
-.const KLOOT_X          = 40          // 48-wide sprite, right edge at display col 64
-.const KLOOT_Y          = 129         // 42-tall sprite, vert-centred on title rows 11-13
+
+// Sprite 0 position registers ($D000/$D001) use VIC's native raster
+// coordinate system, NOT 0-indexed display-pixel rows/cols:
+//   - Sprite X = 24 puts the sprite's LEFT edge at display column 0
+//     (start of the visible 320-px area). So sprite X = 24 + N puts
+//     the left edge at display col N.
+//   - Sprite Y is the raster line where the TOP of the sprite appears.
+//     With $D011 = $1B (25-row mode, RSEL=1), display row N starts at
+//     raster 51 + N*8. So text row 11 (start of title) = raster 139.
+.const KLOOT_X          = 40          // sprite left at display col 16, right at col 64
+                                      //   (display col 64 = 8-px gap before "K" at col 72)
+.const KLOOT_Y          = 129         // sprite spans rasters 129-170 = display-pixel rows
+                                      //   78-119; title block (rows 11-13) is at pixel rows
+                                      //   88-111 → 42-tall sprite vert-centres on the
+                                      //   title block with ~9-px halo above and below
 
 // Coda V3 kick — coda has the unique luxury of "owning" V3 for the
 // duration of the part (zp_outro=0 keeps intro's drum gate closed,
