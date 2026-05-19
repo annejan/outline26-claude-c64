@@ -36,7 +36,7 @@ Seven parts loaded by Spindle's pefchain framework:
 | 3 | `parts/interlude/`   | Text-mode plasma + 6 raster bars over pad→build-up arc | `$F6 = $20` (beat counter) |
 | 4 | `parts/sinus/`       | Comedown: sine-wobble DEFEEST + colour cycling, LP filter close, drums silent | `$F6 = $30` (set when `$FC` frame counter hits 250) |
 | 5 | `parts/greets/`      | Climax: DYCP sprite-font scroller with sine wobble + kick drums returning | `$F6 = $20` |
-| 6 | `parts/coda/`        | Title card "KLOOT AND THE BREADBIN" with slow border colour cycle + dedicated V3 kick | `$F6 = $30` (frame counter hits N_FRAMES) |
+| 6 | `parts/coda/`        | Title card "KLOOT AND THE BREADBIN" with rotating Kloot star sprite + slow border colour cycle + dedicated V3 kick | `$F6 = $30` (frame counter hits N_FRAMES) |
 | 7 | `parts/end/`         | Credit roll, side bars, slow chord/lead reprise | `stay` (loops) |
 
 Read `README.md` for full per-part descriptions. The
@@ -176,6 +176,7 @@ the `.d64`.
 | `$0800-$0B1F`  | coda code + col_tab + driver (during coda) |
 | `$1000-$125D`  | **intro's resident music** — tables + my_music_play (inherited by interlude / sinus / greets / coda) |
 | `$2000-$23FF`  | greets sprite font (overlays intro's unused bitmap area) |
+| `$2800-$2BFF`  | coda Kloot-star sprite shapes (16 frames × 64 bytes, sprite ptrs `$A0-$AF`) |
 | `$3000-$444F`  | end font + code                                       |
 | `$8000-…`      | interlude / greets code + state                       |
 | `$C000-$CAFF`  | screenfill code + dist_table + ripple palette + char_table |
