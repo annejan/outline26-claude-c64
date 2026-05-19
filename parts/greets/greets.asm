@@ -335,12 +335,14 @@ sine_table:
 
 
 //==================================================================
-// scrolling message
+// scrolling message — aligned to $8500 to avoid pefchain load split
+// at $84FF/$8500 (first segment $8000-$84FF skips message data).
 //==================================================================
 // Greets text — uppercase only (font is A-Z + blank).
 // The real story: never had time to code the breadbin, then AI made
 // it possible. Tongue in cheek, grateful, and shout-outs to the
 // folks whose tools / inspiration got us here.
+* = $8500
 message:
 .text "      FOR YEARS I WANTED TO MAKE A DEMO     "
 .text "      FOR THE X PARTY                       "

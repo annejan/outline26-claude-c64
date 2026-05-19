@@ -16,9 +16,9 @@
 
         // Owned pages:
         //   $20-$27 = sprite font shapes (32 glyphs × 64 B = 2 KB)
-        //   $80-$86 = code + state + tables + inline font
+        //   $80-$8F = code + state + tables + message + inline font
         .byte 'P', $20, $27
-        .byte 'P', $80, $86
+        .byte 'P', $80, $8F
         // Inherit intro's music tables ($10-$12)
         .byte 'I', $10, $12
         // Zero-page: $f4-$fa (kick state machine + shadow freq)
