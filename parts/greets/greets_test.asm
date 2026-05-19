@@ -351,7 +351,7 @@ message:
 .text "      SIDMASTERS   THE WEEKENDERS           "
 .text "      LETHARGY   ONSLAUGHT   LEVEL          "
 .text "      SUCCESS   ARTLINE   RESOURCE          "
-.text "      OFFENCE   POO-BRAIN                   "
+.text "      OFFENCE   POO-BRAIN   RABENAUGE          "
 .text "      AND ALL THE QUIET CODERS              "
 .text "      AND ESPECIALLY KLOOT                  "
 .text "      FOR FINALLY GETTING ME HERE           "
