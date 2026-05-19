@@ -133,6 +133,10 @@ setup:
         jsr clear_bitmap                // zero-fill $2000-$3FFF
         jsr copy_logo                  // copy logo rows to rows 8-16
         jsr init_sprites
+        // init_fade_text must run BEFORE init_bmp_scroll — it borrows
+        // zp_text_ptr / zp_smooth as scratch and leaves them clobbered,
+        // which would corrupt the scroller's state if it ran afterwards.
+        jsr init_fade_text             // render fade-band text into bitmap row 5
         jsr init_bmp_scroll
 
         jsr my_music_init
@@ -285,6 +289,7 @@ irq_close:
         bcc !scrolloff+
         jsr update_bmp_scroll
         jsr update_scroll_colors
+        jsr update_fade_text
 !scrolloff:
         pla
         tay
@@ -1151,7 +1156,148 @@ text_ptr_odd:
 
 
 //==================================================================
-// copy_chargen — bank CHARGEN ROM in, copy MIXED-case set ($D800-$DFFF)
+// Fade-band text (MVP) — "open my borders" rendered into bitmap row 5
+// (cells 12-26), fade in/out via colour-RAM cycling on those cells.
+//
+// Bitmap row 5 starts at $2000 + 5*40*8 = $2640. Cells 12-26 occupy
+// $26A0-$2717 (15 cells × 8 bytes). Colour RAM for row 5 starts at
+// $D800 + 5*40 = $D8C8; cells 12-26 = $D8D4-$D8E2.
+//
+// Bitmap encoding: each chargen byte (8 hires pixels) is OR-paired
+// to 4 MC pixels using code 11 — so the pixel colour is driven by
+// colour RAM ($D800), letting us animate visibility by writing the
+// 15 colour-RAM bytes per frame. Code 00 pixels are bg ($D021),
+// which sits at $00 (black) in the rows above the logo.
+//==================================================================
+
+.const TEXT_BITMAP_DST = BITMAP + 5 * 40 * 8 + 12 * 8    // $26A0
+.const TEXT_COL_RAM    = $D800 + 5 * 40 + 12             // $D8D4
+
+text_phrase:
+        // "open my borders" — 15 chars, screencode_mixed lowercase
+        .byte $0F, $10, $05, $0E, $20, $0D, $19, $20
+        .byte $02, $0F, $12, $04, $05, $12, $13
+
+// Per-frame fade counter. cycle index = (counter >> 1) & $3F,
+// so each palette entry holds for 2 frames → 64 entries cycle in
+// 128 frames = 2.56 s.
+fade_counter:
+        .byte 0
+
+// 64-entry COLFADE-style fade palette: in → hold → out → hold black.
+// Each frame, IRQ writes palette[(counter >> 1) & $3F] to all 15
+// text-row colour-RAM cells.
+fade_palette:
+        // fade in (8 entries × 2 frames = 320 ms)
+        .byte $00, $00, $06, $06, $0E, $0E, $0F, $0F
+        // hold full bright (16 entries × 2 = 640 ms)
+        .byte $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F
+        .byte $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F
+        // fade out (8 entries × 2 = 320 ms)
+        .byte $0E, $0E, $06, $06, $00, $00, $00, $00
+        // hold black (32 entries × 2 = 1280 ms)
+        .byte $00, $00, $00, $00, $00, $00, $00, $00
+        .byte $00, $00, $00, $00, $00, $00, $00, $00
+        .byte $00, $00, $00, $00, $00, $00, $00, $00
+        .byte $00, $00, $00, $00, $00, $00, $00, $00
+
+
+//==================================================================
+// init_fade_text — rasterise text_phrase into bitmap row 5 via the
+// chargen copy at FONT_BASE, with OR-pair MC conversion. Also force
+// colour RAM for those cells to black so the text is invisible
+// until the IRQ starts cycling. One-shot at setup time.
+//==================================================================
+// During setup we can clobber any zp byte freely — runtime hasn't
+// started yet. Reuse zp_tmp/zp_msb/zp_text_ptr/zp_smooth.
+.const setup_charsrc = $f9       // (lo, hi) chargen-byte source pointer
+.const setup_bmpdst  = $fb       // (lo, hi) bitmap-byte destination pointer
+.const setup_save    = $fd       // OR-pair scratch byte
+
+init_fade_text:
+        ldx #0
+!c_loop:
+        // chargen src = FONT_BASE + text_phrase[x] * 8
+        lda text_phrase,x
+        sta setup_save           // stash char code (asl below clobbers A)
+        asl
+        asl
+        asl                      // x = char * 8 (low byte; high goes into carry)
+        sta setup_charsrc
+        lda setup_save
+        lsr
+        lsr
+        lsr
+        lsr
+        lsr                      // char / 32
+        clc
+        adc #>FONT_BASE
+        sta setup_charsrc + 1
+
+        // bitmap dst = TEXT_BITMAP_DST + x * 8
+        txa
+        asl
+        asl
+        asl
+        clc
+        adc #<TEXT_BITMAP_DST
+        sta setup_bmpdst
+        lda #>TEXT_BITMAP_DST
+        adc #0                   // pick up carry from asl
+        sta setup_bmpdst + 1
+
+        // Copy 8 chargen bytes with OR-pair MC conversion. Each pair
+        // of adjacent hires bits OR's to a single MC bit-pair "11";
+        // off pairs become "00". Result: text pixels render in the
+        // colour from $D800 (which we animate); bg pixels in $D021.
+        ldy #7
+!r_loop:
+        lda (setup_charsrc),y
+        sta setup_save
+        lsr
+        ora setup_save           // bits 0,2,4,6 = OR of each pair
+        and #$55
+        sta setup_save
+        asl                      // replicate odd bits into even
+        ora setup_save           // → bit-pair "11" wherever a pair was set
+        sta (setup_bmpdst),y
+        dey
+        bpl !r_loop-
+
+        inx
+        cpx #15
+        bne !c_loop-
+
+        // Force colour RAM for the 15 text cells to black so the text
+        // stays invisible until update_fade_text animates it later.
+        lda #$00
+        ldx #14
+!cr_init:
+        sta TEXT_COL_RAM,x
+        dex
+        bpl !cr_init-
+
+        rts
+
+
+//==================================================================
+// update_fade_text — per-frame colour-RAM update for the 15 text
+// cells. Indexes fade_palette by (fade_counter >> 1) & $3F and
+// writes that byte to all 15 cells. ~165 cycles per frame.
+//==================================================================
+update_fade_text:
+        inc fade_counter
+        lda fade_counter
+        lsr
+        and #$3F
+        tax
+        lda fade_palette,x
+        ldx #14
+!u_loop:
+        sta TEXT_COL_RAM,x
+        dex
+        bpl !u_loop-
+        rts
 // to RAM at FONT_BASE, restore. SEI is on from start.
 // Mixed set: a-z at screen codes $01-$1A, A-Z at $41-$5A — matches
 // .encoding "screencode_mixed" so "deFEEST" prints correctly.
