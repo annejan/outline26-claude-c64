@@ -22,6 +22,11 @@ The deeper guides live under [`docs/`](./docs/):
   constraints (VIC banks, chargen ROM hole, $D018 packing) and how
   they shape this demo's per-part layout. Read this before adding a
   new part or moving any data around.
+- [`docs/dilemmas.md`](./docs/dilemmas.md) — running log of the design
+  trade-offs we've hit, what we tried, and what we chose. Reach for
+  this when something "should work" but the trade-off space is
+  non-obvious (FLD vs fixed text, IRQ-chain budget, sprite Y-zones,
+  pefchain page claims).
 
 If you're updating long-form guidance, prefer editing those files
 over creating new top-level docs.
