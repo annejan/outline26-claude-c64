@@ -51,17 +51,23 @@
 .const N_FRAMES   = 250               // ~10 s at the half-rate divider
                                       // (250 ticks @ 25 Hz)
 
-// Kloot star sprite — 16 rotation frames pre-rendered at $2800-$2BFF
-// by tools/render_kloot_star.py. Sprite pointer values $A0..$AF.
+// Kloot star sprite — 16 rotation frames of a 12-lobe Claude-logo-style
+// sparkle, pre-rendered at $2800-$2BFF by tools/render_kloot_star.py
+// (--lobes 12 --inner 2.5 --curve 2.0 --outer 11.0). Sprite pointer
+// values $A0..$AF. X+Y double-expanded so the 24×21 source renders as
+// 48×42 on screen — bigger, chunkier, reads as the actual Claude
+// 12-petal burst rather than a tiny 4-point sparkle (see
+// docs/kloot-star-expansion.md "Stage A").
+//
 // The star fades in at half-rate frame 13 (= ~26 raw frames, aligned
 // with the first audible kick from coda_kick) and rotates one shape
-// per zp_frame tick (40 ms per shape → 90° of visual rotation per
-// 640 ms; with the star's 4-fold symmetry the eye reads it as a full
-// 360° spin every 0.64 s — slow and dignified, not zippy).
+// per zp_frame tick (40 ms per shape). 16 unique shapes span 0..30°
+// of true rotation; 12-fold symmetry makes the loop seamless. Visual
+// full-rotation period: ~0.64 s — same as before, just bigger.
 .const KLOOT_SHAPE_BASE = $a0         // $2800 / 64
 .const KLOOT_SHOW_FRAME = 13          // half-rate frame at first kick
-.const KLOOT_X          = 64          // ~one cell gap left of "KLOOT" text
-.const KLOOT_Y          = 139         // vertical centre of the title block
+.const KLOOT_X          = 40          // 48-wide sprite, right edge at display col 64
+.const KLOOT_Y          = 129         // 42-tall sprite, vert-centred on title rows 11-13
 
 // Coda V3 kick — coda has the unique luxury of "owning" V3 for the
 // duration of the part (zp_outro=0 keeps intro's drum gate closed,
@@ -137,10 +143,13 @@ setup:
         // gets re-enabled in the IRQ once zp_frame reaches KLOOT_SHOW_FRAME.
         lda #$00
         sta $d015
-        sta $d017                       // Y expand off
-        sta $d01d                       // X expand off
 
-        // ---- Sprite 0: Kloot star — pixel signature next to the title ----
+        // ---- Sprite 0: Kloot star — 12-lobe Claude-style burst ----
+        // X+Y double-expanded so the 24×21 source becomes 48×42 on screen.
+        lda #$01
+        sta $d017                       // Y expand (bit 0 = sprite 0)
+        sta $d01d                       // X expand (bit 0 = sprite 0)
+
         lda #KLOOT_X
         sta $d000
         lda $d010

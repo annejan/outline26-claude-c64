@@ -38,24 +38,29 @@ BYTES_PER_FRAME = 64  # 24*21/8 = 63 + 1 trailing pad byte
 
 
 def star_radius(theta: float, r_outer: float, r_inner: float, curve: float,
-                r_diag: float = 0.0, diag_curve: float = 4.0) -> float:
+                r_diag: float = 0.0, diag_curve: float = 4.0,
+                lobes: int = 4) -> float:
     """Polar radius for a Claude-style sparkle.
 
-    Two superimposed 4-fold petal functions:
-      - Big petals at the cardinal angles (0, π/2, π, 3π/2): peak = r_outer.
-      - Small petals at the diagonals (π/4, 3π/4, ...): peak = r_diag.
-    Set r_diag == 0 to get a pure 4-point star (no sparkle bumps).
+    Two superimposed N-fold petal functions:
+      - Big petals at angles 0, 2π/lobes, 4π/lobes, ...: peak = r_outer.
+      - Optional small petals halfway between, peak = r_diag.
     `curve` controls the sharpness of the big points; `diag_curve` controls
-    the sharpness/size of the diagonal bumps.
+    the sharpness/size of the diagonal bumps. `lobes` sets the petal count
+    (real Claude logo is 12; default 4 keeps the original 4-point look).
+
+    A cos(N*θ) wave has 2N peaks of |·|, so we use freq = lobes/2 to get
+    exactly `lobes` peaks per full revolution.
     """
-    big = abs(math.cos(2.0 * theta)) ** curve
-    diag = abs(math.sin(2.0 * theta)) ** diag_curve
+    freq = lobes / 2.0
+    big = abs(math.cos(freq * theta)) ** curve
+    diag = abs(math.sin(freq * theta)) ** diag_curve
     return r_inner + (r_outer - r_inner) * big + r_diag * diag
 
 
 def render_frame(angle_deg: float, r_outer: float, r_inner: float,
                  curve: float, r_diag: float = 0.0, diag_curve: float = 4.0,
-                 antialias_samples: int = 4) -> bytes:
+                 lobes: int = 4, antialias_samples: int = 4) -> bytes:
     """Render a single rotated star into 24×21 1bpp = 63 bytes + 1 pad.
 
     Origin at sprite centre (11.5, 10.5). Pixel is ON if its centre lies
@@ -84,7 +89,7 @@ def render_frame(angle_deg: float, r_outer: float, r_inner: float,
                     r = math.hypot(dx, dy)
                     theta = math.atan2(dy, dx) - rot
                     if r <= star_radius(theta, r_outer, r_inner, curve,
-                                        r_diag, diag_curve):
+                                        r_diag, diag_curve, lobes):
                         covered += 1
             total = antialias_samples * antialias_samples
             if covered * 2 >= total:  # ≥ 50% coverage → pixel ON
@@ -170,15 +175,19 @@ def main() -> int:
     p.add_argument("--diag-curve", type=float, default=4.0,
                    help="Sharpness exponent for the diagonal bumps "
                         "(default: %(default)s)")
+    p.add_argument("--lobes", type=int, default=4,
+                   help="Number of star points (real Claude logo = 12; "
+                        "default: %(default)s)")
     args = p.parse_args()
 
-    # 4-fold symmetric star: unique frames span 0..90°.
-    angle_step = 90.0 / args.frames
+    # N-fold symmetric star: unique frames span 0..(360/lobes)°.
+    # 4 lobes → 90°/frame_set; 12 lobes → 30°/frame_set.
+    angle_step = (360.0 / args.lobes) / args.frames
     frames = []
     for i in range(args.frames):
         angle = i * angle_step
         frame = render_frame(angle, args.outer, args.inner, args.curve,
-                             args.diag, args.diag_curve)
+                             args.diag, args.diag_curve, args.lobes)
         frames.append(frame)
 
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
