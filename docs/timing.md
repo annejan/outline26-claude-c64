@@ -209,3 +209,51 @@ Loops forever (`stay`). One credit cycle:
 
 Music: 128-step chord/lead cycle × 24 frames/step = 61.4 s per
 cycle. LP filter on (re-asserted every frame).
+
+---
+
+## Debugging notes — MCP session (May 2026)
+
+### Greets message dead zone
+
+pefchain splits greets into two load segments at `$84FF`/`$8500`
+(the build sector map shows them separately). The first segment
+(`$8000-$84FF`, 1280 bytes) is **not fully written** — pages
+`$83-$84` (`$8300-$84FF`) retain whatever data the prior part
+(interlude) left there. This included interlude's `wave` table
+at `$8300`, which overwrote the first ~436 characters of the
+scroller message at `$834C`.
+
+**Fix** (PR `b77e97e`):
+  - Added `* = $8500` before `message:` so the scroller text
+    lands in the second (correctly-loaded) segment.
+  - Expanded EFO claim from `'P', $80, $86` to `'P', $80, $8F`
+    so `font_data` at `$8881` is also protected.
+
+**Detection**: Compared PRG data vs VICE memory per page via MCP:
+  `$8000`: 226/256 mismatches, `$8100`: 253/256, `$8200`: 212/256,
+  `$8300`: 256/256, `$8400`: 247/256, `$8500`: 0/256, `$8600`: 0/256.
+  Pattern at `$8300` matched interlude's `wave` table byte-for-byte.
+
+### Spindle NMI clobbering sprite pointers
+
+`$07F8-$07FF` (sprite pointer area) not claimed in greets' EFO
+`'Z'` tag. Spindle NMI writes to `$07F8-$07FF` between ticks,
+resetting all 8 sprite pointers to `$A0` → `$2800` (coda's Kloot
+star data, not greets' font at `$2000`).
+
+**Fix**: `jsr update_sprite_ptrs` every frame in the IRQ handler
+to re-write pointers after each NMI. Old fix, still required.
+
+### VICE-MCP warp mode
+
+`WarpMode=1` in resources (`vice.machine.config.set`) runs
+as fast as the host allows (not 4× — more like 100×). Use
+`Speed=400` + `WarpMode=0` for a predictable 4× warp.
+
+Write checkpoints (`store=true`) on ZP/memory addresses are
+frequently hit but do not reliably stop execution under warp.
+Use `vice.execution.pause` + polling for part detection instead.
+
+`vice.run_until` with `cycles` param is listed as "not yet
+implemented" but `address` param works.
