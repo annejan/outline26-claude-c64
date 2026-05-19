@@ -478,8 +478,9 @@
 // $3b..$40 — unused gap before capitals
         .fill 8 * ($41 - $3b), 0
 
-// Capital glyphs — only the ones credit_text needs (A E F K S T).
+// Capital glyphs — all uppercase A-Z that credit_text needs.
 // All other uppercase slots stay zero (invisible chars).
+// Custom Å glyph at $5B for "Linus Åkesson".
 
 // $41 'A'
         .byte %00111000
@@ -490,8 +491,15 @@
         .byte %11000110
         .byte %11000110
         .byte %00000000
-// $42 — unused
-        .fill 8, 0
+// $42 'B'
+        .byte %11111100
+        .byte %11000110
+        .byte %11000110
+        .byte %11111100
+        .byte %11000110
+        .byte %11000110
+        .byte %11111100
+        .byte %00000000
 // $43 'C'
         .byte %01111110
         .byte %11000110
@@ -501,7 +509,7 @@
         .byte %11000110
         .byte %01111110
         .byte %00000000
-// $44 — unused
+// $44 — unused (D)
         .fill 8, 0
 // $45 'E'
         .byte %11111110
@@ -521,8 +529,19 @@
         .byte %11000000
         .byte %11000000
         .byte %00000000
-// $47..$4a — unused
-        .fill 8 * 4, 0
+// $47..$48 — unused (G-H)
+        .fill 8 * 2, 0
+// $49 'I'
+        .byte %01111110
+        .byte %00011000
+        .byte %00011000
+        .byte %00011000
+        .byte %00011000
+        .byte %00011000
+        .byte %01111110
+        .byte %00000000
+// $4a — unused (J)
+        .fill 8, 0
 // $4b 'K'
         .byte %11000110
         .byte %11001100
@@ -532,8 +551,35 @@
         .byte %11001100
         .byte %11000110
         .byte %00000000
-// $4c..$51 — unused
-        .fill 8 * 6, 0
+// $4c 'L'
+        .byte %11000000
+        .byte %11000000
+        .byte %11000000
+        .byte %11000000
+        .byte %11000000
+        .byte %11000000
+        .byte %11111110
+        .byte %00000000
+// $4d 'M'
+        .byte %11000110
+        .byte %11101110
+        .byte %11111110
+        .byte %11010110
+        .byte %11000110
+        .byte %11000110
+        .byte %11000110
+        .byte %00000000
+// $4e 'N'
+        .byte %11000110
+        .byte %11100110
+        .byte %11110110
+        .byte %11011110
+        .byte %11001110
+        .byte %11000110
+        .byte %11000110
+        .byte %00000000
+// $4f..$51 — unused (O-Q)
+        .fill 8 * 3, 0
 // $52 'R'
         .byte %11111100
         .byte %11000110
@@ -561,7 +607,18 @@
         .byte %00011000
         .byte %00011000
         .byte %00000000
-// $55..$ff — rest unused, zero fill up to $3800
+// $55..$5a — unused (U-Z)
+        .fill 8 * 6, 0
+// $5b 'Å' (A with ring, custom glyph)
+        .byte %00011000
+        .byte %00100100
+        .byte %00011000
+        .byte %00111000
+        .byte %01101100
+        .byte %11000110
+        .byte %11111110
+        .byte %11000110
+// $5c..$ff — rest unused, zero fill up to $3800
         .fill (FONT + $800) - *, 0
 
 
@@ -1151,8 +1208,12 @@ credit_text:
         row("                                        ")
         row("           greetings                    ")
         row("              outline 2026 crew         ")
-        row("              linus akesson             ")
-        row("              mads nielsen              ")
+        // "Linus Åkesson" — manually assembled because screencode_mixed
+        // doesn't know Å. $5b is the custom Å glyph in the font.
+        .text "              Linus "
+        .byte $5b
+        .text "kesson             "
+        row("              Mads Nielsen              ")
         row("              everyone keeping the      ")
         row("              breadbin singing          ")
         row("                                        ")
