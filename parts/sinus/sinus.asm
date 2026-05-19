@@ -90,6 +90,50 @@ setup:
         inx
         bne !cr-
 
+        // Narrative text — sinus is the demo's story moment. Six
+        // fragments scattered across the screen, lowercase chargen so
+        // they read as thinking/remembering rather than announcing.
+        // Wobble + colour-cycle below let them drift in and out
+        // without losing readability.
+        //
+        // Row 4 col 5: "years went by"
+        ldx #12
+!t1:    lda text_years,x
+        sta $04A5,x
+        dex
+        bpl !t1-
+        // Row 6 col 5: "no time for breadbin code" — echoes the
+        // interlude plasma line for resonance.
+        ldx #24
+!t2:    lda text_no_time,x
+        sta $04F5,x
+        dex
+        bpl !t2-
+        // Row 12 col 18: "then kloot"
+        ldx #9
+!t3:    lda text_then_kloot,x
+        sta $05F2,x
+        dex
+        bpl !t3-
+        // Row 13 col 18: "walked in"  (echoes interlude's bass-return text)
+        ldx #8
+!t4:    lda text_walked_in,x
+        sta $061A,x
+        dex
+        bpl !t4-
+        // Row 19 col 5: cast list
+        ldx #27
+!t5:    lda text_cast,x
+        sta $06FD,x
+        dex
+        bpl !t5-
+        // Row 21 col 5: dedication
+        ldx #17
+!t6:    lda text_credits,x
+        sta $074D,x
+        dex
+        bpl !t6-
+
         // Init SID — LP filter mode + volume
         lda #$1f
         sta SID_VOL
@@ -100,11 +144,13 @@ setup:
         lda #$00
         sta SID_FILT_CUT_LO
 
-        // Text mode, ROM chargen at $1000 (uppercase), no MCM.
+        // Text mode, ROM chargen at $1800 (lowercase set), no MCM.
+        // Lowercase chargen makes the narrative fragments read as
+        // thinking-out-loud rather than headline announcements.
         // YSCROLL=0 initially — vertical wobble in IRQ sets it per frame.
         lda #$18                        // DEN=1, RSEL=1, YSCROLL=0
         sta VIC_CTRL1
-        lda #$14                        // screen $0400, chargen $1000 (ROM)
+        lda #$16                        // screen $0400, chargen $1800 (lowercase ROM)
         sta VIC_MEM
         lda #$08                        // CSEL=1, no MCM, xscroll cleared
         sta VIC_CTRL2
@@ -250,3 +296,27 @@ bg_tab:
 .for (var i = 0; i < N_LINES; i++) {
         .byte floor(4.5 + 3.5 * sin(i * 3 * PI / 200 + 0.5))
 }
+
+
+//==================================================================
+// Narrative text fragments — screen codes for lowercase chargen at
+// $1800 (a=$01, b=$02, ..., z=$1A; space=$20; digits=$30..$39).
+//
+// The story: years passed without breadbin code; then kloot walked
+// in; result is this demo, dedicated to X 2026.
+//==================================================================
+text_years:        // "years went by" — 13 chars
+        .byte $19, $05, $01, $12, $13, $20, $17, $05, $0E, $14, $20, $02, $19
+text_no_time:      // "no time for breadbin code" — 25 chars
+        .byte $0E, $0F, $20, $14, $09, $0D, $05, $20, $06, $0F, $12, $20
+        .byte $02, $12, $05, $01, $04, $02, $09, $0E, $20, $03, $0F, $04, $05
+text_then_kloot:   // "then kloot" — 10 chars
+        .byte $14, $08, $05, $0E, $20, $0B, $0C, $0F, $0F, $14
+text_walked_in:    // "walked in" — 9 chars
+        .byte $17, $01, $0C, $0B, $05, $04, $20, $09, $0E
+text_cast:         // "anus  kloot  ranzbak  cinder" — 28 chars
+        .byte $01, $0E, $15, $13, $20, $20, $0B, $0C, $0F, $0F, $14, $20, $20
+        .byte $12, $01, $0E, $1A, $02, $01, $0B, $20, $20, $03, $09, $0E, $04, $05, $12
+text_credits:      // "defeest for x 2026" — 18 chars
+        .byte $04, $05, $06, $05, $05, $13, $14, $20, $06, $0F, $12, $20, $18
+        .byte $20, $32, $30, $32, $36
