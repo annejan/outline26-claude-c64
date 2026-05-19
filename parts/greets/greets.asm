@@ -34,8 +34,8 @@
 
 .const INTRO_MUSIC_PLAY = $119e
 
-.const SPR_BASE_X  = 24
-.const SPR_STRIDE  = 36
+.const SPR_BASE_X  = 12
+.const SPR_STRIDE  = 40
 .const SPR_Y_BASE  = 130
 
 .const BEAT_PERIOD     = 24    // frames per beat
@@ -141,8 +141,8 @@ setup:
         cpx #8
         bne !ppos-
 
-        lda #$00
-        sta $d010         // hi-bit X = 0 (all < 256)
+        lda #$01
+        sta $d010         // hi-bit X: sprite 0 rightmost at X=292
 
         lda #$ff
         sta SPR_EN
