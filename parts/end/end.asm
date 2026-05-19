@@ -620,15 +620,18 @@
         .byte %00000000
 // $59..$5a — unused (Y-Z)
         .fill 8 * 2, 0
-// $5b 'Å' (A with ring, custom glyph)
-        .byte %00011000
-        .byte %00100100
-        .byte %00011000
+// $5b 'Å' (A with ring, custom glyph) — sized so baseline (row 6)
+// aligns with the other capitals, leaving row 7 blank like they do.
+// Ring takes rows 0-2 (3-px-wide with 1-px hole in the middle row),
+// compressed A takes rows 3-6 (widening, wide, crossbar, legs).
+        .byte %00111000
+        .byte %00101000
         .byte %00111000
         .byte %01101100
         .byte %11000110
         .byte %11111110
         .byte %11000110
+        .byte %00000000
 // $5c..$ff — rest unused, zero fill up to $3800
         .fill (FONT + $800) - *, 0
 
