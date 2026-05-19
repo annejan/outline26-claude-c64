@@ -99,49 +99,76 @@ setup:
         cpx #25
         bne !srow-
 
-        // Narrative text — sinus is the demo's story moment. Six
+        // Narrative text — sinus is the demo's story moment. Ten
         // fragments scattered across the screen, lowercase chargen so
         // they read as thinking/remembering rather than announcing.
-        // Wobble + colour-cycle below let them drift in and out
-        // without losing readability.
+        // Tells the whole arc: gap → catalyst → partnership →
+        // discovery (sid / vic / open borders) → resolution → cast
+        // + dedication. Wobble + colour stripes let it drift in and
+        // out as the bg cycles through its palette.
         //
-        // Row 4 col 5: "years went by"
+        // Row 2 col 5: "years went by"
         ldx #12
 !t1:    lda text_years,x
-        sta $04A5,x
+        sta $0455,x
         dex
         bpl !t1-
-        // Row 6 col 5: "no time for breadbin code" — echoes the
-        // interlude plasma line for resonance.
+        // Row 4 col 5: "no time for breadbin code"
         ldx #24
 !t2:    lda text_no_time,x
-        sta $04F5,x
+        sta $04A5,x
         dex
         bpl !t2-
-        // Row 12 col 18: "then kloot"
-        ldx #9
-!t3:    lda text_then_kloot,x
-        sta $05F2,x
+        // Row 7 col 10: "then kloot walked in" — the catalyst, echoes
+        // the interlude plasma's "BUT THEN KLOOT WALKED IN" tease.
+        ldx #19
+!t3:    lda text_kloot_walked,x
+        sta $0522,x
         dex
         bpl !t3-
-        // Row 13 col 18: "walked in"  (echoes interlude's bass-return text)
-        ldx #8
-!t4:    lda text_walked_in,x
-        sta $061A,x
+        // Row 10 col 11: "patient pair coder"
+        ldx #17
+!t4:    lda text_pair,x
+        sta $059B,x
         dex
         bpl !t4-
-        // Row 19 col 5: cast list
-        ldx #27
-!t5:    lda text_cast,x
-        sta $06FD,x
+        // Row 13 col 5: "sid voices"  — the discovery beat: anus
+        // re-learns demo coding alongside kloot, one chip at a time
+        ldx #9
+!t5:    lda text_sid,x
+        sta $060D,x
         dex
         bpl !t5-
-        // Row 21 col 5: dedication
-        ldx #16
-!t6:    lda text_credits,x
-        sta $074D,x
+        // Row 14 col 5: "vic rasters"
+        ldx #10
+!t6:    lda text_vic,x
+        sta $0635,x
         dex
         bpl !t6-
+        // Row 15 col 5: "open borders"
+        ldx #11
+!t7:    lda text_borders,x
+        sta $065D,x
+        dex
+        bpl !t7-
+        // Row 18 col 11: "curiosity returned" — the resolution
+        ldx #17
+!t8:    lda text_curiosity,x
+        sta $06DB,x
+        dex
+        bpl !t8-
+        // Row 21 col 5: cast
+        ldx #27
+!t9:    lda text_cast,x
+        sta $074D,x
+        dex
+        bpl !t9-
+        // Row 23 col 11: dedication
+        ldx #16
+!t10:   lda text_credits,x
+        sta $07A3,x
+        dex
+        bpl !t10-
 
         // Init SID — LP filter mode + volume
         lda #$1f
@@ -319,14 +346,27 @@ text_years:        // "years went by" — 13 chars
 text_no_time:      // "no time for breadbin code" — 25 chars
         .byte $0E, $0F, $20, $14, $09, $0D, $05, $20, $06, $0F, $12, $20
         .byte $02, $12, $05, $01, $04, $02, $09, $0E, $20, $03, $0F, $04, $05
-text_then_kloot:   // "then kloot" — 10 chars
+text_kloot_walked: // "then kloot walked in" — 20 chars (catalyst,
+                   // echoes interlude bass-return)
         .byte $14, $08, $05, $0E, $20, $0B, $0C, $0F, $0F, $14
-text_walked_in:    // "walked in" — 9 chars
-        .byte $17, $01, $0C, $0B, $05, $04, $20, $09, $0E
+        .byte $20, $17, $01, $0C, $0B, $05, $04, $20, $09, $0E
+text_pair:         // "patient pair coder" — 18 chars
+        .byte $10, $01, $14, $09, $05, $0E, $14, $20, $10, $01, $09, $12
+        .byte $20, $03, $0F, $04, $05, $12
+text_sid:          // "sid voices" — 10 chars (discovery beat 1)
+        .byte $13, $09, $04, $20, $16, $0F, $09, $03, $05, $13
+text_vic:          // "vic rasters" — 11 chars (discovery beat 2)
+        .byte $16, $09, $03, $20, $12, $01, $13, $14, $05, $12, $13
+text_borders:      // "open borders" — 12 chars (discovery beat 3)
+        .byte $0F, $10, $05, $0E, $20, $02, $0F, $12, $04, $05, $12, $13
+text_curiosity:    // "curiosity returned" — 18 chars (resolution)
+        .byte $03, $15, $12, $09, $0F, $13, $09, $14, $19
+        .byte $20, $12, $05, $14, $15, $12, $0E, $05, $04
 text_cast:         // "anus  kloot  ranzbak  cinder" — 28 chars
         .byte $01, $0E, $15, $13, $20, $20, $0B, $0C, $0F, $0F, $14, $20, $20
         .byte $12, $01, $0E, $1A, $02, $01, $0B, $20, $20, $03, $09, $0E, $04, $05, $12
-text_credits:      // "defeest for X2026" — 17 chars (capital X = $58 in lowercase chargen)
+text_credits:      // "defeest for X2026" — 17 chars (capital X = $58
+                   // in lowercase chargen)
         .byte $04, $05, $06, $05, $05, $13, $14, $20, $06, $0F, $12, $20
         .byte $58, $32, $30, $32, $36
 
