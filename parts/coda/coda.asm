@@ -51,6 +51,18 @@
 .const N_FRAMES   = 250               // ~10 s at the half-rate divider
                                       // (250 ticks @ 25 Hz)
 
+// Kloot star sprite — 16 rotation frames pre-rendered at $2800-$2BFF
+// by tools/render_kloot_star.py. Sprite pointer values $A0..$AF.
+// The star fades in at half-rate frame 13 (= ~26 raw frames, aligned
+// with the first audible kick from coda_kick) and rotates one shape
+// per zp_frame tick (40 ms per shape → 90° of visual rotation per
+// 640 ms; with the star's 4-fold symmetry the eye reads it as a full
+// 360° spin every 0.64 s — slow and dignified, not zippy).
+.const KLOOT_SHAPE_BASE = $a0         // $2800 / 64
+.const KLOOT_SHOW_FRAME = 13          // half-rate frame at first kick
+.const KLOOT_X          = 64          // ~one cell gap left of "KLOOT" text
+.const KLOOT_Y          = 139         // vertical centre of the title block
+
 // Coda V3 kick — coda has the unique luxury of "owning" V3 for the
 // duration of the part (zp_outro=0 keeps intro's drum gate closed,
 // and we override the arp's per-frame writes every IRQ). So we can
@@ -121,9 +133,27 @@ setup:
         lda #25                         // ~0.5 s lead-in
         sta zp_kick_count
 
-        // Sprites off (greets had 8 enabled)
+        // Sprites off (greets had 8 enabled). Sprite 0 (Kloot star)
+        // gets re-enabled in the IRQ once zp_frame reaches KLOOT_SHOW_FRAME.
         lda #$00
         sta $d015
+        sta $d017                       // Y expand off
+        sta $d01d                       // X expand off
+
+        // ---- Sprite 0: Kloot star — pixel signature next to the title ----
+        lda #KLOOT_X
+        sta $d000
+        lda $d010
+        and #$fe                        // X high bit clear (X < 256)
+        sta $d010
+        lda #KLOOT_Y
+        sta $d001
+        lda #$08                        // Claude orange
+        sta $d027
+        lda #KLOOT_SHAPE_BASE
+        sta $07f8                       // sprite 0 shape pointer → frame 0
+        lda #$00
+        sta kloot_shape                 // counter 0..15 (incremented before write)
 
         // VIC: text mode, ROM chargen $1000 (uppercase), screen $0400.
         lda #$1b                        // DEN=1, RSEL=1, YSCROLL=3
@@ -246,6 +276,15 @@ interrupt:
         sta zp_subtick
         bne !skip_inc+
         inc zp_frame
+        // Advance the Kloot star shape on each zp_frame tick (= every
+        // 2nd raw frame = 25 Hz). 16 unique shapes cover 0°..90°; the
+        // star's 4-fold symmetry makes the loop seamless.
+        inc kloot_shape
+        lda kloot_shape
+        and #$0f
+        sta kloot_shape
+        ora #KLOOT_SHAPE_BASE
+        sta $07f8
 !skip_inc:
 
         lda zp_frame
@@ -255,12 +294,22 @@ interrupt:
         sta zp_timer
         lda #$00
         sta VIC_BORDER                  // settle to black before transition
+        sta $d015                       // turn the star off before handing to end
         jmp !ack+
 
 !run:
         ldy zp_frame
         lda col_tab,y
         sta VIC_BORDER
+        // Reveal the Kloot star at the first kick (zp_frame == KLOOT_SHOW_FRAME).
+        // Idempotent OR — fine to re-write $01 every frame thereafter.
+        lda zp_frame
+        cmp #KLOOT_SHOW_FRAME
+        bcc !no_show+
+        lda $d015
+        ora #$01
+        sta $d015
+!no_show:
 
 !ack:
         lda #$ff
@@ -343,6 +392,12 @@ coda_kick:
 // Kick freq shadow — lives in code RAM rather than zp because the
 // zp_f6..f8 window is already crowded.
 kick_freq:
+        .byte 0
+
+
+// Kloot star shape counter (0..15), wraps each "quarter rotation"
+// visually. Lives in code RAM for the same reason as kick_freq.
+kloot_shape:
         .byte 0
 
 
@@ -438,3 +493,15 @@ col_tab:
         .if (s == 2) { .byte $0e }
         .if (s == 3) { .byte $0f }
 }
+
+
+//==================================================================
+// Kloot star sprite shapes live at $2800-$2BFF (sprite pointer values
+// $A0..$AF). NOT emitted from this source — they're a separate binary
+// (parts/coda/kloot_star.bin) passed to mkpef as a second data file
+// in build.sh, so the KA PRG stays contiguous within $0800-$0AFF and
+// doesn't drag a 7 KB zero-padded chunk along the way (which would
+// collide with greets' $20-$27 sprite font during background loading).
+// To re-render the star: run tools/render_kloot_star.py — see header
+// at the top of this file for the parameters used.
+//==================================================================
