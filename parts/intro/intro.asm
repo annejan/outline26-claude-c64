@@ -22,8 +22,10 @@
 //
 // IRQ chain: irq_close@$F9 → irq_open@$01 → irq_fld@$3B
 //          → irq_bars@$80 → irq_fld_bottom@$C3+K → irq_close@$F9.
-// Music (my_music_play) runs at end of irq_fld — the $3B..$80 window
-// has ~4347 cy, plenty for K=28 top FLD + ~2 kcy music + handover.
+// Music (my_music_play) runs in irq_open so the irq_fld → irq_bars
+// → irq_fld_bottom chain has a fixed cycle budget independent of
+// music step-boundary frames (BINTRIS pt-5: FLD stability requires
+// the timing not to depend on adjacent IRQs' workload).
 //
 // Sprite blink fix: balls 0..2 disabled in irq_close (line $F9) so
 // their Y+256 wrap duplicates between $F9 and next-frame $01 don't
@@ -378,6 +380,16 @@ irq_open:
         // frame at raster ~282. This window is safe → no tearing.
         jsr move_sprites
 
+        // Music plays HERE in irq_open, not in irq_fld. That keeps
+        // the irq_fld → irq_bars → irq_fld_bottom chain on a tight,
+        // frame-independent budget — music_play's variable length
+        // (~600..2000 cy on step-boundary frames) used to push bars
+        // and the bottom-FLD trigger ~1..8 lines late on heavy
+        // music frames, which read as jitter in the bounce.
+        // (Per Janne Hellsten's BINTRIS-pt-5 stability lesson —
+        // FLD timing must not depend on adjacent-IRQ workload.)
+        jsr my_music_play
+
         // Chain to irq_fld at line $3B (= row 1's natural badline).
         // Scroller letters get their rainbow colours from per-cell
         // color RAM (updated each frame in irq_close), not from
@@ -458,7 +470,9 @@ irq_fld:
         bne !fld_loop-
 
 !skip:
-        jsr my_music_play        // music runs here after FLD — original placement
+        // Music plays in irq_open now — keeps this handover tight
+        // and constant. Top-FLD-end → irq_bars is just vector + raster
+        // set + rti = ~20 cy regardless of K.
 
         lda #<irq_bars
         sta $fffe
