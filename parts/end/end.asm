@@ -1119,7 +1119,7 @@ is_header:
         .byte 0             //  9     for x 2026
         .byte 0             // 10     blank
         .byte 1             // 11     started at outline
-        .byte 0,0           // 12..13 one month later / this happened
+        .byte 0,0           // 12..13 three weeks later / this happened
         .byte 0             // 14     blank
         .byte 1             // 15     code
         .byte 0,0,0,0       // 16..19 four code credits
@@ -1175,7 +1175,7 @@ credit_text:
         row("              for x 2026                ")
         row("                                        ")
         row("           started at outline           ")
-        row("              one month later           ")
+        row("            three weeks later           ")
         row("              this happened             ")
         row("                                        ")
         row("           code                         ")
