@@ -528,6 +528,7 @@ sid_freq_hi:
         .byte $11, $12, $13, $14, $15, $17, $18, $1a, $1b, $1d, $1e, $20   // C-4..B-4
 
 // Note-number shortcuts (octave * 12 + semitone, with octave 4 included)
+.const N_C1 = 12       // ~33 Hz — sub-bass kick layer (V1 bass-bleed)
 .const N_E2 = 28
 .const N_F2 = 29
 .const N_G2 = 31
@@ -786,10 +787,30 @@ my_music_play:
         lda mu_step
         and #$03
         bne !drum_done+
-        // BEAT — arm a new kick window. drum_table is walked frame
-        // by frame in the tick block below.
+        // BEAT — arm a new V3 kick window (drum_table walks frame
+        // by frame below).
         lda #DRUM_LEN
         sta drum_state
+        // V1 BASS-BLEED LAYER — Geir Tjelta / Jeroen Tel multi-voice kick
+        // pattern. V1 just wrote its bass note above; we overwrite it
+        // with N_C1 (~33 Hz sub-bass) and gate-pulse V1 to retrigger.
+        // V1's existing punchy ADSR ($04/$61 = instant attack, fast decay,
+        // sustain $6, fast release) shapes the thump naturally. The
+        // bass-pattern note at this kick step is sacrificed; bass
+        // resumes at the next non-kick step (3 of every 4 steps).
+        // This is where the kick's actual low-end weight comes from —
+        // V3 alone can only paint click + harmonic body, V1 brings the
+        // 33-Hz sub-thump that V3's $03-hi tail just can't reach loudly
+        // because V3 is competing for ear with the arp/lead voices.
+        ldx #N_C1
+        lda sid_freq_lo,x
+        sta $d400
+        lda sid_freq_hi,x
+        sta $d401
+        lda #$40
+        sta $d404                // gate off → triggers release of prior bass note
+        lda #$41
+        sta $d404                // gate on → fresh attack of sub-bass thump
 !drum_done:
 !done:
         // --- V3 DRUM tick (table-driven).
