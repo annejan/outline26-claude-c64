@@ -240,6 +240,49 @@ arp write. That was our pre-split race; the new my_music_critical
 writes drum_tick LAST so V3 stays at `$81` for the full drum
 window.
 
+## Known limitations of this VICE-MCP build
+
+These came up in real sessions; document so we don't re-discover.
+
+### `vice.interrupt.log` is a config stub
+The `start` call returns a `log_id` but logs nothing — the response
+includes the note *"Config stored. Actual logging requires VICE
+interrupt hook integration."* Don't rely on it for IRQ-chain
+verification. Fall back to PC polling: pause / `registers.get` /
+resume in a tight loop catches PC across the chain probabilistically.
+
+### `vice.run_until` is asynchronous and unreliable
+The schema says "Run until address …" but in practice the call
+returns immediately with a "resumed, will stop at target" status
+and doesn't always actually pause when the target is hit. PC stays
+in the scroller's tight loop at $5Exx forever even with checkpoints
+set at IRQ entry addresses. Suspect the binary monitor's checkpoint
+"stop on hit" isn't fully wired in this build.
+
+**Workaround**: don't use `run_until` for "advance to this address
+then measure"; use `vice.execution.run` for a known wall-clock
+duration + `vice.execution.pause` + `vice.registers.get`. Sample
+PC many times to build a coverage distribution if you need to know
+"is this handler being hit at all".
+
+### `vice.cycles.stopwatch` only accumulates while running
+- `reset` while paused: OK, sets cycle counter to 0.
+- `read` while paused: returns the cycles accumulated during the
+  PREVIOUS run window.
+- The `read` value is 0 if reset was the last call and no `run`
+  happened between reset and read.
+
+To time a routine entry-to-exit, you'd need: pause-at-entry,
+reset, run-until-exit (which is broken — see above), read. We
+don't currently have a reliable end-to-end cycle measurement
+recipe; the path forward is either to fix the VICE-MCP build's
+checkpoint hooks or to use the binary monitor directly via
+`tools/vicemon.py`.
+
+### `vice.snapshot.load` doesn't auto-resume
+After load, the emulator stays paused. Explicit
+`vice.execution.run` afterwards.
+
 ## Things to remember next session
 
 - VICE-MCP boots at `127.0.0.1:6510`; `./run-mcp.sh` from project
@@ -257,3 +300,7 @@ window.
   `intro_efo_header.asm` whenever a new resident table is added.
 - For X2026 hardware target: PAL only. Don't optimize timing for
   NTSC.
+- For cycle-accurate measurements: prefer `tools/vicemon.py` direct
+  binary-monitor calls over the MCP layer. The MCP's stopwatch +
+  run_until pair isn't sufficient for entry-to-exit timing of
+  raster IRQ handlers in this build.
