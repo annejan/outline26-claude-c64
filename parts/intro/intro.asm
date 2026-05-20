@@ -5,8 +5,9 @@
 //   open top border       lines $00..$32  (HCL trick)
 //   bitmap row 0 scroller lines $33..$3A  (cycles left / right / zig-zag
 //                                          via $fe sentinels in scroll_text)
-//   Top FLD               lines $3B..$3B+K   (K writes, freezes empty row 1)
-//   bitmap rows 2..17     shifted down by K  (logo at rows 8..16 bounces $73+K)
+//   bitmap row 1          lines $3B..$42     (empty bg, displays normally now)
+//   Top FLD               lines $43..$43+K   (K writes, freezes empty row 2)
+//   bitmap rows 3..17     shifted down by K  (logo at rows 8..16 bounces $73+K)
 //   rainbow rasterbars    lines $80..$C1     (behind logo, must end before
 //                                             bottom-FLD's earliest trigger $C3)
 //   Bottom FLD            lines $C3+K..$E2   ((K_max-K) writes, freezes row 18)
@@ -25,11 +26,18 @@
 // reverted us last time — previous code did "current+1" which only
 // worked for K>=1).
 //
-// IRQ chain: irq_close@$F9 → irq_open@$01 → irq_fld@$3B
+// IRQ chain: irq_close@$F9 → irq_open@$01 → irq_fld@$43
 //          → irq_bars@$80 → irq_fld_bottom@$C3+K → irq_close@$F9.
-// Music (my_music_play) runs in irq_open so the FLD chain has a
-// fixed cycle budget independent of music step-boundary frames
-// (BINTRIS pt-5).
+// Music (my_music_play) runs in irq_open. irq_fld trigger moved
+// from $3B (= row 1 badline) to $43 (= row 2 badline) so the
+// $01..$43 window is 66 lines / 4158 cy — enough headroom for
+// the worst-case music_play step-boundary frame (~2000 cy) on top
+// of irq_open's other work (~1800 cy). With trigger at $3B (58
+// lines) those frames overran into the FLD zone, broke the
+// spurious-badline chain for the first K writes, and partially
+// "pulled up" the fade-text. Freezing row 2 instead of row 1
+// puts row 1 in the natural-display zone — same logo Y, same
+// total stretch, just shifts the FLD freeze down 8 lines.
 //
 // Sprite blink fix: balls 0..2 disabled in irq_close (line $F9) so
 // their Y+256 wrap duplicates between $F9 and next-frame $01 don't
@@ -402,15 +410,15 @@ irq_open:
         // FLD timing must not depend on adjacent-IRQ workload.)
         jsr my_music_play
 
-        // Chain to irq_fld at line $3B (= row 1's natural badline).
-        // Scroller letters get their rainbow colours from per-cell
-        // color RAM (updated each frame in irq_close), not from
-        // per-scanline $D021 writes.
+        // Chain to irq_fld at line $43 (= row 2's natural badline).
+        // 8 lines later than the original $3B trigger — gives irq_open
+        // an extra 500 cy of slack on step-boundary music frames.
+        // Row 1 ($3B..$42) is now in natural-display zone (empty bg).
         lda #<irq_fld
         sta $fffe
         lda #>irq_fld
         sta $ffff
-        lda #$3b
+        lda #$43
         sta VIC_RASTER
 
         pla
@@ -422,19 +430,15 @@ irq_open:
 
 
 //==================================================================
-// irq_fld — fires at line $3B (row 1's natural badline). Row 0 has
-// already displayed at $33..$3A and the scroller is locked in place.
-// Canonical HCL FLD pattern: write yscroll=5 before $3C cycle 14,
-// then loop "increment yscroll and write" once per line. Late-write
-// trick: each iteration's $D011 update lands at cy ~24 (AFTER VIC's
-// cy-14 check), so the change is seen by the NEXT line's cy-14
-// check, where yscroll now matches line%8 → VIC fires a SPURIOUS
-// badline that restarts row 1 (empty bg) with VCBASE pinned. After
-// K writes, row 1 has been stretched K times and row 2+ slide down
-// by K px. Logo (row 8) ends up at $73+K.
-// Music runs HERE after the FLD loop — the $3B..$80 window gives
-// 69 lines = 4347 cy, plenty for K=28 (28 lines) + music_play
-// (~600..2000 cy worst case) + vector switch + rti.
+// irq_fld — fires at line $43 (row 2's natural badline). Rows 0..1
+// have already displayed normally. Canonical HCL FLD pattern: write
+// yscroll=5 before $44 cycle 14, then loop "increment yscroll and
+// write" once per line. Late-write trick: each iteration's $D011
+// update lands at cy ~24 (AFTER VIC's cy-14 check), so the change
+// is seen by the NEXT line's cy-14 check where yscroll now matches
+// line%8 → VIC fires a SPURIOUS badline that restarts row 2 (empty
+// bg) with VCBASE pinned. After K writes, row 2 has been stretched
+// K times and row 3+ slide down by K px. Logo (row 8) at $73+K.
 //==================================================================
 irq_fld:
         pha
@@ -451,13 +455,13 @@ irq_fld:
         tax
         beq !skip+
 
-        // Wait for raster to leave $3B (= we're now at $3C).
-        lda #$3b
+        // Wait for raster to leave $43 (= we're now at $44).
+        lda #$43
 !w1:    cmp VIC_RASTER
         beq !w1-
 
-        // First write at $3C cycle ~11 (BEFORE cycle 14): yscroll=5.
-        // $3C%8=4, ys=5 → no badline at $3C (mismatch).
+        // First write at $44 cycle ~11 (BEFORE cycle 14): yscroll=5.
+        // $44%8=4, ys=5 → no badline at $44 (mismatch).
         lda #$3d                // BMM + DEN + RSEL + yscroll=5
         sta VIC_CTRL1
 
