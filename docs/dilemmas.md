@@ -49,25 +49,37 @@ which is already the scroller.
    - Text + logo bounce together; eye reads them as one composite.
    - **Verdict**: intermediate compromise. Replaced by (3).
 
-3. **Symmetric FLD** (the answer all along) — top FLD does K writes
+3. **Symmetric FLD attempted, then reverted**. Tried Jesder's
+   pattern from `ranzbak/defeest-fld`: top FLD does K writes
    *before* the logo, bottom FLD does (K_max − K) writes *after* it.
-   Total FLD stretch per frame is constant (= K_max = 28). The logo
-   bounces inside a 28-line arc, and **everything past the bottom
-   FLD lands at the same raster position every frame** regardless of
-   K. Fade-text moves to bitmap row 19 (= raster `$E3`, fixed Y) and
-   no longer bounces.
-   - **Pro**: bounce arc preserved at K_max=28, fade-text fixed,
-     yscroll ends at constant `(4 + K_max) % 8 = 0` so the chain
-     transitions cleanly into `irq_close`.
-   - **Con**: bars zone shrinks from `$80..$EB` (108 lines) to
-     `$80..$C1` (66 lines) — bars must end before bottom-FLD's
-     earliest trigger at `$C3`. Acceptable trade: bars still span
-     the logo in both bouncing extremes.
-   - **Verdict**: shipped. See `irq_fld_bottom` in `intro.asm` and
-     the IRQ-chain comment at the top of the file.
-   - **Reference**: this is exactly Jesder's symmetric-FLD pattern
-     from `ranzbak/defeest-demo-lft-loader/badline`. See the
-     "external references" section at the bottom of this file.
+   In theory: total stretch constant, everything past the bottom
+   FLD lands at the same raster every frame, fade-text moves to row
+   19 and stays nailed.
+   - **Worked for the logo**: bounce smooth, K=28 arc intact.
+   - **Didn't work for the fade-text**: the bottom FLD's first
+     write only increments yscroll by 1, not +2 like the top FLD's
+     first write. That means the spurious-badline chain doesn't
+     start until the second line of the bottom FLD, so total
+     stretch is `K_max − 1` rather than `K_max`, and the K=0 case
+     loses an entire stretch line. Fade-text Y wobbles by 1
+     raster line, K-dependent.
+   - **Ranzbak's version handles this cleanly** with smaller K_max
+     (15 instead of 28) and an explicit 40-cycle
+     `latch_final_bitmap_line` pad between bottom FLD and the
+     mode switch. Smaller K = simpler timing budget = no glitch.
+   - **Verdict**: reverted in commit `bdf1453`. The robust way to
+     get fixed-Y fade-text alongside an FLD-bouncing logo is to
+     **switch from bitmap to text mode** for the fade-text row
+     (which ranzbak does — see his footer at screen-row 16 in
+     text mode). That's a bigger surgery and is on the wishlist.
+   - **Reference**: `ranzbak/defeest-fld/badline.asm`, and Jesder's
+     0xc64 original. Both linked in the external-references section.
+
+4. **Single FLD + bouncing fade-text (current)**. K_max bumped from
+   28 to 36 in commit `9ab56c8`. yscroll lands at 0 (`(5+35) % 8`),
+   top FLD ends at `$5F` with 33 lines of slack to BAR_TOP, logo
+   bounces $73..$97 — peak still inside the bars zone. Fade-text
+   travels with the logo as a single visual unit. Accepted.
 
 ### Levers we kept on the table but didn't use
 
@@ -84,16 +96,14 @@ which is already the scroller.
 ## IRQ-chain budget: who gets the slack?
 
 The IRQ chain is `irq_close@$F9 → irq_open@$01 → irq_fld@$3B →
-irq_bars@$80 → irq_fld_bottom@$C3+K → irq_close@$F9`. Each stage's
-window:
+irq_bars@$80 → irq_close@$F9`. Each stage's window:
 
 | Stage | Window | Lines | Cycles |
 |-------|--------|-------|--------|
 | irq_close → irq_open | `$F9 → $01` | 64 | ~4032 |
 | irq_open → irq_fld | `$01 → $3B` | 58 | ~3654 |
 | irq_fld → irq_bars | `$3B → $80` | 69 | ~4347 |
-| irq_bars → irq_fld_bottom | `$80 → $C3+K` | 67..95 | ~4222..5985 |
-| irq_fld_bottom → irq_close | `$C3+K → $F9` | 22..54 | ~1386..3402 |
+| irq_bars → irq_close | `$80 → $F9` | 121 | bar loop runs to `$EC` then ~13 lines of slack |
 
 Total per frame: 312 lines × 63 cy = 19,656 cy.
 
@@ -301,12 +311,15 @@ These aren't ours; they're the public C64 demos / reference code we
 read or borrowed techniques from. Listed here so future-us doesn't
 have to re-find them.
 
-### `ranzbak/defeest-demo-lft-loader`
+### `ranzbak/defeest-demo-lft-loader` and `ranzbak/defeest-fld`
 
-`https://github.com/ranzbak/defeest-demo-lft-loader`
+- `https://github.com/ranzbak/defeest-demo-lft-loader`
+- `https://github.com/ranzbak/defeest-fld`
 
-A 2018 deFEEST demo by `ranzbak`, multi-part chained by lft's loader.
-Useful subdirectories:
+Two 2018 deFEEST demos by `ranzbak`. The lft-loader version is multi-
+part; the fld standalone is just the FLD intro.
+
+Useful subdirectories from the lft-loader repo:
 
 - **`defeest-intro/`** — sprite-letters bouncing-wave intro. 7 multi-
   colour sprites each carry one hand-drawn letter of "deFEEST". Five-
@@ -317,8 +330,8 @@ Useful subdirectories:
   effect we add later.
 
 - **`badline/`** — Jesder/0xc64-tutorial-derived FLD intro with a
-  koala bitmap and a 4×4 scroller at the bottom. **This is where the
-  symmetric-FLD pattern in our intro comes from.** Their
+  koala bitmap and a 4×4 scroller at the bottom. The symmetric-FLD
+  pattern we tried (and reverted) came from here. Their
   `logo_bounce_heights[]` cycles K = 0..15; per frame they do K top-
   FLD writes (`render_bitmap_start`) and (16 − K) bottom-FLD writes
   (`render_bitmap_end`), with the bottom-FLD raster trigger self-
@@ -326,6 +339,21 @@ Useful subdirectories:
   text above and 4×4 scroller below stay pinned. Also has an
   `apply_interrupt` tail-call helper worth stealing if our IRQ
   chain grows further.
+
+  Standalone version at `ranzbak/defeest-fld/badline.asm` is the
+  same code with a couple of setup differences (no SID file
+  loaded, no Spindle quirks). Easier to read in isolation.
+
+The key thing we learned but couldn't bank without surgery: ranzbak
+uses **mode-switch** (bitmap → text) for the area below the FLD
+zone. The footer + 4×4 scroller live in text-mode screen RAM, so
+they don't share any timing with the FLD's spurious-badline chain
+and they stay nailed at fixed Y regardless of K. Doing that here
+would let us have fixed-Y fade-text + bouncing logo + full bars,
+but it's a non-trivial refactor: extra IRQ at `$E7` to write
+`$D011` and `$D018`, separate text screen RAM, separate chargen
+pointer, careful re-init back to bitmap mode at the next frame's
+top. On the wishlist.
 
 ### `ranzbak/speedcode`
 
