@@ -436,7 +436,7 @@ irq_fld:
         sta $d019
 
         ldx zp_frame
-        lda bounce_total,x      // K = FLD writes (0..28)
+        lda bounce_total,x      // K = FLD writes (0..36)
         tax
         beq !skip+
 
@@ -1161,11 +1161,18 @@ sprite_yphase: .byte 0, 80, 160, 40, 120, 200, 56, 184
 // Anchor HCL FLD bounce: K = number of yscroll writes per frame.
 // With the late-write per-line loop, each write causes the NEXT
 // line's cy-14 check to fire a spurious badline that restarts the
-// frozen row. K=0..28 = same arc as the original full-screen bounce.
+// frozen row.
+//
+// K=0..36 — bigger arc than the original 0..28, picked because:
+//   - yscroll after K=36 writes is (5+36-1) mod 8 = 0, clean boundary
+//   - top FLD ends at $3B+36=$5F, ~33 lines slack to BAR_TOP=$80
+//   - logo (rows 8..16) bounces $73..$97 — peak still inside the
+//     bars zone for a continuous "logo through rainbow" look
+//   - feels dramatic without being cartoony
 // 3× sine frequency → ~1.7s per cycle.
 .align 256
 bounce_total:
-        .fill 256, round(14 + 14 * sin(toRadians(i * 1080 / 256)))
+        .fill 256, round(18 + 18 * sin(toRadians(i * 1080 / 256)))
 
 
 //==================================================================
