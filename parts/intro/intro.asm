@@ -80,24 +80,26 @@
 // Drums fire only once zp_outro is non-zero (intro's outro animation
 // has armed, ~20 s into intro). Continues through interlude + greets
 // via my_music_play residency. End uses its own music_play, no drums.
-// V3 kick is table-driven (Geir Tjelta / Jeroen Tel "Macro Player"
+// V3 drums are table-driven (Geir Tjelta / Jeroen Tel "Macro Player"
 // pattern + Prince-of-Persia SFX routine). Per-frame command rows
 // write ctrl ($d412) + freq-hi ($d40f) — ADSR stays at the arp's
 // $00/$F0 (peak sustain, no decay) so the kick rides at full volume
 // and the post-kick arp pulse just swaps waveform without retrigger.
 //
-// Body waveform: TRIANGLE ($11). The earlier sawtooth attempt had
-// too much top-end energy — read as "head punch", not "belly punch".
-// Triangle (odd harmonics only, 1/n² rolloff) keeps the energy down
-// in the bass/low-mid where the kick belongs; V1's bass-bleed layer
-// supplies the sub-thump underneath, V3 is just the body shape.
+// TWO drums in one table: kick (rows 0..3) and snare (rows 4..7),
+// 2 bytes per row, picked via drum_offset (0 or 8) set at trigger.
+// Pattern: kick on every 8th step, snare on every 8th+4 step → K-S-K-S
+// on the quarter-note grid (125 BPM).
 //
-// Noise transient pitch dropped from $80 (~2 kHz, hi-hatty click) to
-// $20 (~500 Hz, low-mid rumble) — still gives an attack texture, but
-// in the belly band instead of the head band.
+//   KICK  — pure triangle pitch-slam from $10 → $02 (250 → 30 Hz).
+//           No noise transient — the kick lives entirely in the sub
+//           and low-bass bands. V1's bass-bleed at N_C1 reinforces.
+//   SNARE — low-noise transient ($20 ≈ 500 Hz) + triangle body in
+//           the 50–250 Hz range. The rattly noise gives the snap
+//           that distinguishes it from the kick.
 //
-// DRUM_LEN = 4: 1 low-noise frame + 3 triangle frames pitching down.
-// ~80 ms per kick, ~17% of the 24-frame beat.
+// Both share the same DRUM_LEN window, same gate-on-throughout, same
+// V1 bass-bleed retrigger. The character difference is the V3 voicing.
 .const DRUM_LEN = 4
 
 // Outro phase thresholds (in zp_outro ticks; mirror intro pacing).
@@ -790,21 +792,26 @@ my_music_play:
         lda mu_step
         and #$03
         bne !drum_done+
-        // BEAT — arm a new V3 kick window (drum_table walks frame
-        // by frame below).
+        // BEAT — arm a new drum window. Pick kick (drum_offset=0) on
+        // even quarters and snare (drum_offset=8) on odd quarters →
+        // K-S-K-S backbeat. mu_step is at a kick step (& $03 == 0),
+        // so bit 2 of mu_step splits even/odd quarters; ASL maps it
+        // to a byte-offset into the 16-byte drum_table.
+        lda mu_step
+        and #$04
+        asl                       // 0 or 8
+        sta drum_offset
         lda #DRUM_LEN
         sta drum_state
-        // V1 BASS-BLEED LAYER — Geir Tjelta / Jeroen Tel multi-voice kick
-        // pattern. V1 just wrote its bass note above; we overwrite it
-        // with N_C1 (~33 Hz sub-bass) and gate-pulse V1 to retrigger.
-        // V1's existing punchy ADSR ($04/$61 = instant attack, fast decay,
-        // sustain $6, fast release) shapes the thump naturally. The
-        // bass-pattern note at this kick step is sacrificed; bass
-        // resumes at the next non-kick step (3 of every 4 steps).
-        // This is where the kick's actual low-end weight comes from —
-        // V3 alone can only paint click + harmonic body, V1 brings the
-        // 33-Hz sub-thump that V3's $03-hi tail just can't reach loudly
-        // because V3 is competing for ear with the arp/lead voices.
+        // V1 BASS-BLEED LAYER — fires on BOTH kick and snare. V1 just
+        // wrote its bass note above; we overwrite it with N_C1 (~33 Hz
+        // sub-bass) and gate-pulse V1 to retrigger. V1's existing
+        // punchy ADSR ($04/$61 = instant attack, fast decay, sustain $6,
+        // fast release) shapes the thump naturally. The bass-pattern
+        // note at this drum step is sacrificed; bass resumes at the
+        // next non-drum step (3 of every 4 steps). Without this layer
+        // the kick/snare have no low-end weight — V3 alone competes
+        // with the arp + lead voices for ear and reads as thin.
         ldx #N_C1
         lda sid_freq_lo,x
         sta $d400
@@ -818,8 +825,11 @@ my_music_play:
 !done:
         // --- V3 DRUM tick (table-driven).
         // Each row in drum_table is { ctrl ($d412), freq-hi ($d40f) }.
+        // drum_offset (set at trigger) selects which 4-row block to walk:
+        //   offset 0 → kick rows (0..3)
+        //   offset 8 → snare rows (4..7)
         // ADSR is left at arp's $00/$F0 (set once at init) so V3 stays
-        // at peak volume for the whole kick — punch comes from waveform
+        // at peak volume for the whole hit — punch comes from waveform
         // contrast and pitch sweep, not envelope dynamics.
         lda drum_state
         beq !drum_skip+
@@ -830,6 +840,8 @@ my_music_play:
         sec
         sbc drum_state
         asl                       // × 2 bytes/row
+        clc
+        adc drum_offset           // + kick/snare offset
         tay
 
         lda drum_table,y
@@ -843,32 +855,36 @@ my_music_play:
 
 
 // V3 drum state. drum_state = countdown (0=idle, 1..DRUM_LEN=active).
-// Lives in intro's music segment so every part that inherits the
-// music ('I', $10, $12) can drive it.
+// drum_offset = 0 for kick rows, 8 for snare rows of drum_table.
+// Live in intro's music segment so every part that inherits the
+// music ('I', $10, $12) can drive them.
 drum_state:
         .byte 0
+drum_offset:
+        .byte 0
 
-// V3 kick voice table — see DRUM_LEN comment block at the top of intro
-// for the design rationale.
+// V3 drum table — kick rows 0..3 (offset 0), snare rows 4..7 (offset 8).
 //
 //   ctrl:     $81 = noise + gate, $11 = triangle + gate. Gate stays
-//             on through the whole kick (and stays on for the
-//             post-kick arp $41 write too) — no envelope retrigger.
+//             on through the whole hit (and stays on for the post-hit
+//             arp $41 write too) — no envelope retrigger.
 //   freq-hi:  high byte of V3 freq ($d40f); freq-lo is forced to $00 each
 //             frame, so this drives the pitch directly. SID hi-bytes:
 //             $80 ≈ 2 kHz, $40 ≈ 1 kHz, $20 ≈ 500 Hz, $10 ≈ 250 Hz,
 //             $08 ≈ 125 Hz, $04 ≈ 62 Hz, $02 ≈ 31 Hz (sub-bass).
-//
-// 1 low-noise transient ($20 hi ≈ 500 Hz, sounds like a thump rather
-// than a click) + 3 triangle frames sweeping $10 → $05 → $03 — body
-// stays in the 50–250 Hz "belly" band the whole time. V1's bass-bleed
-// at N_C1 (~33 Hz) sits underneath.
 drum_table:
+        // KICK — pure triangle pitch-slam, no noise. Belly only.
         // ctrl  fhi        phase  notes
-        .byte $81, $20   //  0 — low noise (~500 Hz) — the THUMP attack
+        .byte $11, $10   //  0 — triangle, ~250 Hz — fast attack
+        .byte $11, $04   //  1 — slam down to ~60 Hz
+        .byte $11, $02   //  2 — sub-bass body (~30 Hz)
+        .byte $11, $02   //  3 — hold sub (V1 layer reinforces ~33 Hz)
+        // SNARE — low-noise transient + triangle body, mid-band rattle.
+        // ctrl  fhi        phase  notes
+        .byte $81, $20   //  0 — low noise (~500 Hz) — the rattle attack
         .byte $11, $10   //  1 — triangle body (~250 Hz)
         .byte $11, $05   //  2 — drop (~80 Hz)
-        .byte $11, $03   //  3 — settle into belly (~50 Hz)
+        .byte $11, $03   //  3 — settle (~50 Hz)
 
 // Compact logo bitmap rows 8-16 — extracted from defeest.kla at build
 // time. Stored at $1300 to avoid the runtime-cleared $2000-$3FFF bitmap
