@@ -492,9 +492,9 @@ interrupt:
         tay
         lda title_colours,y
         ldx #0
-!tcol:  sta $D9B8 + 9,x
+!tcol:  sta $D9B8 + 7,x
         inx
-        cpx #22
+        cpx #26
         bne !tcol-
 !skip_inc:
 
