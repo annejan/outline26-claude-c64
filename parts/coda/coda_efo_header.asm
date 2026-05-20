@@ -18,22 +18,23 @@
         // at $0A00 (256 bytes). Reuses the area sinus claimed earlier
         // — by the time coda loads, sinus is long gone.
         .byte 'P', $08, $0A
-        // Kloot star quad sprite shapes (Stage B): 4 quadrants × 16
-        // frames × 64 bytes = 4 KB contiguous at $2800-$37FF. The
-        // sprite payloads MUST avoid $1000-$1FFF — VIC sees chargen ROM
-        // there in bank 0, not the RAM the CPU sees. Bases are aligned
-        // to multiples of $400 ($A0/$B0/$C0/$D0) so the OR-based
-        // pointer cycling in coda's interrupt works.
+        // Kloot star quad sprite shapes (Stage E — pre-rendered zoom):
+        // 4 quadrants × 24 frames × 64 B = 6 KB contiguous at
+        // $2000-$37FF. Each 24-frame sequence = 8 zoom (small→full
+        // with rotation built in) + 16 steady rotation. Coda walks a
+        // single shape counter 0..23, wraps 24→8, so the zoom plays
+        // once and the rotation loops afterwards. Sprite payloads MUST
+        // avoid $1000-$1FFF (chargen ROM visible to VIC there).
         //
-        //   $2800-$2BFF  TR  (ptr $A0..$AF)
-        //   $2C00-$2FFF  TL  (ptr $B0..$BF)
-        //   $3000-$33FF  BL  (ptr $C0..$CF)
-        //   $3400-$37FF  BR  (ptr $D0..$DF)
+        //   $2000-$25FF  TR  (ptr $80..$97, stride 24 = $18)
+        //   $2600-$2BFF  TL  (ptr $98..$AF)
+        //   $2C00-$31FF  BL  (ptr $B0..$C7)
+        //   $3200-$37FF  BR  (ptr $C8..$DF)
         //
         // $30-$37 overlaps end's claim, but end runs AFTER coda so
         // pefchain just defers that half of end's payload to a post-
         // coda load chunk (~0.5 s gap at the coda → end transition).
-        .byte 'P', $28, $37
+        .byte 'P', $20, $37
         // Inherit intro's resident music tables.
         .byte 'I', $10, $12
         // Zero-page: $f6 (timer / transition), $fb (subtick), $fc (frame).

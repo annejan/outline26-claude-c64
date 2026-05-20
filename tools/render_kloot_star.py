@@ -213,6 +213,14 @@ def main() -> int:
                    help="Output preview PNG path (default: %(default)s)")
     p.add_argument("--frames", type=int, default=16,
                    help="Number of rotation frames (default: %(default)s)")
+    p.add_argument("--frames-zoom", type=int, default=0,
+                   help="Number of zoom-in frames prepended before rotation. "
+                        "Star scales linearly from 1/N to 1.0 across these "
+                        "frames while rotation continues — when concatenated "
+                        "with the rotation frames, the sprite-pointer counter "
+                        "in coda can walk a single sequence (zoom plays once, "
+                        "then loops back into the rotation portion). Default "
+                        "0 = no zoom prefix (current rotation-only behaviour).")
     p.add_argument("--outer", type=float, default=11.0,
                    help="Outer radius in px (default: %(default)s)")
     p.add_argument("--inner", type=float, default=3.5,
@@ -277,18 +285,31 @@ def main() -> int:
         angle_step = (360.0 / args.lobes) / args.frames
 
     frames = []
-    for i in range(args.frames):
+    n_zoom = args.frames_zoom
+    total_frames = n_zoom + args.frames
+    for i in range(total_frames):
+        # Continuous rotation across both zoom + rotation phases — the
+        # angle keeps stepping by angle_step every frame, so when the
+        # cycle wraps from "last rotation frame" back to "first rotation
+        # frame" the 12-fold symmetry makes the wrap visually seamless.
         angle = i * angle_step
-        # Stage C breath: modulate outer radius across frames so one
-        # rotation cycle = one breath cycle. cos goes 1 → −1 → 1, so
-        # outer = base − amp*(1 − cos)/2 = base at frame 0, base−amp at
-        # frame N/2, base at frame N. Looks like an inhale/exhale.
-        if args.breath > 0.0:
-            breath_phase = i * 2.0 * math.pi / args.frames
-            outer = args.outer - args.breath * 0.5 * (1.0 - math.cos(breath_phase))
+        if i < n_zoom:
+            # Zoom phase: scale outer + inner radii linearly from
+            # 1/N up to N/N = 1 across N=frames-zoom frames. Last zoom
+            # frame is full-size = same as first rotation frame visually.
+            scale = (i + 1) / n_zoom
+            outer = args.outer * scale
+            inner = args.inner * scale
         else:
-            outer = args.outer
-        frame = render_frame(angle, outer, args.inner, args.curve,
+            # Rotation phase. Stage C breath modulates outer radius
+            # across the rotation cycle for inhale/exhale.
+            if args.breath > 0.0:
+                breath_phase = (i - n_zoom) * 2.0 * math.pi / args.frames
+                outer = args.outer - args.breath * 0.5 * (1.0 - math.cos(breath_phase))
+            else:
+                outer = args.outer
+            inner = args.inner
+        frame = render_frame(angle, outer, inner, args.curve,
                              args.diag, args.diag_curve, args.lobes,
                              quadrant=args.quadrant,
                              petal_lengths=petal_lengths)

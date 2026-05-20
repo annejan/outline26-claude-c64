@@ -90,15 +90,32 @@
 // runs through the middle of the star. $D01B = $0F sets sprites 0-3
 // to BACKGROUND priority — the title chars sit on top of the star.
 //
-// The star fades in at half-rate frame 13 (= ~26 raw frames, aligned
-// with the first audible kick from coda_kick) and rotates one shape
-// per zp_frame tick (40 ms per shape). 16 unique shapes span 0..30°
-// of true rotation; 12-fold symmetry makes the loop seamless. Visual
-// full-rotation period: ~0.64 s.
-.const KLOOT_SHAPE_BASE_TR = $a0      // $2800 / 64 — spr 0 (TR)
-.const KLOOT_SHAPE_BASE_TL = $b0      // $2C00 / 64 — spr 1 (TL)
-.const KLOOT_SHAPE_BASE_BL = $c0      // $3000 / 64 — spr 2 (BL)
-.const KLOOT_SHAPE_BASE_BR = $d0      // $3400 / 64 — spr 3 (BR)
+// Stage E — PRE-RENDERED zoom. Each quadrant's binary now holds 24
+// frames concatenated: 8 zoom (small → full, with rotation built in)
+// + 16 steady-rotation. Sprite positions stay FIXED at the final
+// quad layout for the entire part — the "growth" comes from the
+// rendered content getting bigger inside the same sprite cells,
+// which avoids the centre-stack overlap mess the position-animate
+// approach had (each quadrant's star centre lives at a different
+// corner, so stacking them looks like a 4-cornered cross).
+//
+// Single counter `kloot_shape` (0..23) walks the sequence. After
+// frame 23 it wraps to frame 8 — zoom plays once, rotation loops
+// forever from there. 12-fold star symmetry + continuous rotation
+// step across both phases makes the loop seamless.
+//
+// Pointer values (sprite block = byte address / 64). Stride 24 per
+// quadrant = $18 → each quadrant's 24 pointers span its 1.5 KB:
+//   $80..$97   TR  ($2000-$25FF)
+//   $98..$AF   TL  ($2600-$2BFF)
+//   $B0..$C7   BL  ($2C00-$31FF)
+//   $C8..$DF   BR  ($3200-$37FF)
+.const KLOOT_SHAPE_BASE_TR = $80      // $2000 / 64 — spr 0 (TR)
+.const KLOOT_SHAPE_BASE_TL = $98      // $2600 / 64 — spr 1 (TL)
+.const KLOOT_SHAPE_BASE_BL = $b0      // $2C00 / 64 — spr 2 (BL)
+.const KLOOT_SHAPE_BASE_BR = $c8      // $3200 / 64 — spr 3 (BR)
+.const KLOOT_FRAMES_TOTAL  = 24       // 8 zoom + 16 rotation
+.const KLOOT_FRAMES_ZOOM   = 8        // zoom plays once, then wrap-to-8
 
 // Sprite position registers ($D000/$D001 etc.) use VIC's native raster
 // coordinate system, NOT 0-indexed display-pixel rows/cols:
@@ -119,15 +136,6 @@
 .const KLOOT_Y_TOP    = 108           // top row of quad: spr 0 (TR), spr 1 (TL)
 .const KLOOT_Y_BOT    = 150           // bottom row: spr 2 (BL), spr 3 (BR) — top at raster
                                       //   150, sprite 42 tall (Y-expanded), ends at 192
-
-// Stage D animate-in: all 4 sprites start stacked at the centre of the
-// quad and interpolate outward over KLOOT_REVEAL_FRAMES zp_frame ticks
-// (≈ 480 ms at 25 Hz). The reveal completes one zp_frame tick before
-// the first audible kick (zp_kick_count=25 → raw frame 26 ≈ zp_frame 13).
-.const KLOOT_X_CENTRE = 160           // midpoint of KLOOT_X_LEFT and KLOOT_X_RIGHT
-.const KLOOT_Y_CENTRE = 129           // midpoint of KLOOT_Y_TOP and KLOOT_Y_BOT
-.const KLOOT_REVEAL_FRAMES = 50       // 0..49 interpolating, 50+ final positions
-                                      // ≈ 2 s at 25 Hz — slow reveal, fully readable
 
 // Coda V3 kick — coda has the unique luxury of "owning" V3 for the
 // duration of the part (zp_outro=0 keeps intro's drum gate closed,
@@ -200,35 +208,36 @@ setup:
         lda #110                        // ~2.2 s lead-in
         sta zp_kick_count
 
-        // ---- Kloot star quad — 96×84 12-lobe Claude burst (Stage B+D) ----
-        // Sprites 0-3 form a 2×2 grid, each X+Y-expanded (48×42 on screen).
-        // All four start COLLAPSED at the centre of the final layout
-        // (KLOOT_X_CENTRE, KLOOT_Y_CENTRE) and animate-in outward over
-        // the first KLOOT_REVEAL_FRAMES zp_frame ticks via the IRQ's
-        // position-interpolation tables (Stage D).
+        // ---- Kloot star quad — 96×84 12-lobe Claude burst (Stage E) ----
+        // Sprites 0-3 form a 2×2 grid at fixed positions for the whole
+        // part. The pre-rendered 24-frame sequence per quadrant supplies
+        // the visible zoom (small → full) + ongoing rotation; no per-IRQ
+        // sprite-position math needed.
         lda #$0f                        // bits 0-3 = sprites 0-3
         sta $d017                       // Y expand all 4
         sta $d01d                       // X expand all 4
         sta $d01b                       // background priority: title chars in front
 
-        // Initial positions: all 4 sprites stacked at the centre.
-        lda #KLOOT_X_CENTRE
-        sta $d000
-        sta $d002
-        sta $d004
-        sta $d006
+        // Final positions written ONCE — never touched again.
+        lda #KLOOT_X_RIGHT
+        sta $d000                       // spr 0 TR X
+        sta $d006                       // spr 3 BR X
+        lda #KLOOT_X_LEFT
+        sta $d002                       // spr 1 TL X
+        sta $d004                       // spr 2 BL X
         lda $d010
         and #$f0                        // clear X-high bits for sprites 0-3
         sta $d010
-        lda #KLOOT_Y_CENTRE
-        sta $d001
-        sta $d003
-        sta $d005
-        sta $d007
+        lda #KLOOT_Y_TOP
+        sta $d001                       // spr 0 TR Y
+        sta $d003                       // spr 1 TL Y
+        lda #KLOOT_Y_BOT
+        sta $d005                       // spr 2 BL Y
+        sta $d007                       // spr 3 BR Y
 
-        // Sprites disabled initially — the interrupt gates them on at
-        // zp_frame == 3, after the worst of the centre-stack overlap.
-        lda #$00
+        // Sprites enabled from frame 0 — frame 0 is the smallest zoom
+        // step (a tiny brown point at the quad centre), grows from there.
+        lda #$0f
         sta $d015
 
         // All four quadrants share the Kloot brown ($09).
@@ -238,19 +247,19 @@ setup:
         sta $d029                       // spr 2
         sta $d02a                       // spr 3
 
-        // Sprite shape pointers — each quadrant lives at a different base
-        // address but all advance through their 16-frame rotation in lockstep.
-        lda #KLOOT_SHAPE_BASE_TR        // $A0 → $2800 (TR)
+        // Initial shape pointers = frame 0 of each quadrant's sequence
+        // (the smallest zoom step).
+        lda #KLOOT_SHAPE_BASE_TR        // $80 → $2000 (TR frame 0)
         sta $07f8
-        lda #KLOOT_SHAPE_BASE_TL        // $4C → $1300 (TL)
+        lda #KLOOT_SHAPE_BASE_TL        // $98 → $2600 (TL frame 0)
         sta $07f9
-        lda #KLOOT_SHAPE_BASE_BL        // $5C → $1700 (BL)
+        lda #KLOOT_SHAPE_BASE_BL        // $B0 → $2C00 (BL frame 0)
         sta $07fa
-        lda #KLOOT_SHAPE_BASE_BR        // $6C → $1B00 (BR)
+        lda #KLOOT_SHAPE_BASE_BR        // $C8 → $3200 (BR frame 0)
         sta $07fb
 
         lda #$00
-        sta kloot_shape                 // counter 0..15 (incremented before write)
+        sta kloot_shape                 // counter 0..23 (incremented before write)
 
         // VIC: text mode, ROM chargen $1000 (uppercase), screen $0400.
         lda #$1b                        // DEN=1, RSEL=1, YSCROLL=3
@@ -355,16 +364,15 @@ fadeout:
 // Per frame:
 //   - jsr INTRO_MUSIC_PLAY (chord pad + lead on V1/V2, V3 arp is
 //     about to get overwritten by our kick)
-//   - SAMPLE zp_kick_state into kloot_bob_now BEFORE coda_kick runs,
-//     so the bob value peaks on the first audible kick frame (state 12)
-//     rather than one frame late.
 //   - kick state machine on V3 (hard-restart per beat, sweep body)
-//   - half-rate tick: zp_frame advances every 2nd IRQ, drives shape +
-//     animate-in base positions
-//   - 50 Hz: write sprite (X, Y+bob) for all 4 quadrants
+//   - half-rate tick: zp_frame++ + kloot_shape++ (wrap 24→8) +
+//     4 sprite pointer writes
 //   - star_field: twinkle 16 stars in top rows (4 banks of 4)
 //   - if zp_frame >= N_FRAMES, set $F6 = $30 (transition)
 //   - else border = col_tab[zp_frame] for slow sine colour cycle
+//
+// Sprite positions are FIXED in setup (Stage E pre-rendered zoom) —
+// no per-IRQ X/Y math here. The "growth" lives in the sprite shapes.
 //==================================================================
 interrupt:
         jsr INTRO_MUSIC_PLAY
@@ -372,89 +380,43 @@ interrupt:
         jsr star_field
         jsr coda_kick
 
-        // half-rate divider — drives shape advance + animate-in lookup
+        // half-rate divider — drives shape advance
         lda zp_subtick
         eor #1
         sta zp_subtick
         bne !skip_inc+
         inc zp_frame
-        // Advance the Kloot star shape on each zp_frame tick (25 Hz).
-        // 16 unique shapes cover 0..30° (12-fold symmetric, or 0..360°
-        // if --asymmetry was used at render time); the loop is seamless.
+        // Advance the Kloot star shape. 24 frames total (8 zoom + 16
+        // rotation). Wrap 24 → 8 so the zoom plays once, the rotation
+        // portion loops afterwards. Continuous angle step across both
+        // phases + 12-fold star symmetry keeps the wrap visually seamless.
         inc kloot_shape
         lda kloot_shape
-        and #$0f
+        cmp #KLOOT_FRAMES_TOTAL
+        bne !no_wrap+
+        lda #KLOOT_FRAMES_ZOOM           // restart at first rotation frame
         sta kloot_shape
-        // Write all 4 sprite pointers (TR, TL, BL, BR) from this single
-        // counter — each quadrant uses a different base address but
-        // advances in lockstep. ORA works because every base has bits
-        // 0-3 clear.
-        ora #KLOOT_SHAPE_BASE_TR        // $A0 | shape  → $A0..$AF
+!no_wrap:
+        // Write all 4 sprite pointers. Per-quadrant base ADD'd to the
+        // shape counter — bases stride 24 ($18) so each pointer lands
+        // in its quadrant's 24-frame block. ORA won't work here because
+        // shape ranges 0..23 (= $00..$17) overlaps the base low bits.
+        clc
+        adc #KLOOT_SHAPE_BASE_TR        // $80..$97 → $2000-$25FF (TR)
         sta $07f8
         lda kloot_shape
-        ora #KLOOT_SHAPE_BASE_TL        // $B0 | shape  → $B0..$BF
+        clc
+        adc #KLOOT_SHAPE_BASE_TL        // $98..$AF → $2600-$2BFF (TL)
         sta $07f9
         lda kloot_shape
-        ora #KLOOT_SHAPE_BASE_BL        // $C0 | shape  → $C0..$CF
+        clc
+        adc #KLOOT_SHAPE_BASE_BL        // $B0..$C7 → $2C00-$31FF (BL)
         sta $07fa
         lda kloot_shape
-        ora #KLOOT_SHAPE_BASE_BR        // $D0 | shape  → $D0..$DF
+        clc
+        adc #KLOOT_SHAPE_BASE_BR        // $C8..$DF → $3200-$37FF (BR)
         sta $07fb
-
-        // Stage D animate-in: pick the interpolated base positions for
-        // this zp_frame. Tables hold 13 entries (0..12); zp_frame is
-        // clamped to 12 so post-reveal frames all use the final layout.
-        ldx zp_frame
-        cpx #KLOOT_REVEAL_FRAMES
-        bcc !pos_ok+
-        ldx #KLOOT_REVEAL_FRAMES
-!pos_ok:
-        lda kloot_x_left_table,x
-        sta kloot_x_left_base
-        lda kloot_x_right_table,x
-        sta kloot_x_right_base
-        lda kloot_y_top_table,x
-        sta kloot_y_top_base
-        lda kloot_y_bot_table,x
-        sta kloot_y_bot_base
 !skip_inc:
-
-        // Write sprite positions every IRQ (50 Hz). Bases (x_left /
-        // x_right / y_top / y_bot) are updated at 25 Hz by the
-        // animate-in section above; on the half-rate "skip" frames we
-        // just re-write the unchanged base values. No motion offset
-        // here — focus is the growth/zoom, not continuous wobble.
-        lda kloot_x_right_base
-        sta $d000                       // spr 0 TR X
-        sta $d006                       // spr 3 BR X
-        lda kloot_x_left_base
-        sta $d002                       // spr 1 TL X
-        sta $d004                       // spr 2 BL X
-
-        lda kloot_y_top_base
-        sta $d001                       // spr 0 TR Y
-        sta $d003                       // spr 1 TL Y
-        lda kloot_y_bot_base
-        sta $d005                       // spr 2 BL Y
-        sta $d007                       // spr 3 BR Y
-
-        // EARLY-FRAME SPRITE GATE — frames 0..2 have all 4 sprites at
-        // exact-same X,Y (integer-division of i*KLOOT_DX/50 rounds to 0
-        // for i=0,1,2). With each sprite showing its own quadrant and
-        // the star centre at a DIFFERENT corner of each, the composite
-        // reads as a 4-cornered cross instead of a star. Hide the
-        // sprites for that window — they pop in at frame 3 once
-        // there's at least 1 px of separation and the visual starts
-        // to look like a real star tile.
-        lda zp_frame
-        cmp #3
-        bcs !show+
-        lda #$00
-        sta $d015
-        jmp !done+
-!show:  lda #$0f
-        sta $d015
-!done:
 
         lda zp_frame
         cmp #N_FRAMES
@@ -561,72 +523,12 @@ kloot_shape:
         .byte 0
 
 
-//==================================================================
-// Stage D scratch + tables for animate-in and figure-8 motion.
-//
-// kloot_fig8_x/y     — fig8_x_table[zp_frame] / fig8_y_table[zp_frame]
-//                      sampled at the top of each IRQ. Added to every
-//                      sprite X / Y this IRQ — quad floats as one unit
-//                      along the lazy ∞ path.
-// kloot_*_base       — base position picked from the animate-in
-//                      tables on each zp_frame tick (25 Hz).
-//                      Sprite registers get (base + fig8) every IRQ.
-//==================================================================
-kloot_fig8_x:         .byte 0
-kloot_fig8_y:         .byte 0
-kloot_x_left_base:    .byte 0
-kloot_x_right_base:   .byte 0
-kloot_y_top_base:     .byte 0
-kloot_y_bot_base:     .byte 0
-
-// Animate-in position tables — linear interpolation from
-// KLOOT_*_CENTRE at index 0 to the final KLOOT_X_LEFT / RIGHT /
-// Y_TOP / BOT at index KLOOT_REVEAL_FRAMES. KA's integer division
-// gives slightly stepped progressions which read as smoother than
-// the table's 12 unique values would suggest at 25 Hz.
-.const KLOOT_DX = KLOOT_X_RIGHT - KLOOT_X_CENTRE    // = 24
-.const KLOOT_DY = KLOOT_Y_BOT   - KLOOT_Y_CENTRE    // = 21
-
-kloot_x_left_table:
-.for (var i = 0; i <= KLOOT_REVEAL_FRAMES; i++) {
-        .byte KLOOT_X_CENTRE - i * KLOOT_DX / KLOOT_REVEAL_FRAMES
-}
-kloot_x_right_table:
-.for (var i = 0; i <= KLOOT_REVEAL_FRAMES; i++) {
-        .byte KLOOT_X_CENTRE + i * KLOOT_DX / KLOOT_REVEAL_FRAMES
-}
-kloot_y_top_table:
-.for (var i = 0; i <= KLOOT_REVEAL_FRAMES; i++) {
-        .byte KLOOT_Y_CENTRE - i * KLOOT_DY / KLOOT_REVEAL_FRAMES
-}
-kloot_y_bot_table:
-.for (var i = 0; i <= KLOOT_REVEAL_FRAMES; i++) {
-        .byte KLOOT_Y_CENTRE + i * KLOOT_DY / KLOOT_REVEAL_FRAMES
-}
-
-// Figure-8 motion tables — Lissajous 2:1 (lazy ∞ on its side).
-// Stored as signed 8-bit (negative values in 2's complement) so they
-// can be added directly with `clc / adc` to a base position and the
-// math works mod 256.
-//
-//   X: sin(2t)  amplitude 20 px  →  2 cycles per 256 zp_frame ticks
-//                                   × 2 lissajous factor = 4 cycles
-//   Y: sin(t)   amplitude 10 px  →  1 cycle per 256 zp_frame ticks
-//                                   × 2 lissajous factor = 2 cycles
-//
-// With N_FRAMES = 250, the coda completes ~2 full figure-8 cycles
-// across its window. After the reveal animate-in (50 frames) the
-// quad is "free" and traces the ∞ shape continuously.
-.align 256
-fig8_x_table:
-.for (var i = 0; i < 256; i++) {
-        .byte round(20 * sin(i * 4 * 2 * PI / 256)) & $ff
-}
-.align 256
-fig8_y_table:
-.for (var i = 0; i < 256; i++) {
-        .byte round(10 * sin(i * 2 * 2 * PI / 256)) & $ff
-}
+// (Stage E pre-rendered zoom: all the animate-in interpolation tables,
+// figure-8 motion tables, and per-quadrant base bytes that lived here
+// for Stages C/D are gone. Sprite positions are fixed in setup; the
+// "growth" is rendered into the shape data, not driven by per-IRQ
+// X/Y math. Single kloot_shape counter + 4 sprite-pointer writes is
+// the entire animation now.)
 
 
 //==================================================================

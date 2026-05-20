@@ -58,14 +58,17 @@ build_part parts/greets     greets
 build_part parts/sinus      sinus
 # Coda's Kloot star quad — Stage B: 4 separate sprite-shape binaries pinned
 # at $0C00 / $1400 / $1800 / $1C00 so the KA PRG stays compact at $0800-$0AFF
-# and pefchain can stream each chunk into RAM independently. The four bases
-# are multiples of $400 (i.e. ptr-aligned) so coda.asm can use ORA-based
-# pointer cycling.
+# and pefchain can stream each chunk into RAM independently.
+#
+# Each kloot_star_*.bin now contains 24 frames = 8 zoom + 16 steady-rotation
+# (1536 B each) — coda walks a single shape counter 0..23 with wrap-to-8.
+# Bases stride by $600 (24 × 64) so a single shape counter + per-quadrant
+# pointer-base ADD covers the whole 6-KB sprite region $2000-$37FF.
 build_part parts/coda       coda \
-    kloot_star_tr.bin,2800 \
-    kloot_star_tl.bin,2c00 \
-    kloot_star_bl.bin,3000 \
-    kloot_star_br.bin,3400
+    kloot_star_tr.bin,2000 \
+    kloot_star_tl.bin,2600 \
+    kloot_star_bl.bin,2c00 \
+    kloot_star_br.bin,3200
 build_part parts/end        end
 
 echo ">>> linking with pefchain"
