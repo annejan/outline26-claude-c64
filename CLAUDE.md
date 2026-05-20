@@ -27,6 +27,11 @@ The deeper guides live under [`docs/`](./docs/):
   this when something "should work" but the trade-off space is
   non-obvious (FLD vs fixed text, IRQ-chain budget, sprite Y-zones,
   pefchain page claims).
+- [`docs/intro-architecture.md`](./docs/intro-architecture.md) — the
+  intro's live architecture: 5-IRQ chain layout, cycle budgets per
+  block, symmetric-FLD wiring + first-write fix + latch pad, music
+  split (`my_music_critical` / `my_music_step` / `my_music_play`
+  dispatcher at $119e), wishlist for the X2026 sprint.
 
 If you're updating long-form guidance, prefer editing those files
 over creating new top-level docs.
