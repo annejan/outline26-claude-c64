@@ -899,16 +899,21 @@ drum_table:
 // Self-modified lda base + y(<$d0) always stays inside the table.
 bar_palette:
 .for (var rep = 0; rep < 16; rep++) {
-        // 4 cylinder-shaded bands, 8 lines each. Each band:
-        // dark → mid → bright → mid → dark + 2 black gap → next.
-        // Blue cylinder
-        .byte $00, $06, $0e, $01, $0e, $06, $00, $00
-        // Red cylinder
-        .byte $00, $02, $0a, $01, $0a, $02, $00, $00
-        // Green cylinder
-        .byte $00, $05, $0d, $01, $0d, $05, $00, $00
-        // Yellow/orange cylinder
-        .byte $00, $08, $07, $01, $07, $08, $00, $00
+        // 4 cylinder-shaded bands, 8 lines each. Each cylinder fades
+        // dark → mid → bright → mid → dark → next-cylinder-dark, with
+        // no black gaps between — adjacent palette entries are colour
+        // neighbours, so the visible "vertical spike" from sprite-DMA
+        // cycle theft on a bar line (bg write lands at cy 24+ instead
+        // of cy 16ish, prior raster's colour leaks into the left edge)
+        // is between similar colours instead of black ↔ bright.
+        // Blue cylinder → red
+        .byte $06, $0e, $0e, $01, $0e, $06, $06, $02
+        // Red cylinder → green
+        .byte $02, $0a, $0a, $01, $0a, $02, $02, $05
+        // Green cylinder → orange
+        .byte $05, $0d, $0d, $01, $0d, $05, $05, $08
+        // Orange cylinder → blue (wraps to first byte of next rep)
+        .byte $08, $07, $07, $01, $07, $08, $08, $06
 }
 
 // 256-byte rainbow palette for the scroller bg. Cycles through 16
