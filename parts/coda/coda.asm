@@ -176,6 +176,12 @@
 .const ORBIT_SPEED_1 = 1                // star 1: ~5 s per cycle at 50 Hz
 .const ORBIT_SPEED_2 = 2                // star 2: ~2.5 s per cycle
 
+// Shape advance dividers — each star's shape counter advances every
+// N half-rate ticks so they rotate at fundamentally different speeds.
+// Star 1: /3 ≈ 8.3 Hz, star 2: /2 = 12.5 Hz. Try /1 + /3 for 25+8 Hz.
+.const SHAPE_DIV_1 = 3                  // star 1: advance every 3rd half-rate tick
+.const SHAPE_DIV_2 = 2                  // star 2: advance every 2nd tick
+
         .const zp_timer       = $f6           // transition: set to $30 to trigger pefchain
 .const zp_kick_count  = $f7           // IRQ countdown to next beat
 .const zp_kick_state  = $f8           // 0=idle, KICK_LEN+1=hard-restart frame,
@@ -327,6 +333,11 @@ setup:
         sta kloot_shape_1               // star 1 counter 0..23
         lda #KLOOT_FRAMES_ZOOM          // star 2 starts at rotation frame 0
         sta kloot_shape_2               // (= frame 8 in 24-frame sequence)
+        lda #SHAPE_DIV_1
+        sta shape_div1                  // init divider so first tick fires
+        lda #SHAPE_DIV_2
+        sta shape_div2
+        lda #$00
         sta star1_orbit_phase           // orbital phase counters
         lda #192                        // star 2 starts near opposite side
         sta star2_orbit_phase
@@ -470,22 +481,21 @@ interrupt:
 !over:  jmp !skip_inc+
 !half_rate:
         inc zp_frame
-        // Advance the Kloot star shape. 24 frames total (8 zoom + 16
-        // rotation). Wrap 24 → 8 so the zoom plays once, the rotation
-        // portion loops afterwards. Continuous angle step across both
-        // phases + 12-fold star symmetry keeps the wrap visually seamless.
+        // Advance shape counters via independent dividers so each star
+        // rotates at a fundamentally different speed (/3 vs /2).
+        dec shape_div1
+        bne !skip1+
         inc kloot_shape_1
         lda kloot_shape_1
         cmp #KLOOT_FRAMES_TOTAL
-        bne !no_wrap+
-        lda #KLOOT_FRAMES_ZOOM           // restart at first rotation frame
+        bne !no_wrap1+
+        lda #KLOOT_FRAMES_ZOOM
         sta kloot_shape_1
-!no_wrap:
-        // Star 2 shape advance — only on even zp_frame ticks (half-speed)
-        // so the two stars' rotation rates are fundamentally different.
-        // Star 1 advances every tick (25 Hz), star 2 every other (12.5 Hz).
-        lda zp_frame
-        and #1
+!no_wrap1:
+        lda #SHAPE_DIV_1
+        sta shape_div1
+!skip1:
+        dec shape_div2
         bne !skip2+
         inc kloot_shape_2
         lda kloot_shape_2
@@ -494,6 +504,8 @@ interrupt:
         lda #KLOOT_FRAMES_ZOOM
         sta kloot_shape_2
 !no_wrap2:
+        lda #SHAPE_DIV_2
+        sta shape_div2
 !skip2:
         // ---- Write sprite pointers — conditional on swap_flag ----
         // swap_flag=0: star 1 (brown) → sprites 0-3, star 2 (cyan) → 4-7
@@ -833,6 +845,11 @@ kloot_shape_1:
         .byte 0
 kloot_shape_2:
         .byte 0
+
+// Shape advance dividers — decremented each half-rate tick; when 0
+// the corresponding shape counter advances and the divider reloads.
+shape_div1:     .byte 0
+shape_div2:     .byte 0
 
 // Orbital phase (0..255) — advances at ORBIT_SPEED per frame.
 star1_orbit_phase:  .byte 0
