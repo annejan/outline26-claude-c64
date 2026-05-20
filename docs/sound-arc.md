@@ -1,5 +1,11 @@
 # Sound arc — how music flows across the seven parts
 
+> Companion to [`narrative-arc.md`](./narrative-arc.md). That doc
+> describes the story + visual beats; this one is the music + SID
+> register side of the same arc. Both lock in step — every text
+> reveal sits on an audio shift, every visual climax has a music
+> moment under it.
+
 ## TL;DR
 
 Intro owns the music. Its **tables and play routine stay resident in
@@ -23,7 +29,7 @@ overlays** on top of that continuous music.
 | interlude   | Pad-only first ~1.6 s (V1 muted, line A "FOR YEARS…" typewriter reveals). Last 2.4 s buildup: V1 returns, LP cutoff ramps up with **V1 + V2 both routed through the filter** (res $2) so the bass AND lead open up together, sprite-letter "AI WROTE" drops, drums continue from intro. |
 | sinus       | **Breakdown.** LP filter closes — and now actually closes audibly because V1 + V2 are routed through it ($D417 = $23, res $2). Cutoff ramps $70 → $08 over the duration; vol fades over the last 50 frames. Drums silent (sinus zeros `$F6 = zp_outro` — the gating byte). The eye of the storm before the drop. |
 | greets      | **Climax / drop.** Drums return (greets' setup re-arms `$F6`), full mix + lead + arp. V2 (lead) routed through LP filter ($D417 = $42, res $4) with a slow cutoff "wah" — `zp_wobble_pos` OR'd with $40 ramps $40..$FF over 5 s breathing the melody. DYCP scroller tells the personal arc on top of the loudest moment. |
-| coda        | **Aftermath.** Intro's drums silenced again (coda's setup zeros `$F6`), but coda *owns* V3 for the whole part — overrides the arp every IRQ with its own hard-restart kick on a ~60 BPM cadence. Chord pad + lead drift on V1/V2 under a sparser, slower thump than greets. Title card sits quietly while the music breathes out. |
+| coda        | **The trophy.** Intro's drums silenced again (coda's setup zeros `$F6`), but coda *owns* V3 for the whole part — overrides the arp every IRQ with its own hard-restart kick on a ~60 BPM cadence. Chord pad + lead drift on V1/V2 under a sparser, slower thump than greets. Twin Kloot stars orbit on sine paths behind the title; brown + cyan; star-field asterisks twinkle around them. Music breathes out. |
 | end         | `end_music_init` re-inits SID for slow chord/lead reprise. PWM + filter sweep. No drums. The credit-roll outro. |
 
 ## Why my_music_play is special
@@ -240,14 +246,14 @@ The "feeling of transition" is carried by:
   outro cascade visually mirrors the audio escalation)
 - **Visual cascade in intro's outro** (sprites despawn one by one,
   bars off, logo un-wipes)
-- **V1 mute drop + the typewriter reveal of "FOR YEARS NO TIME FOR
-  BREADBIN CODE" on interlude's plasma** — the sudden bass drop +
-  the sad admission, char-by-char during the pad phase. AI doesn't
-  walk, so the second line is now "AI WROTE" — 8 hires sprite letters
-  that drop in from above on the buildup beat.
-- **V1 return + LP cutoff sweep (V1 + V2 both filtered now) + sprite-
-  letter "AI WROTE" drop in interlude's last 2.4 s** — rising tension,
-  the build. Bass AND lead open up together as the filter rolls open.
+- **V1 mute + typewriter "FOR YEARS NO TIME FOR BREADBIN CODE" on
+  interlude's plasma** — sudden bass drop + the human's confession,
+  char by char during the pad phase. The story's line 1 lands here.
+- **V1 return + LP cutoff sweep (V1 + V2 both filtered) + sprite-letter
+  "AI WROTE" drop on the buildup beat** — story line 2 (the AI's
+  answer, drops as 8 hires sprites from above) lands exactly when
+  the filter opens and the bass returns. The two-line joke is
+  complete *as* the music opens up.
 - **Drums STOP + LP filter close + vol fade in sinus** — the
   breakdown / breather, the calm before the drop. Visual is a
   hypnotic sine wobble of repeating DEFEEST text. The LP close is
@@ -260,12 +266,14 @@ The "feeling of transition" is carried by:
   follows `zp_wobble_pos | $40` so the melody breathes 5 s/cycle in
   step with the visual DYCP motion, on top of the loudest moment of
   the demo.
-- **Coda's sparse hard-restart kick under the title card** — drums
-  from intro's gated player drop out again, but coda owns V3 and
-  fires its own slow ~60 BPM thump under the held chord. The room
-  settles. Title sits centered on a quiet screen for ~10 s.
+- **Coda's sparse hard-restart kick under "KLOTEN MET DE BROODTROMMEL"**
+  — drums from intro's gated player drop out again; coda owns V3 and
+  fires its own slow ~60 BPM thump (the trophy beat) under the held
+  chord. Visually: twin Kloot stars orbiting + star-field twinkle
+  + title text. About 10 s — the audience reads, breathes, *gets it*.
 - **end's own `music_init` re-init** with PWM + filter sweep for the
-  credit roll reprise — quiet, no drums, settles to the title card
+  credit roll reprise — quiet, no drums, settles to the title card.
+  Lunch is over.
 
 If you're tweaking the score, work WITHIN this rhythm rather than
 adding hard cuts. Volume drops anywhere on the resident path leak
