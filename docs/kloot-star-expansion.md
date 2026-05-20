@@ -1,3 +1,42 @@
+# Kloot star — design history + current render params
+
+## Current render command (Stage E)
+
+The committed `parts/coda/kloot_star_*.bin` files are produced by:
+
+```bash
+for q in 0 1 2 3; do
+  name=tr; case $q in 1) name=tl;; 2) name=bl;; 3) name=br;; esac
+  python3 tools/render_kloot_star.py \
+    --quadrant $q \
+    --frames-zoom 8 \
+    --frames 16 \
+    --lobes 12 \
+    --inner 2.5 \
+    --curve 2.0 \
+    --outer 22.0 \
+    --asymmetry 0.4 \
+    --seed 42 \
+    --breath 4 \
+    -o parts/coda/kloot_star_${name}.bin
+done
+```
+
+Each `--quadrant 0..3` flag picks one tile of the 96×84 logical star.
+`--asymmetry 0.4 --seed 42` is the magic that gave the star its
+visible spikes — each of the 12 lobes gets a random multiplier in
+`[0.8, 1.2]`, so the result reads as a recognisable Claude-style
+sparkle rather than a smooth radial circle. **Without --asymmetry the
+star reads as boring/circular** (user feedback 2026-05-20). Always
+include these flags when re-rendering.
+
+`--breath 4` modulates the outer radius across rotation frames →
+inhale/exhale feel. `--frames-zoom 8` prepends 8 size-scaled frames
+before the rotation set; coda walks the resulting 24-frame sequence
+with wrap-to-8 so the zoom plays once, rotation loops forever.
+
+---
+
 # Bigger Kloot star — multi-sprite technical proposal
 
 ## Goal
