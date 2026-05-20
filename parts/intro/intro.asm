@@ -5,28 +5,31 @@
 //   open top border       lines $00..$32  (HCL trick)
 //   bitmap row 0 scroller lines $33..$3A  (cycles left / right / zig-zag
 //                                          via $fe sentinels in scroll_text)
-//   FLD stretch zone      lines $3B..$3B+K  (K = bounce_total[frame],
-//                                            freezes empty bitmap row 1)
-//   bitmap rows 2..7      shifted down by K   (row 4 carries fade-band text,
-//                                              which bounces together with logo —
-//                                              accepted trade-off for smooth FLD)
-//   logo wipe-reveal      rows 8..16, sliding down by K px (logo at $73+K)
-//   rainbow rasterbars    lines $80..$EB  (behind logo, with sides)
-//   open bottom border    lines $EC..$FF  (HCL trick)
+//   Top FLD               lines $3B..$3B+K   (K writes, freezes empty row 1)
+//   bitmap rows 2..17     shifted down by K  (logo at rows 8..16 bounces $73+K)
+//   rainbow rasterbars    lines $80..$C1     (behind logo, must end before
+//                                             bottom-FLD's earliest trigger $C3)
+//   Bottom FLD            lines $C3+K..$E2   ((K_max-K) writes, freezes row 18)
+//   FIXED-Y zone          lines $E3..$F2     (rows 19..21 — do NOT bounce)
+//                                             — fade-band text at row 19
+//   open bottom border    lines $F3..$FF     (HCL trick)
+//
+// Symmetric FLD (ranzbak/defeest-fld pattern, Jesder original):
+// total FLD writes per frame = K_max = 36 (constant). Top FLD adds K
+// stretch lines before the logo; bottom FLD adds (K_max-K) after.
+// Net: rows 19+ land at the same raster every frame regardless of K.
+//
+// Bottom-FLD-first-write fix: yscroll set EXPLICITLY to (5+K)%8 so
+// the spurious-badline chain starts on the very first line for ALL
+// K, including K=0 where top FLD did nothing (was the bug that
+// reverted us last time — previous code did "current+1" which only
+// worked for K>=1).
 //
 // IRQ chain: irq_close@$F9 → irq_open@$01 → irq_fld@$3B
-//          → irq_bars@$80 → irq_close@$F9.
-// Music (my_music_play) runs in irq_open so irq_fld → irq_bars has a
+//          → irq_bars@$80 → irq_fld_bottom@$C3+K → irq_close@$F9.
+// Music (my_music_play) runs in irq_open so the FLD chain has a
 // fixed cycle budget independent of music step-boundary frames
-// (BINTRIS pt-5: FLD stability requires the timing not to depend on
-// adjacent IRQs' workload).
-//
-// Tried symmetric-FLD-with-fixed-fade-text (commit 48530d1) following
-// ranzbak's defeest-fld pattern: top K + bottom (K_max-K). Logo
-// bounce held steady but the fade-text below picked up its own
-// wobble. Reverted in favour of single-FLD + bouncing fade-text;
-// ranzbak's implementation handles it better (smaller K_max=15,
-// careful raster latching). See docs/dilemmas.md.
+// (BINTRIS pt-5).
 //
 // Sprite blink fix: balls 0..2 disabled in irq_close (line $F9) so
 // their Y+256 wrap duplicates between $F9 and next-frame $01 don't
@@ -72,8 +75,9 @@
                                                 // Row 0 displays at $33..$3A — before FLD trigger ($3B) → no bounce.
 
 
-.const BAR_TOP      = $80       // first line of bar zone (after FLD + music)
-.const BAR_BOT      = $ec       // first line PAST bar zone (in open bot border)
+.const BAR_TOP      = $80       // first line of bar zone (after top FLD)
+.const BAR_BOT      = $c2       // first line PAST bar zone — must end BEFORE
+                                 // bottom-FLD's earliest trigger ($C3+K, K=0 → $C3).
 
 // Zero-page
 .const zp_text_ptr  = $fb
@@ -243,13 +247,15 @@ init_sprites:
         sta SPR_YEXP            // Y-expanded → round balls
         lda #0
         sta SPR_MC
-        // Sprite-foreground priority ($D01B): ALL sprites BEHIND bitmap.
-        // Set bit = sprite passes under bitmap %01/%10/%11 pixels.
-        // This gives: balls swim through the gaps in the logo / fade-text /
-        // scroller letters but never occlude them. The result is the
-        // "all touching" effect — balls drift between the foreground
-        // pixels rather than over them.
-        lda #%11111111
+        // Sprite-foreground priority ($D01B). Set bit = sprite passes
+        // BEHIND bitmap %01/%10/%11 pixels.
+        //   bits 0,1,2 → top sprites 0..2 BEHIND (under scroller letters)
+        //   bits 3..7  → mid + bot sprites IN FRONT (overlap logo / text)
+        // Original design — sprite balls visibly bounce OVER the logo
+        // and fade-text. With symmetric-FLD the fade-text sits at row 19
+        // (raster $E3..$EA), mostly below the mid-sprite display range
+        // (which ends at Y=241), so occlusion is rare.
+        lda #%00000111
         sta SPR_FORE
 
         // 8 distinct colours
@@ -437,6 +443,7 @@ irq_fld:
 
         ldx zp_frame
         lda bounce_total,x      // K = FLD writes (0..36)
+        sta saved_K              // remember for irq_fld_bottom's (K_max-K) writes
         tax
         beq !skip+
 
@@ -495,7 +502,7 @@ irq_fld:
 // $d021 from bar_palette[(line + frame/2) & $1f]. Palette is a smooth
 // 32-entry gradient so per-line seams blend visually. The CPU is
 // tied up in this loop until line BAR_BOT — no other work scheduled
-// during this window. Chains to irq_close at $f9.
+// during this window. Chains to irq_fld_bottom at $C3+K.
 //==================================================================
 irq_bars:
         pha
@@ -538,7 +545,108 @@ bar_lda:
         sta VIC_BORDER          // restore border to black
 !barsoff:
         // bg/border are already $00 from previous frame; nothing to do
-        // when bars are off besides chaining to irq_close.
+        // when bars are off besides chaining to irq_fld_bottom.
+
+        // Chain to irq_fld_bottom at $C3 + saved_K (= row 18's first
+        // line in post-top-FLD raster space).
+        lda #<irq_fld_bottom
+        sta $fffe
+        lda #>irq_fld_bottom
+        sta $ffff
+        clc
+        lda saved_K
+        adc #$c3
+        sta VIC_RASTER
+
+        pla
+        tay
+        pla
+        rti
+
+
+//==================================================================
+// irq_fld_bottom — fires at line $C3 + K (row 18's first line after
+// top-FLD shift). Performs (K_max - K) FLD writes, freezing row 18
+// (empty bg). Combined with top FLD's K writes, total stretch is
+// K_max = 36 lines per frame, CONSTANT. Rows 19+ land at the same
+// raster position every frame → fade-text at row 19 stays nailed.
+//
+// THE FIRST-WRITE FIX (previous symmetric FLD attempt's bug):
+// The very first bottom-FLD write must set yscroll = (5+K) % 8
+// EXPLICITLY, not "current+1". For K>=1 the two coincide (top FLD
+// left yscroll at (4+K)%8), but for K=0 top FLD didn't run, yscroll
+// was still 3, and the old "current+1" produced yscroll=4 — which
+// doesn't match $C5's line%8=5, so no spurious badline fires on the
+// first line, total stretch is K_max-1 instead of K_max, and the
+// fade-text wobbles by 1 raster line on K=0 frames. Setting yscroll
+// to (5+K)%8 explicitly fixes all K including K=0.
+//
+// Cycle budget ($C3..$F9 window = 54 lines = 3402 cy):
+//   wait for $C3+K to change       ~25 cy
+//   FLD raster loop (K_max-K) lines  raster-locked = (K_max-K)*63
+//   vector + raster + pla/rti       ~40 cy
+// At K=0: 36 raster lines (2268 cy) + ~65 cy overhead = ~2333 cy.
+// At K=K_max: 0 lines + ~65 cy. Plenty of slack either way.
+//==================================================================
+irq_fld_bottom:
+        pha
+        txa
+        pha
+        tya
+        pha
+        lda #$ff
+        sta $d019
+
+        // X = (K_max - K) = remaining FLD writes.
+        lda #36                  // K_max
+        sec
+        sbc saved_K
+        tax
+        beq !skip+
+
+        // Wait for raster to leave $C3+K
+        clc
+        lda saved_K
+        adc #$c3
+!w1:    cmp VIC_RASTER
+        beq !w1-
+
+        // First write: set yscroll EXPLICITLY to (5+K)%8. The +5 is
+        // chosen so that at the NEXT line's cy-14 check, yscroll
+        // matches that line's line%8 (which is (5+K+1)%8 = (6+K)%8
+        // — wait, recompute: ($C5+K)%8 = (5+K)%8 since $C5%8=5).
+        clc
+        lda saved_K
+        adc #$05
+        and #$07
+        ora #$38
+        sta VIC_CTRL1
+
+        dex
+        beq !skip+
+
+!fld2_loop:
+        lda VIC_RASTER
+!w2:    cmp VIC_RASTER
+        beq !w2-
+        clc
+        lda VIC_CTRL1
+        adc #$01
+        and #$07
+        ora #$38
+        sta VIC_CTRL1
+        dex
+        bne !fld2_loop-
+
+!skip:
+        // 40-cy "latch final bitmap line" pad (ranzbak/Jesder trick):
+        // gives VIC's state machine one quiet line to settle the last
+        // spurious badline's VC/VCBASE before the mode transitions
+        // back to natural flow. Without this, the post-FLD raster
+        // alignment was K-dependent and produced fade-text wobble.
+        ldx #8
+!latch: dex
+        bne !latch-
 
         lda #<irq_close
         sta $fffe
@@ -549,6 +657,8 @@ bar_lda:
 
         pla
         tay
+        pla
+        tax
         pla
         rti
 
@@ -1196,11 +1306,19 @@ pending_odd:
 text_ptr_odd:
         .word 0
 
+// K for the current frame's FLD bounce. irq_fld stashes it,
+// irq_bars reads it to compute irq_fld_bottom's trigger ($C3 + K),
+// irq_fld_bottom reads it to compute write count (K_max - K) and
+// the explicit yscroll value for the first write.
+saved_K:
+        .byte 0
+
 
 //==================================================================
-// Fade-band text — cycles 3 phrases at bitmap row 4. Travels with
-// the logo since rows 2..7 all sit inside the single-FLD shift zone
-// (trigger at $3B). Accepted trade-off: smooth bounce > fixed Y.
+// Fade-band text — cycles 3 phrases at bitmap row 19 (= raster $E3,
+// FIXED Y thanks to symmetric FLD). Row 19 sits in the post-bottom-
+// FLD zone where rows 19..21 land at the same raster every frame
+// regardless of K. Logo bounces above; fade-text below stays still.
 //
 // Each character spans 2 cells = 8 MC pixels wide, rendered by direct
 // bit-expansion of the chargen-ROM glyph (each hires bit → one MC
@@ -1208,8 +1326,8 @@ text_ptr_odd:
 // in b/d/o/p/e/a survive intact — text reads as crisp glyphs, not
 // chunky blobs. Phrases are 20 chars each → 40 cells = full width.
 //
-// Row 4 bitmap: $2500..$263F (320 bytes, 40 cells × 8 rows).
-// Row 4 colour RAM: $D8A0..$D8C7 (40 cells, animated each frame).
+// Row 19 bitmap: $37C0..$38FF (320 bytes, 40 cells × 8 rows).
+// Row 19 colour RAM: $DAF8..$DB1F (40 cells, animated each frame).
 //
 // Each MC byte expanded from a nibble:
 //   bit set → "11" (colour from $D800 = animated)
@@ -1217,8 +1335,8 @@ text_ptr_odd:
 // Lookup table `nibble_to_mc` does the nibble → MC-byte conversion.
 //==================================================================
 
-.const TEXT_BITMAP_DST = BITMAP + 4 * 40 * 8             // $2500
-.const TEXT_COL_RAM    = $D800 + 4 * 40                  // $D8A0
+.const TEXT_BITMAP_DST = BITMAP + 19 * 40 * 8            // $37C0
+.const TEXT_COL_RAM    = $D800 + 19 * 40                 // $DAF8
 
 // Three Set B phrases. Each phrase is exactly 20 chars; 15-char
 // phrases get padded with 2 leading + 3 trailing spaces so the
