@@ -1397,25 +1397,22 @@ sprite_yphase: .byte 0, 80, 160, 40, 120, 200, 56, 184
 // line's cy-14 check to fire a spurious badline that restarts the
 // frozen row.
 //
-// K=0..28 — restored after double-IRQ stable raster (Mäkelä/JackAsser)
-// fixed irq_fld's entry jitter. (5+27)&7 = 0 → yscroll exits the FLD
-// loop cleanly. Peak dK = 14 × 0.074 = 1.03 K-units/frame ⇒ K changes
-// every frame at the steep sine slopes, no plateau twitch.
+// K=0..20 — stable raster pinned the entry cycle, but per-line sprite
+// DMA inside the FLD loop ($5C..$5C+K, fully overlapping mid sprite
+// display range Y≥90) still steals cy from the polling loop. At
+// K_max=28 that cumulative drift breaks the spurious-badline pattern
+// on a handful of lines per frame → logo tearing top AND bottom.
+// At K_max=20 the budget tolerates the drift, at the cost of peak
+// dK = 0.74 → some 2-3-frame plateaus at sine extrema.
 //
-// Why not bigger:
-//   - K_max=36 (our initial pick): top FLD runs to $5B+36=$7F, only
-//     1 line of slack to BAR_TOP=$80. Vector+rti handover misses
-//     irq_bars on K=36 frames → cascade failure: no bars, no bottom
-//     FLD, sprite Y-wrap, music hangup. Catastrophic.
-//   - K_max=20 (intermediate): yscroll clean but peak dK=0.74 holds
-//     same K for 2-3 frames at the slow parts of the sine → visible
-//     "plateau" twitching. Only justified before stable raster
-//     because K_max=28 was tearing from sprite-DMA-induced jitter.
+// True fix for K_max=28 needs sprite-free FLD lines: either drop
+// sine_mid Y_min above $5B+K_max ($77 → Y≥119 vs current 90) or
+// raster-toggle SPR_EN off during the FLD zone (~4 cy/frame). TBD.
 //
 // 3× sine frequency → ~1.7s per cycle.
 .align 256
 bounce_total:
-        .fill 256, round(14 + 14 * sin(toRadians(i * 1080 / 256)))
+        .fill 256, round(10 + 10 * sin(toRadians(i * 1080 / 256)))
 
 
 //==================================================================
