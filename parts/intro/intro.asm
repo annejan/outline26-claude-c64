@@ -1331,16 +1331,17 @@ sprite_yphase: .byte 0, 80, 160, 40, 120, 200, 56, 184
 // line's cy-14 check to fire a spurious badline that restarts the
 // frozen row.
 //
-// K=0..36 — bigger arc than the original 0..28, picked because:
-//   - yscroll after K=36 writes is (5+36-1) mod 8 = 0, clean boundary
-//   - top FLD ends at $3B+36=$5F, ~33 lines slack to BAR_TOP=$80
-//   - logo (rows 8..16) bounces $73..$97 — peak still inside the
-//     bars zone for a continuous "logo through rainbow" look
-//   - feels dramatic without being cartoony
+// K=0..20 — sized for the $5B FLD trigger. Top FLD ends at
+// $5B+K_max = $6F, leaving 17 lines / ~1070 cy of slack before
+// BAR_TOP=$80 for the vector+rti handover to irq_bars. yscroll
+// after K=20 writes = (5+19)&7 = 0, clean boundary into the
+// bars zone. K_max=36 (our previous setting) overran the irq_fld
+// → irq_bars handover at peak K because top FLD ran to $7F,
+// missed the bars trigger, and produced wild visual artifacts.
 // 3× sine frequency → ~1.7s per cycle.
 .align 256
 bounce_total:
-        .fill 256, round(18 + 18 * sin(toRadians(i * 1080 / 256)))
+        .fill 256, round(10 + 10 * sin(toRadians(i * 1080 / 256)))
 
 
 //==================================================================
