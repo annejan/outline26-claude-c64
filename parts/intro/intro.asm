@@ -5,9 +5,9 @@
 //   open top border       lines $00..$32  (HCL trick)
 //   bitmap row 0 scroller lines $33..$3A  (cycles left / right / zig-zag
 //                                          via $fe sentinels in scroll_text)
-//   bitmap row 1          lines $3B..$42     (empty bg, displays normally now)
-//   Top FLD               lines $43..$43+K   (K writes, freezes empty row 2)
-//   bitmap rows 3..17     shifted down by K  (logo at rows 8..16 bounces $73+K)
+//   bitmap rows 1..4      lines $3B..$5A     (FIXED Y — fade-text at row 4)
+//   Top FLD               lines $5B..$5B+K   (K writes, freezes empty row 5)
+//   bitmap rows 6..17     shifted down by K  (logo at rows 8..16 bounces $73+K)
 //   rainbow rasterbars    lines $80..$C1     (behind logo, must end before
 //                                             bottom-FLD's earliest trigger $C3)
 //   Bottom FLD            lines $C3+K..$E2   ((K_max-K) writes, freezes row 18)
@@ -26,18 +26,24 @@
 // reverted us last time — previous code did "current+1" which only
 // worked for K>=1).
 //
-// IRQ chain: irq_close@$F9 → irq_open@$01 → irq_fld@$43
+// IRQ chain: irq_close@$F9 → irq_open@$01 → irq_fld@$5B
 //          → irq_bars@$80 → irq_fld_bottom@$C3+K → irq_close@$F9.
-// Music (my_music_play) runs in irq_open. irq_fld trigger moved
-// from $3B (= row 1 badline) to $43 (= row 2 badline) so the
-// $01..$43 window is 66 lines / 4158 cy — enough headroom for
-// the worst-case music_play step-boundary frame (~2000 cy) on top
-// of irq_open's other work (~1800 cy). With trigger at $3B (58
-// lines) those frames overran into the FLD zone, broke the
-// spurious-badline chain for the first K writes, and partially
-// "pulled up" the fade-text. Freezing row 2 instead of row 1
-// puts row 1 in the natural-display zone — same logo Y, same
-// total stretch, just shifts the FLD freeze down 8 lines.
+// Music (my_music_critical) runs in irq_open. Music step-boundary
+// work is in irq_close (my_music_step). irq_fld trigger sits at
+// $5B (= row 5 badline) so:
+//   - $01..$5B = 90 lines = 5670 cy for irq_open — TONS of headroom
+//     for peak music + sprite + reveal work (was 4158 cy at $43,
+//     which still wobbled on heavy frames).
+//   - rows 0..4 ($33..$5A) all display BEFORE any FLD → fixed Y →
+//     fade-band text can live at row 4 above the bouncing logo.
+//   - row 5 ($5B..) is the FLD-frozen row (empty bg, invisible).
+//   - rows 6..17 + logo at row 8 still bounce $73+K — same as before.
+//
+// If logo-top tearing returns at this trigger (it did historically
+// at K=28), upgrade irq_fld's entry to the codebase64 double-IRQ
+// stable-raster pattern (Marko Mäkelä / JackAsser): set up a
+// throwaway IRQ at $5A that fills with NOPs and chains to irq_fld
+// at $5B with 1-cycle jitter. See docs/intro-architecture.md.
 //
 // Sprite blink fix: balls 0..2 disabled in irq_close (line $F9) so
 // their Y+256 wrap duplicates between $F9 and next-frame $01 don't
@@ -415,15 +421,16 @@ irq_open:
         // segment for the rationale.
         jsr my_music_critical
 
-        // Chain to irq_fld at line $43 (= row 2's natural badline).
-        // 8 lines later than the original $3B trigger — gives irq_open
-        // an extra 500 cy of slack on step-boundary music frames.
-        // Row 1 ($3B..$42) is now in natural-display zone (empty bg).
+        // Chain to irq_fld at line $5B (= row 5's natural badline).
+        // 32 lines later than the original $3B trigger — gives irq_open
+        // 5670 cy of slack so peak music + sprite frames can never
+        // overrun the FLD entry. Rows 1..4 ($3B..$5A) are now in
+        // natural-display zone — fade-text at row 4 stays at fixed Y.
         lda #<irq_fld
         sta $fffe
         lda #>irq_fld
         sta $ffff
-        lda #$43
+        lda #$5b
         sta VIC_RASTER
 
         pla
@@ -435,15 +442,17 @@ irq_open:
 
 
 //==================================================================
-// irq_fld — fires at line $43 (row 2's natural badline). Rows 0..1
-// have already displayed normally. Canonical HCL FLD pattern: write
-// yscroll=5 before $44 cycle 14, then loop "increment yscroll and
-// write" once per line. Late-write trick: each iteration's $D011
-// update lands at cy ~24 (AFTER VIC's cy-14 check), so the change
-// is seen by the NEXT line's cy-14 check where yscroll now matches
-// line%8 → VIC fires a SPURIOUS badline that restarts row 2 (empty
-// bg) with VCBASE pinned. After K writes, row 2 has been stretched
-// K times and row 3+ slide down by K px. Logo (row 8) at $73+K.
+// irq_fld — fires at line $5B (row 5's natural badline). Rows 0..4
+// have already displayed normally — row 0 scroller, rows 1..3 empty
+// bg, row 4 carries the fade-band text at fixed Y. Canonical HCL
+// FLD pattern: write yscroll=5 before $5C cycle 14, then loop
+// "increment yscroll and write" once per line. Late-write trick:
+// each iteration's $D011 update lands at cy ~24 (AFTER VIC's cy-14
+// check), so the change is seen by the NEXT line's cy-14 check
+// where yscroll now matches line%8 → VIC fires a SPURIOUS badline
+// that restarts row 5 (empty bg) with VCBASE pinned. After K writes,
+// row 5 has been stretched K times and row 6+ slide down by K px.
+// Logo (row 8) at $73+K.
 //==================================================================
 irq_fld:
         pha
@@ -460,13 +469,13 @@ irq_fld:
         tax
         beq !skip+
 
-        // Wait for raster to leave $43 (= we're now at $44).
-        lda #$43
+        // Wait for raster to leave $5B (= we're now at $5C).
+        lda #$5b
 !w1:    cmp VIC_RASTER
         beq !w1-
 
-        // First write at $44 cycle ~11 (BEFORE cycle 14): yscroll=5.
-        // $44%8=4, ys=5 → no badline at $44 (mismatch).
+        // First write at $5C cycle ~11 (BEFORE cycle 14): yscroll=5.
+        // $5C%8=4, ys=5 → no badline at $5C (mismatch).
         lda #$3d                // BMM + DEN + RSEL + yscroll=5
         sta VIC_CTRL1
 
@@ -1364,10 +1373,10 @@ saved_K:
 
 
 //==================================================================
-// Fade-band text — cycles 3 phrases at bitmap row 19 (= raster $E3,
-// FIXED Y thanks to symmetric FLD). Row 19 sits in the post-bottom-
-// FLD zone where rows 19..21 land at the same raster every frame
-// regardless of K. Logo bounces above; fade-text below stays still.
+// Fade-band text — cycles 3 phrases at bitmap row 4 (= raster
+// $53..$5A, ABOVE the FLD trigger at $5B). Rows 0..4 all display
+// at fixed Y regardless of K, so the text stays nailed in place
+// while the logo bounces below.
 //
 // Each character spans 2 cells = 8 MC pixels wide, rendered by direct
 // bit-expansion of the chargen-ROM glyph (each hires bit → one MC
@@ -1375,8 +1384,8 @@ saved_K:
 // in b/d/o/p/e/a survive intact — text reads as crisp glyphs, not
 // chunky blobs. Phrases are 20 chars each → 40 cells = full width.
 //
-// Row 19 bitmap: $37C0..$38FF (320 bytes, 40 cells × 8 rows).
-// Row 19 colour RAM: $DAF8..$DB1F (40 cells, animated each frame).
+// Row 4 bitmap: $2500..$263F (320 bytes, 40 cells × 8 rows).
+// Row 4 colour RAM: $D8A0..$D8C7 (40 cells, animated each frame).
 //
 // Each MC byte expanded from a nibble:
 //   bit set → "11" (colour from $D800 = animated)
@@ -1384,8 +1393,8 @@ saved_K:
 // Lookup table `nibble_to_mc` does the nibble → MC-byte conversion.
 //==================================================================
 
-.const TEXT_BITMAP_DST = BITMAP + 19 * 40 * 8            // $37C0
-.const TEXT_COL_RAM    = $D800 + 19 * 40                 // $DAF8
+.const TEXT_BITMAP_DST = BITMAP + 4 * 40 * 8             // $2500
+.const TEXT_COL_RAM    = $D800 + 4 * 40                  // $D8A0
 
 // Three Set B phrases. Each phrase is exactly 20 chars; 15-char
 // phrases get padded with 2 leading + 3 trailing spaces so the
