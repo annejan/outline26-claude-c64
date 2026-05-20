@@ -170,12 +170,18 @@ setup:
         dex
         bpl !t10-
 
-        // Init SID — LP filter mode + volume
+        // Init SID — LP filter on, V1 (bass) + V2 (lead) routed through it.
+        // $D418 bit 4 = LP mode; volume in low nibble.
+        // $D417 bit 0 = V1 filtered, bit 1 = V2 filtered, bits 4-7 = resonance.
+        // V3 stays unfiltered so arp + any drum hits keep their bite.
+        // The interrupt ramps SID_FILT_CUT_HI from $70 down to $08 over
+        // the duration, so the bass + lead progressively close down to a
+        // dull throb as sinus winds out into greets.
         lda #$1f
         sta SID_VOL
-        lda #$10                        // LP filter mode bit
+        lda #$23                        // V1+V2 filtered, resonance $2
         sta SID_FILT_CTRL
-        lda #$70                        // mid filter cutoff
+        lda #$70                        // start cutoff — bright
         sta SID_FILT_CUT_HI
         lda #$00
         sta SID_FILT_CUT_LO
@@ -235,6 +241,12 @@ fadeout:
 //==================================================================
 interrupt:
         jsr INTRO_MUSIC_PLAY
+
+        // intro music_play writes $0F to $D418 every frame, which
+        // CLEARS the LP filter mode bit. Re-assert $1F so V1+V2 keep
+        // going through the LP filter (with the cutoff sweep below).
+        lda #$1f
+        sta SID_VOL
 
         inc zp_frame
 

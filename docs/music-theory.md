@@ -183,21 +183,34 @@ a shimmering chord pad with an upward-pitch "shimmer" that blurs the
 harmonic boundaries. The 25% duty gives a hollow, clean tone — this is
 the "breadbin organ" sound.
 
-### Drum voice — V3 timesharing
+### Drum voice — V3 timesharing + V1 bass-bleed layer
 
 The resident drum code in `my_music_play` steals V3 from the arp on
-beat frames (every 4th chord step = every 24 frames = ~125 BPM).
+beat frames (every 4th chord step = every 24 frames = ~125 BPM) AND
+takes a 1-frame override on V1 to layer a sub-bass thump.
 
-**Gate latency fact:** The SID 6581 does NOT respond to a gate-on if
-gate was already high. The waveform simply switches (pulse → noise)
-without resetting the envelope. This means our drum hit is envelope-
-free — the noise wave plays at whatever amplitude the arp's sustain
-was at ($F = max). This is why the kick is LOUD without any ADSR
-change.
+**The kit is K-S-K-S** alternating on the quarter-note grid since
+the 2026-05-20 rework — kick on even quarters, snare on odd. See
+[`docs/sid-drums.md`](./sid-drums.md) for the full table + state.
 
-After the kick window (10 frames ≈ 200 ms), `my_music_play`'s next
-chord-step write puts V3 back to pulse waveform at the next arp pitch.
-The envelope never dipped, so there's no "recovery silence."
+**Gate-latency fact:** The SID 6581 does NOT respond to a gate-on if
+gate was already high. The waveform simply switches without resetting
+the envelope. V3 keeps its arp-set $00/$F0 envelope (sustain pinned
+at peak) through every drum frame — the kick is LOUD without any
+ADSR change because the envelope was already maxed out.
+
+**V1 bass-bleed.** At each drum trigger, V1 gets a fresh gate-pulse
+($40→$41) to N_C1 (~33 Hz sub-bass). V1's existing punchy
+$04/$61 ADSR (instant attack, fast decay, sustain $6, fast release)
+shapes the thump naturally. The bass-pattern note at that step is
+sacrificed (3 of every 4 bass notes survive, kicks land on the
+quarter). This is where the kick's actual low-end weight comes from
+— V3 alone can only paint the high-frequency click + harmonic body.
+Pattern from the codebase64 Macro Player (Geir Tjelta / Jeroen Tel).
+
+After each drum window (4 frames ≈ 80 ms), `my_music_play`'s next
+chord-step write puts V3 back to pulse waveform at the next arp pitch
+with gate held on → no envelope retrigger, no audible seam.
 
 **Coda exception:** Coda owns V3 outright. Intro's `my_music_play`
 still writes the arp, but coda's per-frame IRQ overwrites V3 with its
@@ -209,17 +222,28 @@ off→on transition for a clean envelope reset.
 ## Filter / volume arc across parts
 
 ```
-intro:     vol=$0F (max), no filter
-interlude: vol=$0F, LP filter on, cutoff sweeps $40→$FF during last 8 beats
-sinus:     LP filter $70→$08 over 200 frames, vol $0F→$00 over last 50 frames
-greets:    vol=$0F, LP filter open (no re-assertion — arp-only V3 sound)
-coda:      vol=$1F (bit 4 = LP filter on), no cutoff sweep
+intro:     vol=$0F (max), no filter routing
+interlude: vol=$1F (LP mode), V1+V2 filtered ($D417=$23, res $2),
+           cutoff $40→$FF during the buildup (last ~2.4 s)
+sinus:     vol=$1F (LP mode), V1+V2 filtered ($D417=$23, res $2),
+           cutoff $70→$08 over duration, vol fades $0F→$00 over last 50 frames
+greets:    vol=$1F (LP mode), V2 filtered ($D417=$42, res $4),
+           cutoff modulated by `zp_wobble_pos | $40` for slow "wah"
+coda:      vol=$1F, LP mode on, no cutoff sweep
 end:       vol ramps $00→$0F over 2 s, LP filter on throughout
 ```
 
-The filter arc is the long-form emotional contour: open (intro) →
-closed (interlude build) → closing further (sinus breakdown) → open
-(greets climax) → slightly closed (coda breather) → fading (end).
+The filter arc is the long-form emotional contour: dry (intro) →
+opens up with bass + lead (interlude build) → closes both (sinus
+breakdown) → wah on the lead (greets climax) → slightly closed for
+the breather (coda) → fading (end).
+
+**Critical pitfall: $D417 voice routing.** `$D418` bit 4 sets LP
+mode, BUT the filter only affects voices whose bit is set in
+`$D417` (bits 0-2 = V1/V2/V3 routed through filter). Sinus shipped
+for weeks with the cutoff sweep doing nothing because `$D417 = $10`
+routed no voices. Always set BOTH the mode bit in `$D418` AND the
+voice-routing bits in `$D417` when adding filter work to a part.
 
 ## Why this progression works for a 2-minute demo
 

@@ -271,7 +271,12 @@ interrupt:
         sta $d404
         jmp !beat+
 !buildup:
-        lda #$01
+        // Route V1 (bass) + V2 (lead) through the LP filter so the
+        // cutoff ramp pulls BOTH up together — it's not just the pad
+        // opening any more, the melody opens with it. V3 stays
+        // unfiltered (arp/drum keep their bite). Resonance $2 in the
+        // high nibble adds a slight emphasis at the cutoff for character.
+        lda #$23                  // res $2 + V2 + V1 filtered
         sta $d417
         lda zp_filt_cut
         sta $d416

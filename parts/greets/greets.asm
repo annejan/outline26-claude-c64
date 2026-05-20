@@ -95,9 +95,13 @@ setup:
         inx
         bne !clr-
 
-        // SID master volume, mute V1
-        lda #$1f
+        // SID — LP filter on V2 (lead) with moderate resonance. Cutoff
+        // is modulated per frame in the IRQ (4 bytes there) for a slow
+        // "wah" that matches the DYCP wobble visually.
+        lda #$1f                  // LP mode + vol $F ($D418 bit 4 = LP)
         sta $d418
+        lda #$42                  // res $4, V2 through filter ($D417)
+        sta $d417
         lda #$00
         sta $d404
 
@@ -175,11 +179,19 @@ interrupt:
 
         jsr INTRO_MUSIC_PLAY
 
-        // Reassert master vol (my_music_play writes vol_in here every
-        // frame; without a re-write the SID would stay at $0F with no
-        // filter mode — fine for greets since we're going wide-open).
-        lda #$0f
+        // Reassert master vol AND keep the LP filter mode bit set.
+        // my_music_play writes $0F (no filter mode) every frame, so we
+        // need to put bit 4 back to keep V2 going through the filter.
+        lda #$1f
         sta $d418
+
+        // LP cutoff "wah" — zp_wobble_pos counts 0..255 per frame
+        // (5 s full cycle), OR'd with $40 to keep the cutoff in
+        // $40..$FF so the filter never closes all the way (would
+        // mute V2 audibly). Slow breathing motion on the lead.
+        lda zp_wobble_pos
+        ora #$40
+        sta $d416
 
         // V1 (bass) plays naturally — this is the payoff. The previous
         // mute (sta $d404) is gone, the bass returns with intro's

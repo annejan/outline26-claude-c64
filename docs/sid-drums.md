@@ -197,42 +197,74 @@ in the parts that "look" like they have drums (greets, interlude).
 Because every later part calls `INTRO_MUSIC_PLAY = $119E` via the
 resident-music inheritance, the drum code propagates automatically.
 
-Two zp-style bytes live in intro's music segment (around `$128A`):
+### K-S-K-S kit (2026-05-20)
 
-- `drum_state` — countdown of remaining frames in current kick window
-- `drum_freq` — shadow of V3 freq hi (SID `$D40F` is write-only)
+Since the May 20 rework, drums are a **table-driven K-S-K-S kit**
+(kick and snare alternating on the quarter-note grid). State lives
+in intro's music segment around `$128A`:
 
-Trigger condition (inside `my_music_play`):
+- `drum_state` — countdown of remaining frames in the current hit window
+- `drum_offset` — 0 for kick rows, 8 for snare rows of the drum table
+
+```
+drum_table:                     ; 16 bytes, 2 bytes per row × 8 rows
+    ; KICK rows (offset 0) — triangle pitch slam, no noise.
+    .byte $11, $10              ; triangle gate-on, ~250 Hz
+    .byte $11, $04              ; ~62 Hz
+    .byte $11, $02              ; sub-bass body (~30 Hz)
+    .byte $11, $02              ; hold sub
+    ; SNARE rows (offset 8) — low-noise transient + triangle body.
+    .byte $81, $20              ; noise gate-on, ~500 Hz rattle
+    .byte $11, $10              ; triangle body, ~250 Hz
+    .byte $11, $05              ; ~80 Hz
+    .byte $11, $03              ; ~50 Hz
+```
+
+Trigger:
 
 ```kickass
 lda zp_outro
-beq !drum_done+       ; ⚠️ gating — drums only fire if zp_outro != 0
+beq !drum_done+       ; gated: drums only fire if zp_outro != 0
 lda mu_step
 and #$03
 bne !drum_done+       ; only every 4th step = ~125 BPM beat
-lda #DRUM_LEN
+
+; Pick kick (offset 0) or snare (offset 8): bit 2 of mu_step splits
+; even/odd quarters, ASL'd to byte-offset into the 16-byte table.
+lda mu_step
+and #$04
+asl
+sta drum_offset
+
+lda #DRUM_LEN          ; = 4 (snug, ~80 ms per hit)
 sta drum_state
-lda #DRUM_FREQ_HI
-sta drum_freq
+
+; V1 BASS-BLEED LAYER — Macro Player / SFX-routine pattern. V1 just
+; wrote its bass note above; we overwrite with N_C1 (~33 Hz) and
+; gate-pulse to retrigger V1's punchy $04/$61 ADSR. The bass-pattern
+; note at this kick step is sacrificed; bass resumes the next step.
+ldx #N_C1
+lda sid_freq_lo,x  / sta $D400
+lda sid_freq_hi,x  / sta $D401
+lda #$40 / sta $D404   ; gate off → release prior bass note
+lda #$41 / sta $D404   ; gate on → fresh attack of the sub thump
 !drum_done:
 ```
 
-Per-frame tick (also inside `my_music_play`):
+Per-frame tick:
 
 ```kickass
 lda drum_state
 beq !drum_skip+
 dec drum_state
-lda drum_freq
-sec / sbc #DRUM_SWEEP        ; pitch sweep down
-cmp #DRUM_FLOOR
-bcs !sweep_ok+
-lda #DRUM_FLOOR              ; floor at sub-bass
-!sweep_ok:
-sta drum_freq
-lda #$00 / sta $D40E         ; V3 freq lo
-lda drum_freq / sta $D40F    ; V3 freq hi (sweeping)
-lda #$81 / sta $D412         ; V3: noise + gate on
+lda #DRUM_LEN-1
+sec / sbc drum_state           ; forward phase index
+asl                             ; × 2 bytes/row
+clc / adc drum_offset          ; + kick (0) / snare (8) base
+tay
+lda drum_table,y   / sta $D412 ; ctrl (gate held on throughout)
+lda drum_table+1,y / sta $D40F ; V3 freq hi
+lda #$00 / sta $D40E
 !drum_skip:
 ```
 
@@ -240,20 +272,33 @@ Current constants:
 
 | Constant | Value | Effect |
 |----------|-------|--------|
-| `DRUM_LEN` | 10 frames (~200 ms) | Kick window length — long enough to "land" |
-| `DRUM_FREQ_HI` | `$20` (~488 Hz) | Start pitch — mid-bass attack |
-| `DRUM_SWEEP` | `$03` per frame | Sweep speed — fast 808-style dive |
-| `DRUM_FLOOR` | `$03` (~46 Hz) | Sub-bass body floor |
+| `DRUM_LEN` | 4 frames (~80 ms) | Hit window — short, snappy, leaves arp to play between |
+| Kick pitch sweep | $10 → $02 hi byte | 250 Hz → 30 Hz over 4 frames (triangle) |
+| Snare pitch sweep | $20 (noise) → $03 hi | 500 Hz rattle into 50 Hz triangle body |
+| V1 sub-bass | `N_C1` (~33 Hz) | Bass-bleed layer fires on BOTH kick + snare |
 
-No hard restart in this implementation — V3's envelope was set to
-`AD=$00, SR=$F0` by intro's `my_music_init` (sustained-at-peak arp)
-and the kick relies on that to be LOUD. The waveform switches from
-pulse (arp) to noise (kick) without re-gating; envelope stays at
-peak the whole time so noise plays at full volume.
+### Key design choices
 
-After the kick window ends, music_play's next V3 ctrl write puts
-the waveform back to pulse and the arp resumes audibly — envelope
-never released, so no click.
+**No hard restart.** V3's envelope is `AD=$00, SR=$F0` (sustain pinned
+at peak) from `my_music_init`. The kick is purely waveform + pitch on
+top of a constant peak envelope. The kick body relies on that pinned
+peak envelope to be LOUD. Waveform switches between pulse (arp) /
+noise (snare attack) / triangle (kick + body) without ever re-gating;
+envelope stays at peak the whole time so each waveform plays at full
+volume. Post-kick arp `$41` (pulse + gate) write swaps waveform with
+the gate still on → no envelope retrigger, no audible seam, arp
+picks up cleanly.
+
+**Multi-voice layering.** V3 alone reads as thin — it shares its
+loudness slot with the arp and competes with V1 bass + V2 lead. The
+V1 bass-bleed at `N_C1` reinforces the kick's body with a real
+sub-thump using V1's `$04/$61` punchy ADSR. Pattern from the
+codebase64 Macro Player (Geir Tjelta / Jeroen Tel) and the
+Prince-of-Persia SFX routine — "the kick lives across voices".
+
+**Triangle, not sawtooth.** Sawtooth's all-harmonics buzz reads as
+"head punch" (high frequency content); triangle's odd-harmonics-only
++ 1/n² rolloff keeps the kick in the belly band.
 
 ### Coda's V3 kick — the clean version (no arp to fight)
 
