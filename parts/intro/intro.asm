@@ -76,8 +76,12 @@
 
 
 .const BAR_TOP      = $80       // first line of bar zone (after top FLD)
-.const BAR_BOT      = $c2       // first line PAST bar zone — must end BEFORE
-                                 // bottom-FLD's earliest trigger ($C3+K, K=0 → $C3).
+.const BAR_BOT      = $be       // first line PAST bar zone — must end with
+                                 // enough margin that we can set $D012 = $C3
+                                 // BEFORE raster reaches it (otherwise the
+                                 // irq_fld_bottom trigger misses this frame
+                                 // → no bottom FLD → fade-text pulled up
+                                 // with the logo). 5 lines = ~315 cy is ample.
 
 // Zero-page
 .const zp_text_ptr  = $fb
