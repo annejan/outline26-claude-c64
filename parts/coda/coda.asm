@@ -481,7 +481,12 @@ interrupt:
         lda #KLOOT_FRAMES_ZOOM           // restart at first rotation frame
         sta kloot_shape_1
 !no_wrap:
-        // Star 2 shape advance (independent rate = different rotation)
+        // Star 2 shape advance — only on even zp_frame ticks (half-speed)
+        // so the two stars' rotation rates are fundamentally different.
+        // Star 1 advances every tick (25 Hz), star 2 every other (12.5 Hz).
+        lda zp_frame
+        and #1
+        bne !skip2+
         inc kloot_shape_2
         lda kloot_shape_2
         cmp #KLOOT_FRAMES_TOTAL
@@ -489,6 +494,7 @@ interrupt:
         lda #KLOOT_FRAMES_ZOOM
         sta kloot_shape_2
 !no_wrap2:
+!skip2:
         // ---- Write sprite pointers — conditional on swap_flag ----
         // swap_flag=0: star 1 (brown) → sprites 0-3, star 2 (cyan) → 4-7
         // swap_flag=1: star 2 (cyan)  → sprites 0-3, star 1 (brown) → 4-7
