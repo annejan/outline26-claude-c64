@@ -230,12 +230,16 @@ setup:
         lda #$0f
         sta $d015
 
-        // All four quadrants share the Claude orange.
-        lda #$08
-        sta $d027                       // spr 0
-        sta $d028                       // spr 1
-        sta $d029                       // spr 2
-        sta $d02a                       // spr 3
+        // Kloot star quad colours — warm gradient across quadrants
+        // for a more dimensional look: yellow→orange→amber→gold.
+        lda #$07                        // yellow
+        sta $d027                       // spr 0 (top-right)
+        lda #$08                        // orange
+        sta $d028                       // spr 1 (top-left)
+        lda #$0a                        // light red
+        sta $d029                       // spr 2 (bottom-left)
+        lda #$0a                        // light red
+        sta $d02a                       // spr 3 (bottom-right)
 
         // Sprite shape pointers — each quadrant lives at a different base
         // address but all advance through their 16-frame rotation in lockstep.
@@ -319,7 +323,7 @@ setup:
         bne !t2-
 
         // ---- colour the title rows ----
-        // Title row: white. Sub row: light grey. Everything else: $0E.
+        // Title row: white. Sub row: light grey.
         // Colour RAM row 11 starts at $D800 + 11*40 = $D9B8.
         // Row 13: $DA08.
         ldx #0
@@ -335,6 +339,33 @@ setup:
         inx
         cpx #22
         bne !c2-
+
+        // ---- colour RAM background gradient ----
+        // Paint rows 14-24 (below title) with a subtle dark gradient
+        // from $0E (dark grey) at row 14 to $00 (black) at row 21+.
+        .var bg_row = 14
+        .for (var val = $0e; val >= 0; val = val - 2) {
+                .if (val >= 0) {
+                        ldx #0
+                        lda #val
+                        !bg:
+                        sta COL_RAM + bg_row * 40,x
+                        inx
+                        cpx #40
+                        bne !bg-
+                        .eval bg_row++
+                }
+        }
+        // Fill remaining rows (down to row 24) with $00.
+        .for (bg_row; bg_row < 25; bg_row++) {
+                ldx #0
+                lda #$00
+                !bg:
+                sta COL_RAM + bg_row * 40,x
+                inx
+                cpx #40
+                bne !bg-
+        }
 
         // Settle SID: drums OFF (zp_timer = $00 gates the percussion
         // in intro's my_music_play). Vol restored to max.
@@ -433,6 +464,21 @@ interrupt:
         sta kloot_y_top_base
         lda kloot_y_bot_table,x
         sta kloot_y_bot_base
+
+        // Title text colour pulse — cycle title row through warm colours
+        // on each zp_frame tick. Use zp_frame >> 2 as index into a
+        // warm palette, giving ~2.5 s per full cycle at 25 Hz.
+        lda zp_frame
+        lsr
+        lsr
+        and #7
+        tay
+        lda title_colours,y
+        ldx #0
+!tcol:  sta $D9B8 + 9,x
+        inx
+        cpx #22
+        bne !tcol-
 !skip_inc:
 
         // Write sprite positions every IRQ (50 Hz) so the Y-bob has
@@ -700,6 +746,13 @@ title_sub:
         .byte $06, $0F, $12, $20                            // FOR_
         .byte $18                                            // X
         .byte $32, $30, $32, $36                            // 2026
+
+
+// Title text colour pulse table — 8-entry warm cycle running at
+// ~6.25 Hz (zp_frame >> 2 & 7), giving ~1.3 s per full cycle.
+title_colours:
+.byte $01, $07, $08, $0a, $0e, $0c, $08, $07
+//       white, yellow, orange, l.red, l.blue, grey, orange, yellow
 
 
 //==================================================================
