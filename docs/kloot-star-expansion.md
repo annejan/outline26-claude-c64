@@ -1,5 +1,56 @@
 # Kloot star — design history + current render params
 
+> **Quick orientation if you're new to this file:**
+> The Kloot star is the brown sparkle in coda. Everything below is
+> design history. The CURRENT runtime architecture is summarised
+> right under this paragraph — read that first, dive into stage A/B
+> only if you need the back-story.
+
+## Current state (as of 2026-05-21)
+
+The coda runs **TWO** Kloot stars on screen at once + a 32-star
+background starfield. The whole effect is built on the Stage E
+pre-rendered zoom shape data:
+
+- **6 KB shape data** at `$2000-$37FF` — 4 quadrants × 24 frames × 64 B.
+  Each 24-frame sequence = **8 zoom** (small → full with rotation
+  built in) + **16 steady-rotation** frames. Pre-rendered with
+  `tools/render_kloot_star.py` using the params in the next section
+  (asymmetric 12-lobe Claude-style sparkle with breath modulation).
+  Both stars share this same data — the difference is per-star X/Y
+  positions and per-star shape counters.
+- **Star 1** = sprites 0-3 (brown `$09`), **Star 2** = sprites 4-7
+  (cyan `$0E`). Each has its own `kloot_shape_N` counter (0..23)
+  advancing at independent rates (`SHAPE_DIV_1=3`, `SHAPE_DIV_2=2`
+  ticks-per-step at the half-rate divider) → fundamentally different
+  rotation speeds, lobes drift apart visually.
+- **Orbital motion**: each star has its own `starN_orbit_phase`
+  advancing per IRQ (`ORBIT_SPEED_1=1`, `ORBIT_SPEED_2=2`). Phase
+  indexes a 256-byte sine table at `$0B00`. X / Y offsets computed
+  from sine + cosine (cosine via phase + 64 offset).
+- **Depth swap**: a `swap_flag` toggles which star is in front. The
+  toggle fires on the bit-6 transition of (phase2 − phase1) — that
+  happens every ~64 frames at max separation, so the swap is invisible
+  (stars are far apart). Implementation also swaps the sprite slot
+  assignments + colour registers so brown stays brown and cyan stays
+  cyan regardless of which is in front.
+- **In-front-of-text toggle**: `$D01B` flips between `$FF` (sprites
+  behind text) and `$00` (sprites in front) on the same safe-window
+  trigger. Stars appear to orbit through the title in 3D.
+- **Full-screen starfield**: 32 asterisks (`$2A`) painted into screen
+  RAM at setup at fixed positions (`star_pos` table, 16-bit COL_RAM
+  addresses). `star_field` cycles their colours via 8-bank rotation
+  using **self-modifying STA** (NOT ZP indirect — would clobber
+  `$FB` zp_subtick and `$FC` zp_frame, which hangs the transition).
+  Self-mod patches `star_patch_col + 1` (operand-lo) and `+2`
+  (operand-hi) — **NOT `+0` (opcode)**, which would corrupt the
+  instruction itself.
+
+IRQ ordering inside coda's `interrupt`:
+`jsr my_music_play → jsr star_field → jsr coda_kick → half-rate
+state advance → priority-swap detect → orbital motion math → sprite
+position writes`.
+
 ## Current render command (Stage E)
 
 The committed `parts/coda/kloot_star_*.bin` files are produced by:
