@@ -226,8 +226,9 @@ setup:
         sta $d005
         sta $d007
 
-        // Sprites enabled from frame 0 — the explode-out IS the reveal.
-        lda #$0f
+        // Sprites disabled initially — the interrupt gates them on at
+        // zp_frame == 3, after the worst of the centre-stack overlap.
+        lda #$00
         sta $d015
 
         // All four quadrants share the Claude orange.
@@ -368,18 +369,6 @@ fadeout:
 interrupt:
         jsr INTRO_MUSIC_PLAY
 
-        // Figure-8 (lemniscate / sideways ∞) motion for the Kloot quad.
-        // Lissajous 2:1 — X traces TWO cycles per ONE Y cycle, which is
-        // the canonical lazy-∞ trace. Tables are 256 entries indexed
-        // by zp_frame; with N_FRAMES=250 we get ~2 full figure-8 loops
-        // across the coda. Amplitudes: ±20 px X, ±10 px Y — comfortable
-        // around the centred quad without colliding with the title text.
-        ldx zp_frame
-        lda fig8_x_table,x
-        sta kloot_fig8_x
-        lda fig8_y_table,x
-        sta kloot_fig8_y
-
         jsr star_field
         jsr coda_kick
 
@@ -430,33 +419,42 @@ interrupt:
         sta kloot_y_bot_base
 !skip_inc:
 
-        // Write sprite positions every IRQ (50 Hz). All 4 sprites share
-        // the same (fig8_x, fig8_y) offset added on top of the per-
-        // quadrant base position, so the whole quad floats as one unit
-        // tracing the figure-8 path. Each base (x_left / x_right /
-        // y_top / y_bot) is updated at 25 Hz by the animate-in section
-        // above; the 50 Hz figure-8 add gives 20 ms position granularity.
+        // Write sprite positions every IRQ (50 Hz). Bases (x_left /
+        // x_right / y_top / y_bot) are updated at 25 Hz by the
+        // animate-in section above; on the half-rate "skip" frames we
+        // just re-write the unchanged base values. No motion offset
+        // here — focus is the growth/zoom, not continuous wobble.
         lda kloot_x_right_base
-        clc
-        adc kloot_fig8_x
         sta $d000                       // spr 0 TR X
         sta $d006                       // spr 3 BR X
         lda kloot_x_left_base
-        clc
-        adc kloot_fig8_x
         sta $d002                       // spr 1 TL X
         sta $d004                       // spr 2 BL X
 
         lda kloot_y_top_base
-        clc
-        adc kloot_fig8_y
         sta $d001                       // spr 0 TR Y
         sta $d003                       // spr 1 TL Y
         lda kloot_y_bot_base
-        clc
-        adc kloot_fig8_y
         sta $d005                       // spr 2 BL Y
         sta $d007                       // spr 3 BR Y
+
+        // EARLY-FRAME SPRITE GATE — frames 0..2 have all 4 sprites at
+        // exact-same X,Y (integer-division of i*KLOOT_DX/50 rounds to 0
+        // for i=0,1,2). With each sprite showing its own quadrant and
+        // the star centre at a DIFFERENT corner of each, the composite
+        // reads as a 4-cornered cross instead of a star. Hide the
+        // sprites for that window — they pop in at frame 3 once
+        // there's at least 1 px of separation and the visual starts
+        // to look like a real star tile.
+        lda zp_frame
+        cmp #3
+        bcs !show+
+        lda #$00
+        sta $d015
+        jmp !done+
+!show:  lda #$0f
+        sta $d015
+!done:
 
         lda zp_frame
         cmp #N_FRAMES
