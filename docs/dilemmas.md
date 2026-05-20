@@ -436,3 +436,110 @@ on a bad line (not the often-quoted 23).
 The general C64 codebase reference. We default to it for any new
 VIC or 6510 routine per repo convention (see `feedback-codebase64-
 first.md` in memory).
+
+---
+
+## Lessons we've burned hours on (chronological)
+
+A growing list of "we burned multiple hours on this, write it down
+so future Augurk / Kloot / TL-Buis / Cinder don't have to". Each
+entry should be one line in `AGENTS.md` "C64 / VIC gotchas" too —
+this file is the longer story behind the gotcha.
+
+### 2026-05-19 — `$D418` global volume fade
+
+Wrote a `vol_out = zp_outro >> 3` subtraction inside intro's
+`my_music_play`. The intent was "fade master volume during intro's
+outro animation". The problem: `zp_outro` saturates at `$F0` and
+stays there for the rest of the demo, so `my_music_play` muted SID
+for every later part that called it. Interlude + greets shipped
+silent.
+
+Lesson: don't put part-specific behaviour in shared resident code.
+If a fade only applies to one part, gate it on a counter that ONLY
+ticks in that part.
+
+### 2026-05-20 — `$D417` voice routing required for LP filter
+
+Sinus had a beautiful LP-cutoff close-down sweep wired up… and it
+was completely silent because `$D417 = $10` (resonance $1, but
+*zero* voice routing). LP mode is set in `$D418` bit 4, but the
+filter only affects voices whose bit is set in `$D417` (bits 0-2 =
+V1/V2/V3, bit 3 = ext-in). Setting one without the other = no audio
+effect.
+
+Lesson: always set BOTH `$D418` filter-mode bit AND `$D417` voice
+routing bits when adding filter work. Check both registers exist as
+distinct writes in the part's setup or IRQ.
+
+### 2026-05-20 — sprite-DMA on bars / FLD lines
+
+The intro rasterbar loop showed "vertical-spike" smudges at column
+boundaries — the per-line `$D021` write was landing at variable
+cycles because mid-sprite DMA on the same lines stole 2-4 cy. Fix
+was a raster-locked cycle-exact bar loop that polls `cmp $d012`,
+then immediately writes a pre-loaded palette value (single `stx`),
+so the write lands at cy ~13 of every line regardless of DMA load.
+
+Same family of bug haunts the FLD: top-FLD raster zone `$3B..$77`
+overlaps mid-sprite display area. Sprite DMA stealing cycles inside
+the FLD loop drifts the spurious-badline pattern, manifesting as
+logo tearing. Counter-measure was to drop K_max from 28 to 20 and
+keep mid-sprite Y_min ≥ 90 (so mid sprites don't reach into FLD).
+
+Lesson: any cycle-sensitive raster effect that runs across lines
+with sprite display will jitter. Either use raster-locked tight
+loops with pre-loaded writes, or keep sprites OFF the affected
+lines via Y constraints.
+
+### 2026-05-20 — greets DYCP double bug
+
+`parts/greets/greets.asm`: the DYCP / DXCP loops had TWO bugs that
+combined into apparent chaos:
+
+1. `sta $D001, X` with X = 0..7 hit `$D001..$D008` — but sprite Y
+   registers are at every-other byte (`$D001`, `$D003`, ...,
+   `$D00F`), not consecutive. So Y values were scattering across
+   sprite X registers too.
+2. `txa / clc / adc zp_wobble_pos` → phase = `i + wobble`, a
+   1-byte step. The comment said "phase = wobble + i * PHASE_STEP"
+   but the multiplication was never applied. All 8 sprites bobbed
+   in sync, no wave at all.
+
+Fix: 5× `asl` after `txa` to multiply by 32 (= 45° of the 256-entry
+sine), and write to `$D000 + N*2 + 1` for the Y register via
+`txa / asl / tay / iny`.
+
+Lesson: when code comments describe a calculation, verify the code
+actually does what the comment says. Especially for arithmetic with
+deliberate multipliers.
+
+### 2026-05-20 → 21 — coda starfield self-modifying STA
+
+Wanted a full-screen 32-star twinkle. First attempt used `($FB),Y`
+ZP indirect for the per-star colour write — but `$FB` and `$FC` are
+the coda's `zp_subtick` / `zp_frame`. Every IRQ trashed both,
+hanging the transition and corrupting the kloot quad shape pointers.
+
+Second attempt switched to self-modifying STA, but patched the
+WRONG offsets:
+
+```
+star_patch_col:
+        sta $D800     ; 3 bytes: $8D $00 $D8 (opcode, lo, hi)
+
+sta star_patch_col       ; ← writes to opcode byte ← BUG
+sta star_patch_col + 1   ; ← writes to operand-lo
+```
+
+After one iteration the `$8D` (STA opcode) became the col-ram lo
+byte from the table, and the instruction was no longer a STA.
+Subsequent writes went to random addresses → sprite pointers and
+ZP state corrupted → coda hangs with garbled visuals.
+
+Final fix: patch `+1` (operand-lo) and `+2` (operand-hi), leave
+`+0` (opcode) alone. PR #29 closed the loop after #25 and #28.
+
+Lesson: for self-modifying absolute instructions, the operand
+bytes are at LABEL+1 (lo) and LABEL+2 (hi). The opcode is at +0.
+Burning the opcode is a fast way to spend hours chasing ghosts.

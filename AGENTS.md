@@ -24,21 +24,27 @@ linker, runs on stock PAL hardware (verified in VICE x64sc).
 The narrative arc — a human who hadn't had time to code the breadbin
 in years sat down one evening with an AI pair-programmer — is woven
 into the demo itself: interlude's plasma shows "FOR YEARS NO TIME
-FOR BREADBIN CODE" then "BUT THEN KLOOT WALKED IN" when the bass
-returns; greets' DYCP scroller tells the full story; end credits
-close with "see you at Evoke".
+FOR BREADBIN CODE" then "AI WROTE" drops in as 8 sprite letters
+when the bass returns; greets' DYCP scroller tells the lunchbox-party
+story; coda lands the title "KLOTEN MET DE BROODTROMMEL / A DIGITAL
+LUNCH EXPERIENCE"; end credits close out the bow.
+
+**Read `docs/narrative-arc.md` and `docs/sound-arc.md` first** —
+they're the two-sided map of the same arc (story side and audio side
+locked in step). Every text reveal sits on an audio shift, every
+visual climax has a music moment under it.
 
 Seven parts loaded by Spindle's pefchain framework:
 
 | # | Dir | Role | Transition out |
 |---|-----|------|----------------|
 | 1 | `parts/screenfill/`  | Loading screen — radial DEFEEST bloom + water ripple + fade-to-black | `$06 = $00` (HOLDCNT drained) |
-| 2 | `parts/intro/`       | Logo bounce, scroller, rasterbars, 8 sprites, 3-voice SID | `$F6 = $F0` (`zp_outro` hits `T_OUTRO_DONE`) |
-| 3 | `parts/interlude/`   | Text-mode plasma + 6 raster bars over pad→build-up arc | `$F6 = $10` (beat counter, 16 beats ≈ 7.5 s) |
-| 4 | `parts/sinus/`       | Comedown: sine-wobble DEFEEST + colour cycling, LP filter close, drums silent | `$F6 = $30` (set when `$FC` frame counter hits 250) |
-| 5 | `parts/greets/`      | Climax: DYCP sprite-font scroller with sine wobble + kick drums returning | `$F6 = $20` |
-| 6 | `parts/coda/`        | Title card "KLOOT AND THE BREADBIN" (or "KLOTEN MET DE BROODTROMMEL") with rotating Kloot star sprite + slow border colour cycle + dedicated V3 kick | `$F6 = $30` (frame counter hits N_FRAMES) |
-| 7 | `parts/end/`         | Credit roll, side bars, slow chord/lead reprise | `stay` (loops) |
+| 2 | `parts/intro/`       | Logo bounce, scroller, rasterbars, 8 sprites, 3-voice SID + K-S-K-S kit | `$F6 = $F0` (`zp_outro` hits `T_OUTRO_DONE`) |
+| 3 | `parts/interlude/`   | Plasma + bars-on-buildup, typewriter "FOR YEARS…" + sprite-letter "AI WROTE" drop, LP V1+V2 filter sweep | `$F6 = $0A` (~10 beats ≈ 4 s) |
+| 4 | `parts/sinus/`       | Comedown: sine-wobble DEFEEST + colour cycling + LP filter close on V1+V2; drums silent | `$F6 = $30` (frame counter hits 250) |
+| 5 | `parts/greets/`      | Climax: DYCP sprite-font scroller (lunchbox greets) + drums returning + V2 LP "wah" | `$F6 = $20` |
+| 6 | `parts/coda/`        | "KLOTEN MET DE BROODTROMMEL / A DIGITAL LUNCH EXPERIENCE", twin brown+cyan Kloot stars orbiting on sine paths, alternating priority + in/out of title plane, 32-star full-screen twinkle, sparse 60-BPM kick on V3 | `$F6 = $30` |
+| 7 | `parts/end/`         | Credit roll, side bars, slow chord/lead reprise (PWM + filter sweep) | `stay` (loops) |
 
 Read `README.md` for full per-part descriptions. The
 `pefchain_script` file at repo root is the master sequencer.
@@ -329,6 +335,59 @@ that window.
 Toggle `$D011` bit 3 (24/25-row mode) at the right raster line to
 suppress VIC's border-on action. See `irq_close` / `irq_open` in
 `parts/intro/intro.asm`.
+
+### Self-modifying code: opcode at `+0`, operand-lo at `+1`, operand-hi at `+2`
+
+For an absolute STA / LDA / etc., the assembled bytes are:
+
+```
+8D 00 D8     ; sta $D800 — opcode is byte +0
+                                   operand-lo is +1
+                                   operand-hi is +2
+```
+
+To patch the target address, write to **`label+1` (lo) and
+`label+2` (hi)** — NOT `label` (which is the opcode byte). Burning
+the opcode turns the instruction into garbage; subsequent writes
+go to wherever the corrupted opcode happens to interpret as.
+
+We shipped this bug in PR #26 (starfield self-mod patched `+0/+1`
+instead of `+1/+2`); the demo hung on coda for hours until #29
+fixed it. Always double-check offsets on self-mod or run a quick
+disassembly of the label after patching.
+
+### `$D417` voice routing is NOT optional for the filter
+
+`$D418` bit 4 turns LP filter mode ON, but the filter only
+affects voices whose corresponding bit is set in `$D417` (bits 0-2
+= V1/V2/V3, bit 3 = external in). If you set LP mode but no voices
+are routed, the cutoff sweep does nothing audibly. Sinus shipped
+silent filter sweeps for weeks because `$D417 = $10` (resonance $1
+but no voice routing). Always set BOTH together. See
+`docs/music-theory.md` "Critical pitfall" section.
+
+### ZP slot collisions across the demo
+
+The intro's resident `my_music_play` (called from every part except
+end) uses `$F9` / `$FA` as private scratch — they're safe to use as
+ephemeral scratch IN A PART, but DON'T hold cross-frame state in
+them. Each part also has its own ZP claim in the EFO header
+(`'Z', from, to`); collisions there cause silent state corruption.
+
+In coda specifically: `$FB` = `zp_subtick` and `$FC` = `zp_frame`.
+Using them as ZP-indirect pointer destroys both, hanging the
+transition. Use `$F9` / `$FA` for short-lived scratch, OR
+self-modifying absolute STAs (see above).
+
+When adding ZP-using code: cross-check the EFO header's `'Z'`
+range vs. what other parts assume from `my_music_play`.
+
+### `$08` (orange) vs `$09` (brown) — the Kloot star is BROWN
+
+The Claude logo is brown ($09), not orange ($08). Setting the star
+to $08 reads as Claude orange but the *demo* convention is the
+**brown Kloot star**. Same shade as bread crust — fits the
+lunchbox theme. See `parts/coda/coda.asm` star colour setup.
 
 ---
 
