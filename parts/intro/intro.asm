@@ -1737,10 +1737,16 @@ update_bmp_scroll:
 !done:
         rts
 
-// Sprite Y for top-border sprites — range 14..30
+// Sprite Y for top-border sprites — range 14..50. With Y-expand the
+// display reaches raster 14..91, just touching mid sprite display
+// minimum (raster 90), so top and mid sprites kiss at the peak of
+// each sine cycle — mirroring the mid↔bot kiss at the bottom of the
+// screen. Phases 0/80/160 (sprite_yphase entries for sprites 0/1/2)
+// keep the 3 top sprites at different points in the cycle so they
+// don't all bunch into the FLD zone simultaneously.
 .align 256
 sine_top:
-        .fill 256, 14 + round(8 * (1 - cos(toRadians(i * 360 / 256))))
+        .fill 256, 14 + round(18 * (1 - cos(toRadians(i * 360 / 256))))
 
 // Sprite Y for display-area sprites — range 90..200.
 // Floor 90 keeps mid sprites out of the FLD zone ($3C..$58 max):
