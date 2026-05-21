@@ -12,7 +12,7 @@
         .word $0000              // main
         .word fadeout            // fadeout
         .word $0000              // cleanup
-        .word $0000              // callmusic
+        .word musichook          // callmusic — see interlude EFO header
 
         // Code + tables span $0800-$0DFF (6 pages):
         //   code + setup    @ $0800-$09xx

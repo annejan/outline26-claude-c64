@@ -13,25 +13,43 @@ effects and music evolve.
 
 ## Part chain
 
+### Measured timeline (VICE-MCP, 2026-05-21)
+
+Per-part durations as observed via live `$D018` + `$F6` sampling — note
+that pefchain inserts blank-filler effects between parts to mask the
+disk load, so the "perceived" gap between transitions can be larger
+than the part's own duration. With ~8 KB of koala bitmap to stream
+into greets, the biggest blank gap sits before greets.
+
 ```
-screenfill ──5.6s──→ intro ──73s──→ interlude ──7.7s──→ sinus ──5s──→ greets ──~50s──→ coda ──32s──→ end (loops)
+screenfill ─5s─→ intro ─57s─→ interlude ─~4s─→ [blank 18s] ─→ sinus ─~4s─→ greets ─50s─→ coda ─30s─→ end (loops)
 ```
 
-| Part | Duration | Cumulative | Transition ZP | Trigger |
-|------|----------|------------|---------------|---------|
-| screenfill | 5.6 s | 5.6 s | `$06` (HOLDCNT) | `06 = 00` |
-| intro | 73.3 s | 78.9 s | `$F6` (zp_outro) | `F6 = F0` |
-| interlude | 7.7 s | 86.6 s | `$F6` (zp_beat_count) | `F6 = 10` |
-| sinus | 5.0 s | 91.6 s | `$F6` (zp_timer) | `F6 = 30` |
-| greets | ~50 s | ~141.6 s | `$F6` (zp_beat_count) | `F6 = 82` (scroll-driven) |
-| coda | 32.0 s | ~173.6 s | `$F6` (zp_timer) | `F6 = 30` |
-| end | loops | — | (none) | `stay` |
+| Part | Duration | Sets `$D018` | Transition trigger |
+|------|----------|--------------|---------------------|
+| screenfill | ~5 s | `$17` (lo-case ROM) | `$06 == $00` (HOLDCNT) |
+| intro | ~57 s | `$19` (bitmap mode) | `$F6 == $F0` (zp_outro saturated) |
+| interlude | ~4 s + ~11 s blank-filler before sinus | `$15` (chargen $1000) | `$F6 == $10` (16 beats) |
+| sinus | ~4 s | `$17` (lo-case ROM) | `$F6 == $30` (timer) |
+| greets | ~50 s (scroll-driven KLOTEN landing) | `$19` (bitmap mode, koala) | `$F6 == $82` |
+| coda | ~30 s | `$15` (chargen $1000) | `$F6 == $30` (timer) |
+| end | loops | `$1D` (chargen $3000) | (none — `stay`) |
 
-**One-pass runtime: ~2:53** from boot to looping credits. Greets is
-now scroll-DRIVEN (not pure-time) — when `scroll_pos` reaches the
-"KLOTEN" punchline, the IRQ forces `$F6 = SETTLE_BEAT`, the row snaps
-to centred KLOTEN for ~1.9 s, then pefchain advances. Add/remove
-names in the message and the part length tracks automatically.
+**Measured one-pass runtime: ~2:55** from boot to end-credits-loop.
+
+Music stays continuous across every part-to-part blank-filler because
+intro installs `my_music_play` via the EFO `'M', $9e, $11` tag — see
+[`docs/sound-arc.md`](./sound-arc.md) "Music continuity through load
+gaps" for the mechanism. Each non-intro part has a `musichook:` label
+holding a `bit $0000` placeholder that pefchain rewrites to
+`jsr $119e` at link time; the auto-inserted blank-fillers between
+effects use the same callmusic mechanism, so SID never goes silent.
+
+Greets is **scroll-driven** (not pure-time): the IRQ forces `$F6 =
+SETTLE_BEAT` the moment `scroll_pos` reaches the "KLOTEN" punchline
+in the message. Settle holds for ~1.9 s of centred KLOTEN before
+pefchain transitions to coda. Add/remove names in the message and
+the part length tracks automatically.
 
 ---
 

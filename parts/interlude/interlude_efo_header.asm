@@ -13,7 +13,15 @@
         .word $0000              // main
         .word fadeout            // fadeout (sec/rts — script transitions on space)
         .word $0000              // cleanup
-        .word $0000              // callmusic
+        .word musichook          // callmusic — pefchain rewrites the
+                                  // 3-byte `bit $0000` at this label
+                                  // into `jsr $119e` (intro's
+                                  // my_music_play, installed via the
+                                  // 'M' tag in intro's EFO header).
+                                  // Blank-filler parts inserted between
+                                  // effects also call this routine, so
+                                  // SID music keeps ticking during the
+                                  // load gaps at transitions.
 
         // Memory: code + tables at $80-$84 (5 pages: plasma wave, raster bars, etc.)
         .byte 'P', $80, $84

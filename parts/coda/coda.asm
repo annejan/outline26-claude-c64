@@ -809,7 +809,11 @@ interrupt:
         sta $d00f                       // spr 7 BR Y
 
         // ---- NOW the rest of the per-frame work ----
-        jsr INTRO_MUSIC_PLAY
+musichook:
+        .byte $2c, $00, $00       // bit $0000 — pefchain rewrites to
+                                   // jsr $119e via intro's 'M' tag.
+                                   // See interlude.asm's musichook
+                                   // comment for the design.
         // Re-assert master vol: my_music_play computes $D418 from
         // $F8 (zp_intro) every frame, which would only matter if
         // something accidentally wrote to $F8 — but it's cheap

@@ -182,7 +182,10 @@ fadeout:
 //   - border + bg cycle from per-frame colour tables
 //==================================================================
 interrupt:
-        jsr INTRO_MUSIC_PLAY
+musichook:
+        .byte $2c, $00, $00       // bit $0000 — pefchain rewrites to
+                                   // jsr $119e. See interlude.asm's
+                                   // musichook comment for the design.
 
         // intro music_play writes $0F to $D418 every frame, which
         // CLEARS the LP filter mode bit. Re-assert $1F so V1+V2 keep

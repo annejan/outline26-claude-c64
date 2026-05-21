@@ -36,4 +36,12 @@
         .byte 'Z', $f5, $fe
         // I/O safe (interrupts leave $01 at $35)
         .byte 'S'
+        // Install my_music_play at $119E as the global play routine.
+        // pefchain will then auto-rewrite the `bit !0` placeholders
+        // in every later part's EFO callmusic slot to `jsr $119E` at
+        // link time. The auto-inserted "blank" parts that pefchain
+        // schedules between effects also call this routine, so SID
+        // music keeps ticking during the load gaps that used to drop
+        // out for ~0.5 s at every transition.
+        .byte 'M', $9e, $11
         .byte $00                // end of tags

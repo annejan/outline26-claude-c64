@@ -12,7 +12,7 @@
         .word $0000              // main
         .word fadeout            // fadeout
         .word $0000              // cleanup
-        .word $0000              // callmusic
+        .word musichook          // callmusic — see interlude EFO header
 
         // Code + parallax starfield state/tables + col_tab + sin_tab.
         // Code, tier tables, row lookups and per-star state span

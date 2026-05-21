@@ -78,8 +78,11 @@ Drums come back full. V1 bass on the pattern. V2 lead doing its
 filtered "wah" through the chord cycle. Across the middle of the
 screen, eight X-expanded sprite letters DYCP-wave through a list
 of demogroup names — the loudest moment, everyone gets a shoutout.
-~77 seconds, scrolling through a wall of crew handles, landing on
-"KLOOT."
+~50 seconds, scrolling through a wall of crew handles at 9 px/frame
+(≈ 11 chars/sec) over a multi-colour koala backdrop, landing on
+"KLOTEN" (the demo title's first word). The transition is
+scroll-driven: when the last name finishes exiting, the row snaps
+to centred KLOTEN for ~1.9 s, then pefchain advances to coda.
 
 No story text here. The story already happened in interlude.
 

@@ -12,7 +12,7 @@
         .word $0000                // main
         .word fadeout              // fadeout
         .word $0000                // cleanup
-        .word $0000                // callmusic
+        .word musichook            // callmusic — see interlude EFO header
 
         // Owned pages:
         //   $08-$0F = sprite font shapes (32 glyphs × 64 B = 2 KB,

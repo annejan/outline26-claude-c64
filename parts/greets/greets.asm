@@ -258,7 +258,10 @@ interrupt:
         lda #$ff
         sta VIC_IRQ
 
-        jsr INTRO_MUSIC_PLAY
+musichook:
+        .byte $2c, $00, $00       // bit $0000 — pefchain rewrites to
+                                   // jsr $119e. See interlude.asm's
+                                   // musichook comment for the design.
 
         // Reassert master vol AND keep the LP filter mode bit set.
         // my_music_play writes $0F (no filter mode) every frame, so we

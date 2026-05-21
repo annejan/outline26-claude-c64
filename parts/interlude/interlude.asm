@@ -272,7 +272,16 @@ interrupt:
         lda #$ff
         sta VIC_IRQ
 
-        jsr INTRO_MUSIC_PLAY
+musichook:
+        .byte $2c, $00, $00       // bit $0000 — pefchain rewrites to
+                                   // jsr $119e (intro's my_music_play)
+                                   // at link time via the 'M' tag in
+                                   // intro's EFO header. Replaces the
+                                   // old `jsr INTRO_MUSIC_PLAY` so the
+                                   // auto-inserted blank-filler parts
+                                   // between effects also call music
+                                   // (= no SID dropout during load
+                                   // gaps at transitions).
         lda #$1f
         sta $d418
 

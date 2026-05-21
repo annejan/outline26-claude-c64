@@ -65,6 +65,41 @@ If you ever need an audio fade-out, do it **outside** `my_music_play`
 and gate it on a counter that ONLY ticks in the relevant part. Don't
 modify shared resident code with global side effects.
 
+## Music continuity through load gaps (the `'M'` + `bit $0000` trick)
+
+Pefchain inserts blank-filler effects between parts to mask the disk
+load — they paint a solid black screen and run a minimal IRQ. Without
+any setup, those blanks DON'T call `my_music_play`, so the SID just
+sits playing whatever was last written until the next part's IRQ takes
+over. With ~8 KB of koala bitmap to stream into greets, those blanks
+total ~11-18 s before each big part, which used to manifest as ~0.5 s
+audible drop-outs at every transition.
+
+The fix uses Spindle's standard "installed music player" mechanism:
+
+1. **Intro's EFO header declares the `'M', $9e, $11` tag** — tells
+   pefchain that `my_music_play` lives at `$119e` and should be the
+   global play routine for the whole demo.
+2. **Every other part (interlude, sinus, greets, coda) has a
+   `musichook:` label in its IRQ** pointing at a 3-byte placeholder
+   `bit $0000` (= `.byte $2c, $00, $00`). The EFO header's `callmusic`
+   field references this label.
+3. **At link time, pefchain rewrites every `bit $0000` placeholder to
+   `jsr $119e`** — so the part's IRQ ends up calling music normally,
+   AND the auto-inserted blank-filler parts get a matching `jsr $119e`
+   injected too.
+
+Net effect: SID music ticks at 50 Hz continuously from intro's first
+note through end-credits, regardless of how long pefchain spends
+loading between parts. End is the exception — it does `end_music_init`
+which clears SID and runs its own player. The very last transition
+(coda→end) still sees one frame of intro's player from the blank
+filler before end's setup takes over, so there's no audible seam.
+
+If a part needs to install a different player (e.g. a SID rip), put
+its own `'M', lo, hi` tag in that part's EFO and pefchain re-routes
+the callmusic placeholders from that point onward.
+
 ## `zp_intro` thresholds gate the per-voice writes
 
 `my_music_play` reads `$F8` (zp_intro) and uses three thresholds to
