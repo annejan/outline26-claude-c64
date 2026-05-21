@@ -40,11 +40,11 @@ Seven parts loaded by Spindle's pefchain framework:
 |---|-----|------|----------------|
 | 1 | `parts/screenfill/`  | Loading screen — radial DEFEEST bloom + water ripple + fade-to-black | `$06 = $00` (HOLDCNT drained) |
 | 2 | `parts/intro/`       | Logo bounce, scroller, rasterbars, 8 sprites, 3-voice SID + K-S-K-S kit | `$F6 = $F0` (`zp_outro` hits `T_OUTRO_DONE`) |
-| 3 | `parts/interlude/`   | Plasma + bars-on-buildup, typewriter "FOR YEARS…" + sprite-letter "AI WROTE" drop, LP V1+V2 filter sweep | `$F6 = $0A` (~10 beats ≈ 4 s) |
+| 3 | `parts/interlude/`   | Plasma + bars-on-buildup, typewriter "FOR YEARS…" + sprite-letter "SPARKED" drop with white-border flash, LP V1+V2 filter sweep | `$F6 = $0A` (~10 beats ≈ 7.7 s) |
 | 4 | `parts/sinus/`       | Comedown: sine-wobble DEFEEST + colour cycling + LP filter close on V1+V2; drums silent | `$F6 = $30` (frame counter hits 250) |
-| 5 | `parts/greets/`      | Climax: DYCP sprite-font scroller (lunchbox greets) + drums returning + V2 LP "wah" | `$F6 = $20` |
-| 6 | `parts/coda/`        | "KLOTEN MET DE BROODTROMMEL / A DIGITAL LUNCH EXPERIENCE", twin brown+cyan Kloot stars orbiting on sine paths, alternating priority + in/out of title plane, 32-star full-screen twinkle, sparse 60-BPM kick on V3 | `$F6 = $30` |
-| 7 | `parts/end/`         | Credit roll, side bars, slow chord/lead reprise (PWM + filter sweep) | `stay` (loops) |
+| 5 | `parts/greets/`      | Climax: 16-bit DYCP sprite-font scroller (~77 s, lunchbox greets), fade-then-settle landing on "KLOOT", drums returning, V2 LP "wah" | `$F6 = $A0` (160 beats ≈ 77 s) |
+| 6 | `parts/coda/`        | "KLOTEN MET DE BROODTROMMEL / A DIGITAL LUNCH EXPERIENCE", twin brown+cyan Kloot stars (Stage F ping-pong zoom breath) orbiting on sine paths, alternating priority + in/out of title plane, 32-star 4-tier parallax PETSCII starfield, sparse 60-BPM kick on V3 | `$F6 = $30` |
+| 7 | `parts/end/`         | Credit roll, side bars, slow chord/lead reprise (PWM + LP filter sweep, "dark phaser" mood since PR #31) | `stay` (loops) |
 
 Read `README.md` for full per-part descriptions. The
 `pefchain_script` file at repo root is the master sequencer.
@@ -176,21 +176,24 @@ the `.d64`.
 
 ## Memory map cheatsheet (VIC bank 0)
 
+For the full per-part / per-page table see
+[`docs/memory-layout.md`](./docs/memory-layout.md). Quick reference:
+
 | Range          | Owner / contents                                   |
 |----------------|----------------------------------------------------|
-| `$0200-$02FF`  | Spindle 3.1 resident loader — DO NOT TOUCH        |
+| `$0200-$02FF`  | Spindle 3.1 resident loader — DO NOT TOUCH         |
 | `$0300-$03FF`  | Spindle loader buffer                              |
 | `$0400-$07FF`  | Screen RAM (intro: bitmap colour-info; others: text) |
 | `$0800-$5BBC`  | intro code + bitmap colour info + sprite shapes + scroller |
 | `$0800-$0CE7`  | sinus code + sine_tab + col_tab + bg_tab (during sinus) |
-| `$0800-$0B1F`  | coda code + col_tab + driver (during coda) |
+| `$0800-$0FFF`  | coda code + state + col_tab + sin_tab (8 pages) (during coda) |
 | `$1000-$125D`  | **intro's resident music** — tables + my_music_play (inherited by interlude / sinus / greets / coda) |
-| `$2000-$23FF`  | greets sprite font (overlays intro's unused bitmap area) |
-| `$2800-$37FF`  | coda Kloot-star quad sprite shapes (4 quadrants × 16 frames × 64 bytes; sprite ptrs `$A0-$DF` at `$2800`/`$2C00`/`$3000`/`$3400`) |
-| `$3000-$444F`  | end font + code                                       |
-| `$8000-…`      | interlude / greets code + state                       |
+| `$2000-$27FF`  | greets sprite font (during greets) / coda Kloot TR+TL sprite shapes (during coda) |
+| `$2C00-$37FF`  | coda Kloot BL+BR sprite shapes (4 quadrants × 24 frames × 64 B; sprite-pointer bases `$80/$98/$B0/$C8`) |
+| `$3000-$444F`  | end font + code                                    |
+| `$8000-$8FFF`  | interlude / greets code + state + scroll message + sprite-font glyphs |
 | `$C000-$CAFF`  | screenfill code + dist_table + ripple palette + char_table |
-| `$F4-$F8`      | Spindle loader zero-page — DO NOT CLOBBER             |
+| `$F4-$FA`      | Spindle loader + shared zero-page (multiple part-specific overlays — see memory-layout.md) |
 
 **Zero-page conventions:**
 - `$F4-$F8` belongs to Spindle's loader — declare your usage of any
@@ -538,47 +541,53 @@ See `parts/greets/greets_test.asm` for a working example.
 
 ---
 
-## Pending work
+## Pending work (current as of 2026-05-21)
 
-- **Greets** — DYCP sprite scroller still produces flashing/illegible
-  letters. Current fix: sprite pointer re-write every frame (Spindle NMI
-  clobbers `$07F8-$07FF`), sine wobble reduced to ±1 px, sprite priority
-  reversed (sprite 7 leftmost, sprite 0 rightmost). Still needs colour /
-  font-shape tuning.
-- **Sinus** — boring. Dual-axis wobble (`$D016`+`$D011` 90° phase offset)
-  + colour cycling + LP fade added, but single repeating "DEFEEST" text
-  still thin.
-- **Coda** — title card with 4-sprite Kloot star (Stage B+D: 96×84 quad
-  with asymmetric petals, sound-bound bob, animate-in reveal) + colour
-  RAM star-field + V3 kick. Still needs more content.
-- **Screenfill/intro** — wording/lettering polish needed.
+See [`docs/two-weeks-out.md`](./docs/two-weeks-out.md) for the full
+stocktake + recommended focus plan for the X2026 runup.
 
-**Completed recent work (all shipped to main):**
-- 7-part structure: screenfill → intro → interlude → sinus → greets → coda → end
-- Drums in intro's `my_music_play` gated on `zp_outro != 0` so they
-  enter late in intro and carry through interlude + greets
-- Story interleave in interlude (sad text on plasma → tease text at
-  bass return), greets DYCP scroller telling personal arc
-- Sinus rewritten from stripe placeholder to repeating DEFEEST text
-  with `$D016` wobble + colour cycling + LP fade (PR #9)
-- End credits: title + Evoke closer + Anus/Kloot/Ranzbak/Cinder credits
-- Logo PNG round-trip workflow + bitmap trim (PR #3 / #4)
-- All major bugs squashed (KA `>label+N` precedence, sinus EFO
-  page-claim mismatch, `$D011` bit 7 trap, sinus CSEL preservation)
-- **Interlude halved**: `BUILDUP_BEAT` 24→8, pefchain `f6=20`→`f6=10` (PR #8)
-- **Greets sprite pointer fix**: `jsr update_sprite_ptrs` every frame (PR #7)
-- **Greets wobble reduced**: sine amplitude 4→1; priority reversed (PR #7)
-- **Sinus**: space fill + dual-axis wobble + LP fade (PR #9)
-- **Coda Stage B — 4-sprite Kloot star**: 96×84 quad, 12-lobe Claude burst,
-  pre-rendered by `render_kloot_star.py --quadrant 0..3` (PR #11)
-- **Coda Stage C — breath modulation**: collective scale + position bob (PR #12)
-- **Coda Stage D — asymmetric petals, animate-in reveal**: explode-out from
-  centre, sound-bound bob, petal shape modulation per quadrant (PR #13)
-- **Coda V3 kick**: dedicated noise kick, 10-frame pitch sweep, hard restart (PR #9)
-- **End capital glyphs**: B, I, L, M, N; custom Å at screencode `$5B` (direct commit)
-- **Docs**: `docs/kloot-star-expansion.md`, `docs/music-theory.md`
+- **Real-hardware verification — never done.** Two weeks out from
+  X2026. VICE is generous; real PAL C64 can break on IRQ timing,
+  `$D012` race conditions, DMA stretching. Highest-priority item.
+- **Sinus** — *"weird"* per user feedback (2026-05-20), never
+  diagnosed in detail. Filter routing was fixed but the visual /
+  audio character still doesn't land. Most overdue named item.
+- **End-credits clean↔dark slow-sine modulation** — documented as
+  future polish in [`docs/sound-arc.md`](./docs/sound-arc.md) under
+  "End-credits darkening". Sketch implementation ready; not built.
+- **Submission compliance** — X2026 rules unread; filename / runtime
+  cap / screenshot package not verified.
+- **PAL CRT preview** — never seen the demo on anything but a
+  flat-panel monitor.
 
-See `docs/timing.md` for current frame-by-frame event timeline.
+**What's DONE since the docs were last refreshed (2026-05-20 → 21):**
+
+- **Coda parallax PETSCII starfield** (PR #31) — 32 stars across 4
+  speed tiers, replacing the original static-asterisk twinkle.
+- **Coda Stage F ping-pong zoom breath** (PR #33) — both Kloot stars
+  ping-pong `0 → 23 → 0` forever; star 1 opens with zoom-in, star 2
+  with zoom-out, naturally out of phase. Plus the size-diet sprite-
+  pointer loop refactor that fits Stage F back inside coda's 8-page
+  claim.
+- **Coda NMI-clobber jitter fix** (direct commit `ae80273`) — sprite
+  pointers re-written every frame at 50 Hz so the Spindle NMI loader
+  can't drag them off-screen between IRQs.
+- **Greets epic-extended** (PR #32) — 15 s → 77 s scroller with
+  16-bit `scroll_pos`, fade-then-settle landing on "KLOOT", clean
+  fadeout sprite-off, `.fill 64, 0` for the `$9A` blank glyph slot.
+- **Greets DYCP wobble trimmed** (PR #34) — sine amplitudes
+  3→2 (Y) and 2→1 (X) for legibility.
+- **Interlude breathing room + SPARKED border flash** (direct commit
+  `8ed0777`) — `BEAT_PERIOD 20→24`, `BUILDUP_BEAT 4→6`,
+  `TRANSITION_BEAT 10→16`, white-border flash on SPARKED landing.
+- **AGENTS.md gotcha additions + memory-layout refresh + tools
+  helpers** (PR #35) — `.align 256` page-claim collision, DYCP
+  blank-glyph trap, 8-bit `,Y` reach limit; `tools/where-am-i.sh`;
+  `tools/record_demo.py --part`.
+- **`docs/two-weeks-out.md`** (PR #36) — stocktake + focus plan.
+
+See [`docs/timing.md`](./docs/timing.md) for the current frame-by-frame
+event timeline.
 
 ---
 

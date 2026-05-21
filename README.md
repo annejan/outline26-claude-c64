@@ -169,56 +169,102 @@ trigger. The end card is the only "stay" loop.
 ### Part 5 — `parts/greets/greets.asm` (greetings scroll)
 
 - **DYCP sprite-font scroll** — 8 X-expanded sprites show a 8-char window
-  of greetings text with a per-sprite sine wobble (Y offset from sine table,
-  amplitude ±1 px). Sprite pointers re-written every frame (Spindle NMI
+  of greetings text with a per-sprite sine wobble (Y offset ±2 px, X
+  offset ±1 px, halved from the original ±3 / ±2 in PR #34 for
+  readability). Sprite pointers re-written every frame (Spindle NMI
   clobbers `$07F8-$07FF` between ticks). Priority reversed: sprite 7
   leftmost, sprite 0 rightmost — VIC reads left-to-right for overlap.
-- **Kick drums on V3** — pitch-swept noise burst on every beat (driven from
-  intro's resident `my_music_play`; gated on `zp_outro != 0` which sinus
-  resets, so drums silence in sinus and return here).
-- Text advances 1 char per 6 frames, ~128 of 864 chars visible in 32 beats.
-- Greeting scroll tells the personal arc: "for years no time… then I sat
-  down with Kloot… especially Kloot for finally getting me here".
-- Beat counter at `$f6` ticks every 24 frames. After 32 beats (~15 s)
+- **16-bit `scroll_pos`** so the message can exceed 256 bytes —
+  `update_sprite_ptrs` self-modifies the LDA operand each call instead
+  of relying on `lda message,y`'s 8-bit Y reach.
+- **Kick drums on V3** — pitch-swept noise burst on every beat (driven
+  from intro's resident `my_music_play`; gated on `zp_outro != 0` which
+  sinus resets, so drums silence in sinus and return here).
+- **Fade-then-settle ending.** Three phases of duration: 0..57 s scroll
+  at full DYCP amplitude; 57..69 s `zp_damp_shift` ramps 0→5 in
+  quarter-beat steps so both wobble (sign-preserving ASR per shift)
+  and scroll speed (lookup table `SCROLL_DELAY_TABLE`) decelerate
+  together; 69..77 s settle — scroll snaps to `settle_text` (the
+  KLOOT punchline), sprites freeze flat at `SPR_Y_BASE`, colour
+  cycle keeps shimmering. The deceleration masks the freeze.
+- Text advances 1 char per 8 frames (was 12). Greeting tells the
+  lunchbox-themed arc ending with KLOOT centred in the held landing.
+- Beat counter at `$f6` ticks every 24 frames. After 160 beats (~77 s)
   pefchain advances to coda.
 - Inherits intro's music pages (`'I', $10, $12`).
+- **Bug fix in PR #32:** `ptr_lookup` maps every non-A-Z char to slot
+  `$9A`. Before the fix, `font_data` emitted only the 26 A-Z glyphs
+  so slot `$9A` read uninitialised RAM and every space / `.` / digit
+  in the message rendered as random pixels ("letters popping in").
+  One-line `.fill 64, 0` after the A-Z loop makes the blank slot
+  deterministic.
 
 ### Part 6 — `parts/coda/coda.asm` (title card)
 
-- **Title card** — "KLOOT AND THE BREADBIN" on row 11, "BY DEFEEST   FOR
-  X2026" on row 13. Text mode, ROM uppercase chargen at `$1000`. The
-  breather where the story lands between greets' scroller and end's
-  credit roll.
-- **Kloot star — 4-sprite 96×84 quad (Stage B+D)** — four X+Y-expanded
-  sprites (sprites 0-3) form a 2×2 grid, each 48×42 on screen (24×21
-  source expanded 2×). The 12-lobe Claude burst is pre-rendered by
-  `tools/render_kloot_star.py --lobes 12 --quadrant 0..3` into four
-  1024-byte files at `$2800`/`$2C00`/`$3000`/`$3400` (sprite bases
-  `$A0..$DF`). 16 rotation frames cycle seamlessly via 4-fold symmetry.
-- **Stage C — breath modulation**: collective scale + position bob
-  modulated by a 256-entry sine table, giving the star a breathing/
-  pulsing feel.
-- **Stage D — asymmetric petals, animate-in reveal**: all four sprites
-  start collapsed at screen centre and explode outward over the first
-  ~30 frames. Per-quadrant petal shape modulation creates asymmetric
-  lobes. Sound-bound bob syncs the vertical bob to the kick drum phase.
-- **Colour RAM star-field**: top 5 rows twinkle with random colours
-  on a black background.
-- **Slow border colour cycle** through a 256-entry calm palette (black /
-  blue / light-blue / light-grey), driven by `col_tab[zp_frame]`.
-- **Dedicated V3 kick** — coda "owns" V3 (no arp competing), so it sets
-  a real kick ADSR (`A=0, D=8, S=0, R=0`) once in setup and runs a
-  hard-restart state machine each beat: gate-off frame → fresh gate-on
-  + pitch-swept body. ~60 BPM, simpler than greets' kicks because there's
-  nothing to fight with on the voice. See [`docs/sid-drums.md`](./docs/sid-drums.md).
-- Half-rate divider on `zp_subtick` keeps `zp_frame` ticking at 25 Hz; after
-  `N_FRAMES = 250` (~10 s) the IRQ writes `$30` to `$f6` and pefchain
-  advances to end.
+- **Title card** — "KLOTEN MET DE BROODTROMMEL" on row 11, "A DIGITAL
+  LUNCH EXPERIENCE" on row 13. Text mode, ROM uppercase chargen at
+  `$1000`. The breather where the story lands between greets' scroller
+  and end's credit roll.
+- **Twin Kloot stars — 4-sprite 96×84 quads each.** Star 1 (sprites
+  0-3, **brown `$09`**) and star 2 (sprites 4-7, **cyan `$0E`**). Each
+  is a 2×2 quad of X+Y-expanded 24×21 sprites = 48×42 on screen per
+  quadrant, 96×84 total. Both stars share the same pre-rendered shape
+  data at `$2000-$37FF` (4 quadrants × 24 frames × 64 B), and each star
+  walks its own `kloot_shape_N` counter (0..23) at independent dividers
+  (`SHAPE_DIV_1=3`, `SHAPE_DIV_2=2`) so the lobe angles drift apart
+  visually.
+- **12-lobe Claude-style sparkle with breath** — shapes generated by
+  `tools/render_kloot_star.py --lobes 12 --asymmetry 0.4 --seed 42
+  --breath 4 --frames-zoom 8 --frames 16` per quadrant. Asymmetric
+  random lobe multipliers (seed 42) give the recognisable Claude
+  sparkle; without `--asymmetry` the star reads as a smooth radial
+  circle. 24 frames per quadrant = 8 zoom (small → full, with rotation
+  built in) + 16 steady rotation.
+- **Stage F — ping-pong zoom breath.** Each star's shape counter
+  walks `0 → 23 → 0` forever via a per-star direction byte
+  (`kloot_dir_N`). Forward zooms in then rotates; backward rotates
+  in reverse (invisible because 12-fold symmetry) then zooms back
+  out. Star 1 starts at shape=0 forward (opens with zoom-in); star 2
+  starts at shape=23 backward (opens with zoom-out) so the two breaths
+  are naturally out of phase.
+- **Twin-star orbits + priority swap.** Each star orbits on a sine
+  path indexed by `star{1,2}_orbit_phase` advanced at different speeds
+  (`ORBIT_SPEED_1=1`, `ORBIT_SPEED_2=2`). VIC priority rule (higher
+  sprite number = in front) means star 2 always renders on top by
+  default — a `swap_flag` toggles which star owns sprites 0-3 vs 4-7
+  on the bit-6 transition of `(star2_phase - star1_phase)`, so the
+  depth alternates at max separation (~64 frames between swaps) and
+  is invisible because the stars are far apart at the swap moment.
+- **`$D01B` in-front-of-text toggle** — same trigger as the priority
+  swap. Stars appear to orbit through the title plane in 3D.
+- **Parallax PETSCII starfield** (PR #31) — 32 stars across 4 speed
+  tiers (`tier_speed[]={3,5,8,14}` half-rate ticks per move), 4
+  distinct chars (`+ * . ,`, fast→slow) and 4 colours
+  (white / lt-grey / dk-grey / blue). Per half-rate tick each star's
+  countdown advances; on zero the star erases its current col, dec's
+  col with wrap `0→39`, draws the tier's char + colour at the new
+  position. Title rows 11/13 are never assigned, so drift passes
+  above + below the title.
+- **Slow border colour cycle** through a 256-entry calm palette
+  (black / blue / light-blue / light-grey), driven by
+  `col_tab[zp_frame]`.
+- **Dedicated V3 kick** — coda "owns" V3 (no arp competing), so it
+  sets a real kick ADSR (`A=0, D=8, S=0, R=0`) once in setup and runs
+  a hard-restart state machine each beat: gate-off frame → fresh
+  gate-on + pitch-swept body. ~60 BPM, simpler than greets' kicks
+  because there's nothing to fight with on the voice. See
+  [`docs/sid-drums.md`](./docs/sid-drums.md).
+- Half-rate divider on `zp_subtick` keeps `zp_frame` ticking at
+  25 Hz; after `N_FRAMES = 250` (~10 s) the IRQ writes `$30` to
+  `$f6` and pefchain advances to end.
 - Inherits intro's music pages (`'I', $10, $12`). Drums from intro's
-  `my_music_play` are silenced (`zp_outro` gate stays zero because coda's
-  setup zeros `$f6`); only the coda's own V3 kick sounds.
-- EFO claims `'P', $08, $0A` for code + col_tab and `'P', $28, $37` for
-  all four quadrants of star sprite data (16 pages).
+  `my_music_play` are silenced (`zp_outro` gate stays zero because
+  coda's setup zeros `$f6`); only the coda's own V3 kick sounds.
+- EFO claims `'P', $08, $0F` for code + `col_tab` + `sin_tab`
+  (8 pages — `sin_tab` MUST end before `$1000` or it stomps the
+  inherited intro music tables), and `'P', $20, $37` for the
+  6 KB of Kloot-star shape data (overlaps end's `$30-$44` claim;
+  end's payload is deferred until coda finishes).
 
 ### Part 7 — `parts/end/end.asm` (credit roll)
 
@@ -270,9 +316,9 @@ at `setup` / `interrupt` / `fadeout` routines plus memory-page tags.
 ```
 parts/screenfill/screenfill.pef     06 = 00
 parts/intro/intro.pef               f6 = f0
-parts/interlude/interlude.pef       f6 = 10
+parts/interlude/interlude.pef       f6 = 0a
 parts/sinus/sinus.pef               f6 = 30
-parts/greets/greets.pef             f6 = 20
+parts/greets/greets.pef             f6 = a0
 parts/coda/coda.pef                 f6 = 30
 parts/end/end.pef                   stay
 ```
@@ -288,15 +334,17 @@ Each condition tells pefchain when to advance:
 
 - `06 = 00` — wait for zero-page `$06` (= screenfill's HOLDCNT) to hit 0.
 - `f6 = f0` — wait for `$f6` (= intro's `zp_outro`) to reach `T_OUTRO_DONE`.
-- `f6 = 10` — wait for `$f6` (= interlude's beat counter) to reach 16
-  (~7.5 s). Same byte reused from intro, reset to 0 by interlude's setup.
+- `f6 = 0a` — wait for `$f6` (= interlude's beat counter) to reach 10
+  (~7.7 s after the interlude breathing-room rework). Reset to 0 by
+  interlude's setup.
 - `f6 = 30` — wait for `$f6` (= sinus' transition byte) to be set to
   $30 by sinus once `$fc` (the actual frame counter, off-music-clobber)
   hits 250. Sinus's setup resets `$f6` to 0.
-- `f6 = 20` — wait for `$f6` (= greets' beat counter) to reach 32.
-  Same byte again, reset by greets' setup.
+- `f6 = a0` — wait for `$f6` (= greets' beat counter) to reach 160
+  (~77 s). Settle phase kicks in at beat 144 (~69 s); the last ~8 s
+  hold the screen on the KLOOT landing. Reset to 0 by greets' setup.
 - `f6 = 30` — wait for `$f6` (= coda's `zp_timer`) to be set to `$30`
-  by coda's IRQ once its `$fc` half-rate frame counter hits N_FRAMES
+  by coda's IRQ once its half-rate frame counter hits N_FRAMES
   (~10 s). Coda's setup resets `$f6` to 0.
 - `stay`    — never advance (end runs forever).
 

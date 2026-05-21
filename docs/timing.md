@@ -3,26 +3,6 @@
 All values are approximate; everything is subject to change as
 effects and music evolve.
 
-## MCP-measured timings (21 May 2026)
-
-PAL 50 fps, VICE x64sc, measured via polling `$F6` every ~3 s from
-autostart:
-
-| Time (s) | `$F6` | Part |
-|----------|-------|------|
-| 0–51 | `$00` | screenfill → intro — `$F6` is `zp_outro` in intro, stays 0 until outro starts |
-| 51–54 | `$00`→`$1A`→`$66`→`$B2` | Transition cluster — intro outro sweeps `zp_outro` 0→`$F0`, triggers interlude |
-| 54–66 | `$66`→`$B2`→`$3C` | Rapid — interlude + sinus (fast `$F6` update), then greets loads |
-| 66–87 | `$01`→`$03`→`$05`→`$08`→`$0A`→`$0C`→`$0E` | **Greets** — slow beat-counter increment (every ~0.48 s) |
-| 90 | `$00` | Transition to coda → end (`$F6` reset) |
-
-**Greets visible window: ~21 s** (beat 1→30 of 32).
-Scroll advances 1 char every 6 frames → ~8.3 chars/s.
-At 21 s ≈ 175 chars shown, roughly 20% of message visible before
-transition to coda. Bumped to SCROLL_DELAY=12 (4.2 chars/s) for
-readability — same total chars shown (~88 chars over 21 s ≈ 10
-lines of ~30).
-
 ## Frame / tick basis
 
 | Unit | Rate | Per |
@@ -34,20 +14,21 @@ lines of ~30).
 ## Part chain
 
 ```
-screenfill ──5.6s──→ intro ──73s──→ interlude ──7.5s──→ sinus ──5s──→ greets ──15s──→ coda ──10s──→ end (loops)
+screenfill ──5.6s──→ intro ──73s──→ interlude ──7.7s──→ sinus ──5s──→ greets ──77s──→ coda ──10s──→ end (loops)
 ```
 
 | Part | Duration | Cumulative | Transition ZP | Trigger |
 |------|----------|------------|---------------|---------|
 | screenfill | 5.6 s | 5.6 s | `$06` (HOLDCNT) | `06 = 00` |
 | intro | 73.3 s | 78.9 s | `$F6` (zp_outro) | `F6 = F0` |
-| interlude | 7.7 s | 86.6 s | `$F6` (zp_beat_count) | `F6 = 10` |
+| interlude | 7.7 s | 86.6 s | `$F6` (zp_beat_count) | `F6 = 0a` |
 | sinus | 5.0 s | 91.6 s | `$F6` (zp_timer) | `F6 = 30` |
-| greets | 15.4 s | 107.0 s | `$F6` (zp_beat_count) | `F6 = 20` |
-| coda | 10.0 s | 117.0 s | `$F6` (zp_timer) | `F6 = 30` |
+| greets | 76.8 s | 168.4 s | `$F6` (zp_beat_count) | `F6 = a0` |
+| coda | 10.0 s | 178.4 s | `$F6` (zp_timer) | `F6 = 30` |
 | end | loops | — | (none) | `stay` |
 
-**One-pass runtime: ~1 min 57 s** from boot to looping credits.
+**One-pass runtime: ~3 min** from boot to looping credits (post
+greets-extended PR #32).
 
 ---
 
@@ -151,17 +132,20 @@ see `docs/pefchain-notes.md`.
 
 ## Part 5 — greets (`parts/greets/`)
 
-32 beats × 24 frames = **15.36 s**.
+160 beats × 24 frames = **76.8 s** (post PR #32 epic-extended rework
+— was 32 beats / 15.4 s). Three phases:
 
 | Beat | Time | Event |
 |------|------|-------|
-| 0 | 0 s | 8 X-expanded sprites show 8-char window of greetings text. |
-| Each beat | every 0.48 s | Kick on V3 (10-frame pitch sweep). Music V1+V2 play naturally. |
-| 0–31 | 0–15.4 s | Text advances 1 char per 6 frames. DYCP sine wobble per sprite. |
-| **32 (= $20)** | **15.4 s** | pefchain loads coda. |
+| 0 | 0 s | 8 X-expanded sprites show 8-char window of greetings text. DYCP wobble ±2 px Y / ±1 px X (PR #34). |
+| Each beat | every 0.48 s | Kick on V3 (driven from intro's `my_music_play`). Music V1+V2 play naturally. |
+| 0–119 | 0–57.6 s | **Phase 1 — full scroll.** Text advances 1 char per 8 frames (was 12). 16-bit `scroll_pos` reaches the full ~640-byte message. |
+| 120–143 | 57.6–69.1 s | **Phase 2 — fade.** `zp_damp_shift` ramps 0→5 in quarter-beat steps. DYCP/DXCP apply sign-preserving ASRs to each sine sample → wobble shrinks 2→1→0 px. Scroll delay reads from `SCROLL_DELAY_TABLE` (8 → 12 → 18 → 28 → 50 → 128) so the scroller decelerates with the wobble. |
+| 144–159 | 69.1–76.8 s | **Phase 3 — settle.** Scroll snaps to `settle_text` ("  KLOOT  "), sprites lock flat at `SPR_Y_BASE`, colour cycle keeps shimmering. Beat counter still ticks so pefchain sees the trigger. |
+| **160 (= $A0)** | **76.8 s** | pefchain loads coda. `fadeout` zeros `$D015` for a clean handoff. |
 
-Only ~128 of 864 text characters scroll through before the
-32-beat limit triggers the transition.
+The full greets list now reads through and lands a deliberate "KLOOT"
+endpoint instead of just stopping mid-scroll.
 
 ---
 
@@ -169,34 +153,42 @@ Only ~128 of 864 text characters scroll through before the
 
 `N_FRAMES = 250` half-rate ticks (~10.0 s at the 25 Hz subtick divider).
 
-Four-sprite Kloot star: sprites 0-3 form a 2×2 grid, each X+Y-expanded
-(48×42 on screen, source 24×21). Four quadrant data files at
-`$2800`/`$2C00`/`$3000`/`$3400`, sprite bases `$A0`/`$B0`/`$C0`/`$D0`.
+Twin 4-sprite Kloot stars: sprites 0-3 (star 1, brown `$09`) and 4-7
+(star 2, cyan `$0E`) each form a 2×2 grid, X+Y-expanded (48×42 per
+quadrant, source 24×21). Both stars share the 6 KB Stage E shape
+data at `$2000-$37FF` (TR/TL/BL/BR at `$2000/$2600/$2C00/$3200`,
+sprite-pointer bases `$80/$98/$B0/$C8`, 24 frames each).
 
 | Frame | Time | Event |
 |-------|------|-------|
-| 0 | 0 s | Setup: text mode, ROM uppercase chargen at `$1000`, screen `$0400`. Title text painted on rows 11 and 13. V3 ADSR pre-loaded with kick shape (`AD=$08, SR=$00`). `$F6` zeroed → drums from intro's `my_music_play` silenced. All 4 sprites enabled (`$D015=$0F`) but initially collapsed at screen centre `(160,128)`. |
-| 0 → ~30 | 0 → ~1.2 s | **Stage D animate-in**: sprites explode outward from centre to final positions (TR/TL/BL/BR at KLOOT_X_{LEFT,RIGHT} / KLOOT_Y_{TOP,BOT}). Position interpolation via separate tables per quadrant. |
-| 0 → 249 | 0 → 10.0 s | **Stage C breath modulation**: collective scale + position bob from a 256-entry sine table. Y-position bob synced to kick phase. |
-| 0 → 249 | 0 → 10.0 s | **Per-quadrant petal shape**: lobe curvature modulates per frame per quadrant, creating asymmetric petal shapes. |
+| 0 | 0 s | Setup: text mode, ROM uppercase chargen at `$1000`, screen `$0400`. Title text painted on rows 11 and 13. V3 ADSR pre-loaded with kick shape (`AD=$08, SR=$00`). `$F6` zeroed → drums from intro's `my_music_play` silenced. All 8 sprites enabled (`$D015=$FF`) at fixed quad positions. Parallax starfield seeded (32 stars at predetermined rows, all initial ticks loaded from `tier_speed[]`). |
+| 0 → 249 | 0 → 10.0 s | **Stage F ping-pong zoom breath**: star 1 starts at shape=0 dir=forward → opens with zoom-in; star 2 starts at shape=23 dir=backward → opens with zoom-out. Each star's `kloot_shape_N` walks 0→23→0 via shared `kloot_advance` subroutine. Rotation reverse-loop is invisible (12-fold symmetry). |
 | ~26 raw = zp_frame 13 | ~0.52 s | First audible V3 kick (after 25-frame lead-in countdown). Kick fires every 50 raw frames thereafter (~60 BPM). |
-| each zp_frame tick | 25 Hz | Per-star ping-pong shape counters tick at independent dividers (`SHAPE_DIV_1=3`, `SHAPE_DIV_2=2`). Each counter walks 0→23→0 for a 24-frame ping-pong zoom cycle. |
-| 0 → 249 | 0 → 10.0 s | Border colour cycles through `col_tab` (256-entry slow sine). Colour RAM star-field twinkles in top 5 rows. |
+| each zp_frame tick | 25 Hz | Independent ping-pong shape dividers (`SHAPE_DIV_1=3`, `SHAPE_DIV_2=2`) → fundamentally different rotation rates so lobes drift apart. Independent orbital phases (`ORBIT_SPEED_1=1`, `ORBIT_SPEED_2=2`) for the sine-path orbits. |
+| ~64-frame periods | varies | Priority swap fires on bit-6 transition of `(star2_phase - star1_phase)` — happens at max separation so invisible. Swaps sprite slot assignments + colour registers (brown stays brown) and toggles `$D01B` so the in-front star alternates. |
+| each half-rate tick | 25 Hz | Parallax starfield: each star's tick decrements; on zero the star erases its current col, dec col with wrap 0→39, draws tier char + colour at the new col. 4 tiers × 8 stars; tier speeds 3/5/8/14. |
+| 0 → 249 | 0 → 10.0 s | Border colour cycles through `col_tab` (256-entry slow sine). |
 | **250** | **10.0 s** | IRQ writes `$F6 = $30`, border snaps to black, `$D015 = $00` hides sprites; pefchain's `f6 = 30` fires, end loads. |
 
 Per-frame: `INTRO_MUSIC_PLAY` (chord pad + lead on V1/V2), then
-`coda_kick` on V3 (10-frame pitch sweep, hard restart each beat).
+`star_field` (parallax tick), then `coda_kick` on V3 (12-frame
+pitch sweep, hard restart each beat). Sprite pointers re-written at
+50 Hz (every IRQ) via a 4-iteration Y-indexed loop over
+`sprite_bases` so the Spindle NMI loader can't drag them away.
 `zp_subtick` toggles each IRQ; only every second IRQ increments
 `zp_frame`. Sprite pointers written every IRQ (50 Hz) to guard
-against Spindle NMI clobber — same pattern as greets' per-frame
+against Spindle NMI clobber — same pattern as greets'
 `update_sprite_ptrs`.
 
-**EFO ownership**: `'P', $08, $0A` (code + col_tab, 3 pages). `'P', $28,
-$37` (all 4 quadrant star data: `$2800-$2BFF` TR, `$2C00-$2FFF` TL,
-`$3000-$33FF` BL, `$3400-$37FF` BR — 16 pages). `'I', $10, $12` inherits
-intro's music. Four quadrant `.bin` files passed separately to `mkpef`
-via `build.sh` instead of one large contiguous PRG, avoiding zero-padded
-gaps across greets' memory.
+**EFO ownership**: `'P', $08, $0F` (code + state + col_tab + sin_tab,
+8 pages — `sin_tab` MUST end before `$1000` or it stomps the
+inherited intro music tables; see `docs/memory-layout.md` "Stage F
+note"). `'P', $20, $37` (all 4 quadrants of Kloot shape data:
+`$2000-$25FF` TR, `$2600-$2BFF` TL, `$2C00-$31FF` BL,
+`$3200-$37FF` BR — 24 pages, 6 KB). `'I', $10, $12` inherits
+intro's music. The four quadrant `.bin` files are passed
+separately to `mkpef` via `build.sh` instead of one large
+contiguous PRG, avoiding zero-padded gaps across greets' memory.
 
 ---
 

@@ -6,28 +6,46 @@
 > right under this paragraph — read that first, dive into stage A/B
 > only if you need the back-story.
 
-## Current state (as of 2026-05-21)
+## Current state (as of 2026-05-21, post Stage F + parallax + NMI fix)
 
 The coda runs **TWO** Kloot stars on screen at once + a 32-star
-background starfield. The whole effect is built on the Stage E
-pre-rendered zoom shape data:
+parallax PETSCII starfield. The whole effect is built on the Stage E
+pre-rendered zoom shape data plus the Stage F ping-pong counter on
+top of it:
 
 - **6 KB shape data** at `$2000-$37FF` — 4 quadrants × 24 frames × 64 B.
   Each 24-frame sequence = **8 zoom** (small → full with rotation
   built in) + **16 steady-rotation** frames. Pre-rendered with
-  `tools/render_kloot_star.py` using the params in the next section
-  (asymmetric 12-lobe Claude-style sparkle with breath modulation).
-  Both stars share this same data — the difference is per-star X/Y
-  positions and per-star shape counters.
+  `tools/render_kloot_star.py` using the params in the "Current
+  render command" section below (asymmetric 12-lobe Claude-style
+  sparkle with breath modulation). Both stars share this same data —
+  the difference is per-star X/Y positions, per-star shape counters,
+  and per-star ping-pong direction.
 - **Star 1** = sprites 0-3 (brown `$09`), **Star 2** = sprites 4-7
   (cyan `$0E`). Each has its own `kloot_shape_N` counter (0..23)
   advancing at independent rates (`SHAPE_DIV_1=3`, `SHAPE_DIV_2=2`
   ticks-per-step at the half-rate divider) → fundamentally different
   rotation speeds, lobes drift apart visually.
+- **Stage F ping-pong zoom breath** (PR #33). Each star's
+  `kloot_shape_N` walks `0 → 23 → 0` forever via a per-star direction
+  byte (`kloot_dir_N`). Forward: zoom in (0..7) → rotate (8..23) →
+  reverse. Backward: rotate in reverse (23..8) → zoom out (7..0) →
+  reverse. Star 1 starts at shape=0 forward (opens with zoom-in);
+  star 2 starts at shape=23 backward (opens with zoom-out). The two
+  breaths are naturally out of phase — one shrinks while the other
+  grows. Rotation reversal is invisible because the burst has 12-fold
+  symmetry. Shared step routine `kloot_advance` indexed by `X = star
+  number (0 or 1)` keeps the binary footprint manageable.
 - **Orbital motion**: each star has its own `starN_orbit_phase`
   advancing per IRQ (`ORBIT_SPEED_1=1`, `ORBIT_SPEED_2=2`). Phase
-  indexes a 256-byte sine table at `$0B00`. X / Y offsets computed
-  from sine + cosine (cosine via phase + 64 offset).
+  indexes a 256-byte sine table at `$0F00` (page-aligned — MUST end
+  before `$1000` or it stomps the inherited intro music tables).
+  X / Y offsets computed from sine + cosine (cosine via phase + 64
+  offset).
+- **Sprite-pointer writes** are now a 4-iteration Y-indexed loop over
+  a `sprite_bases` table (one of the cost-recoveries from PR #33).
+  Pointers re-written every IRQ at 50 Hz (commit `ae80273`) so the
+  Spindle NMI loader can't pull the kloot quads off-screen.
 - **Depth swap**: a `swap_flag` toggles which star is in front. The
   toggle fires on the bit-6 transition of (phase2 − phase1) — that
   happens every ~64 frames at max separation, so the swap is invisible
@@ -37,19 +55,24 @@ pre-rendered zoom shape data:
 - **In-front-of-text toggle**: `$D01B` flips between `$FF` (sprites
   behind text) and `$00` (sprites in front) on the same safe-window
   trigger. Stars appear to orbit through the title in 3D.
-- **Full-screen starfield**: 32 asterisks (`$2A`) painted into screen
-  RAM at setup at fixed positions (`star_pos` table, 16-bit COL_RAM
-  addresses). `star_field` cycles their colours via 8-bank rotation
-  using **self-modifying STA** (NOT ZP indirect — would clobber
-  `$FB` zp_subtick and `$FC` zp_frame, which hangs the transition).
-  Self-mod patches `star_patch_col + 1` (operand-lo) and `+2`
-  (operand-hi) — **NOT `+0` (opcode)**, which would corrupt the
-  instruction itself.
+- **Parallax PETSCII starfield** (PR #31). 32 stars across 4 speed
+  tiers (`tier_speed[]={3,5,8,14}` half-rate ticks per move), 4
+  distinct chars (`+ * . ,`) and 4 colours (white / lt-grey /
+  dk-grey / blue). Per half-rate tick each star's countdown advances;
+  on zero the star erases its current col, decrements col with wrap
+  `0→39`, draws the tier's char + colour at the new column. Title
+  rows 11 and 13 are never assigned to any star so the drift passes
+  above + below the centred title.
 
 IRQ ordering inside coda's `interrupt`:
 `jsr my_music_play → jsr star_field → jsr coda_kick → half-rate
-state advance → priority-swap detect → orbital motion math → sprite
-position writes`.
+state advance (`kloot_advance` called twice with X=0, X=1) →
+sprite-pointer loop → priority-swap detect → orbital motion math →
+sprite position writes`.
+
+EFO claims: `'P', $08, $0F` for code + state + col_tab + sin_tab
+(8 pages), `'P', $20, $37` for the 6 KB Kloot-star shape data,
+`'I', $10, $12` for inherited intro music.
 
 ## Current render command (Stage E)
 
