@@ -3,7 +3,7 @@
 All values are approximate; everything is subject to change as
 effects and music evolve.
 
-## MCP-measured timings (19 May 2026)
+## MCP-measured timings (21 May 2026)
 
 PAL 50 fps, VICE x64sc, measured via polling `$F6` every ~3 s from
 autostart:
@@ -180,14 +180,16 @@ Four-sprite Kloot star: sprites 0-3 form a 2×2 grid, each X+Y-expanded
 | 0 → 249 | 0 → 10.0 s | **Stage C breath modulation**: collective scale + position bob from a 256-entry sine table. Y-position bob synced to kick phase. |
 | 0 → 249 | 0 → 10.0 s | **Per-quadrant petal shape**: lobe curvature modulates per frame per quadrant, creating asymmetric petal shapes. |
 | ~26 raw = zp_frame 13 | ~0.52 s | First audible V3 kick (after 25-frame lead-in countdown). Kick fires every 50 raw frames thereafter (~60 BPM). |
-| each zp_frame tick | 25 Hz | All 4 sprite pointers advance in lockstep: `kloot_shape = (kloot_shape + 1) & $0F`. 16 frames × 4-fold symmetry = seamless 360° visual rotation in ~0.64 s. |
+| each zp_frame tick | 25 Hz | Per-star ping-pong shape counters tick at independent dividers (`SHAPE_DIV_1=3`, `SHAPE_DIV_2=2`). Each counter walks 0→23→0 for a 24-frame ping-pong zoom cycle. |
 | 0 → 249 | 0 → 10.0 s | Border colour cycles through `col_tab` (256-entry slow sine). Colour RAM star-field twinkles in top 5 rows. |
 | **250** | **10.0 s** | IRQ writes `$F6 = $30`, border snaps to black, `$D015 = $00` hides sprites; pefchain's `f6 = 30` fires, end loads. |
 
 Per-frame: `INTRO_MUSIC_PLAY` (chord pad + lead on V1/V2), then
 `coda_kick` on V3 (10-frame pitch sweep, hard restart each beat).
 `zp_subtick` toggles each IRQ; only every second IRQ increments
-`zp_frame`.
+`zp_frame`. Sprite pointers written every IRQ (50 Hz) to guard
+against Spindle NMI clobber — same pattern as greets' per-frame
+`update_sprite_ptrs`.
 
 **EFO ownership**: `'P', $08, $0A` (code + col_tab, 3 pages). `'P', $28,
 $37` (all 4 quadrant star data: `$2800-$2BFF` TR, `$2C00-$2FFF` TL,

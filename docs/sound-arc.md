@@ -26,7 +26,7 @@ overlays** on top of that continuous music.
 |-------------|---------------------------------------------------------------------|
 | screenfill  | (silence — SID untouched, music engine isn't running yet)           |
 | intro       | Bass + lead + arp build in. Drums kick in late (when `zp_outro != 0` — intro's outro animation starts, ~20 s in). K-S-K-S backbeat: V3 paints kick (triangle pitch slam) and snare (low-noise + triangle body) alternating on the quarter; V1 bass-bleeds N_C1 (~33 Hz) sub under both. |
-| interlude   | Pad-only first ~1.6 s (V1 muted, line A "FOR YEARS…" typewriter reveals). Last 2.4 s buildup: V1 returns, LP cutoff ramps up with **V1 + V2 both routed through the filter** (res $2) so the bass AND lead open up together, sprite-letter "AI WROTE" drops, drums continue from intro. |
+| interlude   | Pad-only first ~2.9 s (V1 muted, line A "FOR YEARS…" typewriter reveals over 2.8 s). Last ~4.8 s buildup: V1 returns, LP cutoff ramps up with **V1 + V2 both routed through the filter** (res $2) so the bass AND lead open up together, sprite-letter "SPARKED" drops with border flash, drums continue from intro. |
 | sinus       | **Breakdown.** LP filter closes — and now actually closes audibly because V1 + V2 are routed through it ($D417 = $23, res $2). Cutoff ramps $70 → $08 over the duration; vol fades over the last 50 frames. Drums silent (sinus zeros `$F6 = zp_outro` — the gating byte). The eye of the storm before the drop. |
 | greets      | **Climax / drop.** Drums return (greets' setup re-arms `$F6`), full mix + lead + arp. V2 (lead) routed through LP filter ($D417 = $42, res $4) with a slow cutoff "wah" — `zp_wobble_pos` OR'd with $40 ramps $40..$FF over 5 s breathing the melody. DYCP scroller tells the personal arc on top of the loudest moment. |
 | coda        | **The trophy.** Intro's drums silenced again (coda's setup zeros `$F6`), but coda *owns* V3 for the whole part — overrides the arp every IRQ with its own hard-restart kick on a ~60 BPM cadence. Chord pad + lead drift on V1/V2 under a sparser, slower thump than greets. Twin Kloot stars orbit on sine paths behind the title; brown + cyan; star-field asterisks twinkle around them. Music breathes out. |
@@ -250,10 +250,10 @@ The "feeling of transition" is carried by:
   interlude's plasma** — sudden bass drop + the human's confession,
   char by char during the pad phase. The story's line 1 lands here.
 - **V1 return + LP cutoff sweep (V1 + V2 both filtered) + sprite-letter
-  "AI WROTE" drop on the buildup beat** — story line 2 (the AI's
-  answer, drops as 8 hires sprites from above) lands exactly when
-  the filter opens and the bass returns. The two-line joke is
-  complete *as* the music opens up.
+  "SPARKED" drop on the buildup beat** — story line 2 (the AI's
+  answer, drops as 8 hires sprites from above, white border flash
+  on landing) lands exactly when the filter opens and the bass
+  returns. The two-line joke is complete *as* the music opens up.
 - **Drums STOP + LP filter close + vol fade in sinus** — the
   breakdown / breather, the calm before the drop. Visual is a
   hypnotic sine wobble of repeating DEFEEST text. The LP close is

@@ -14,7 +14,7 @@ That's the whole thing. Seven parts carry it.
 ```
 [01] screenfill   the disk loads          — DEFEEST bloom
 [02] intro       the cracktro arrives    — deFEEST presents…
-[03] interlude   the confession           — FOR YEARS NO TIME / AI WROTE
+[03] interlude   the confession           — FOR YEARS NO TIME / SPARKED
 [04] sinus       the breath                — quiet, breadbin-blue wobble
 [05] greets      the party                  — lunchbased lifeforms, shoutouts
 [06] coda        the trophy                  — KLOTEN MET DE BROODTROMMEL
@@ -56,11 +56,11 @@ buildup beat hits — LP filter sweeps open on bass AND lead together
 — and the answer drops in from above as eight sprite letters:
 
 ```
-                AI WROTE
+                SPARKED
 ```
 
 It's a joke. It's the truth. It's the whole demo in two lines. AI
-doesn't walk; AI writes. The line lands, the energy lifts, the
+doesn't walk; it sparks. The line lands, the energy lifts, the
 party isn't quite here yet — but the bass is coming back.
 
 ### 4. The breath (sinus)
@@ -121,11 +121,11 @@ Lunch was served.
 ```
 beat:    quiet  →  build  →  confess  →  breathe  →  drop  →  settle  →  bow
 visual:  load   →  intro   →  text drop →  wobble  →  greetz →  twin star → credits
-story:   --     →  hello   →  AI WROTE  →  --       →  thanks →  trophy   →  --
+story:   --     →  hello   →  SPARKED   →  --       →  thanks →  trophy   →  --
 music:   silent →  drums in→  filter rise→ filter close→full kit→ slow kick→ chord reprise
 ```
 
-When the AI WROTE letters drop, the bass returns and the filter
+When the SPARKED letters drop, the bass returns and the filter
 opens. When the sinus filter closes, the drums stop. When the
 greets drums come back, the lead's wah kicks in. When the coda
 title lands, the drums sparse out to one beat per second. Each
