@@ -632,30 +632,27 @@ sine_table_x:
 // folks whose tools / inspiration got us here.
 * = $8600
 message:
-.text "        GREETZ TO ALL LUNCHBASED LIFEFORMS    "
-.text "FROM ROTTERDAM AND BEYOND     "
-.text "NO BREAD WAS HARMED DURING THIS PRODUCTION    "
-.text "EXCEPT THE PINDAKAAS SANDWICH IN DRIVE 1541   "
-.text "KLOTEN MET DE BROODTROMMEL    "
-.text "THE OFFICIAL LUNCHTIME RELEASE OF X2026    "
-.text "SMEERKAAS   BROODJEKAAS.EXE   "
-.text "TUPPERWARE DIVISION   ROTTERDAM   "
-.text "ALL HAIL THE HAM PIRATES    "
-.text "GREETINGS TO FAIRLIGHT   TRIAD   BONZAI   "
-.text "GENESIS PROJECT   OXYRON   BYTERAPERS    "
-.text "CENSOR DESIGN   PHOBOS TEAM    "
-.text "AND ALL THE QUIET CODERS WHO MADE THE TOOLS    "
-.text "THIS RELEASE STANDS ON YOUR SHOULDERS    "
-.text "ESPECIALLY KLOOT THE AI FOR MAKING IT HAPPEN    "
-.text "THANK YOU EVERYONE    "
-.text "NOW GO EAT YOUR LUNCH    "
-.text "        "
-// Landing point for the settle phase. The first 8 chars after this
+.text "    XENON   SILICON LTD   SCS TRC         "
+.text "    FOCUS   FAIRLIGHT   REFLEX            "
+.text "    BONZAI   GENESIS PROJECT   EXTEND     "
+.text "    TRSI   OXYRON   BYTERAPERS            "
+.text "    CENSOR DESIGN   CHANNEL FOUR          "
+.text "    PADUA   ATLANTIS   ELYSIUM            "
+.text "    EXCESS   TRIAD   NEOPLASIA            "
+.text "    THE DREAMS   RADWAR   PERFORMERS      "
+.text "    VANDALISM NEWS   NAH-KOLOR   LOTEK    "
+.text "    CHOCOTROPHY   PHOBOS TEAM             "
+.text "    SIDMASTERS   THE WEEKENDERS           "
+.text "    LETHARGY   ONSLAUGHT   LEVEL          "
+.text "    SUCCESS   ARTLINE   RESOURCE          "
+.text "    PLUSH   FINNISH GOLD  NURDS           "
+.text "    OFFENCE   POO-BRAIN   RABENAUGE       "
+.text "    HOKUTO FORCE ABYSS CONNECTION         "
 // label fill the on-screen 8-sprite window once settle kicks in;
 // pad with trailing spaces so even if the scroller drifts past it
 // for any reason, the visible window stays clean.
 settle_text:
-.text "  KLOOT                                                  "
+.text "  KLOOT                                   "
 .byte $00
 
 
