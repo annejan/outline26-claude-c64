@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Export character rows 8-16 (the DEFEEST logo) from a Koala .kla file
-as a paletted 320x72 PNG for hand-pixel editing.
+as a paletted 320x72 PNG for pixel editing.
 
 Usage:
   python3 tools/koala_to_logo_png.py parts/screenfill/defeest.kla /tmp/logo.png

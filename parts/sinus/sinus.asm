@@ -119,10 +119,10 @@ setup:
         sta $04A5,x
         dex
         bpl !t2-
-        // Row 7 col 10: "then kloot walked in" — the catalyst, echoes
-        // the interlude plasma's "BUT THEN KLOOT WALKED IN" tease.
+        // Row 7 col 10: "kloot forked process" — the catalyst, echoes
+        // the interlude plasma's "KLOOT FORKED PROCESS" tease.
         ldx #19
-!t3:    lda text_kloot_walked,x
+!t3:    lda text_kloot_forked,x
         sta $0522,x
         dex
         bpl !t3-
@@ -350,18 +350,18 @@ bg_tab:
 // Narrative text fragments — screen codes for lowercase chargen at
 // $1800 (a=$01, b=$02, ..., z=$1A; space=$20; digits=$30..$39).
 //
-// The story: years passed without breadbin code; then kloot walked
-// in; result is this demo, dedicated to X2026.
+// The story: years passed without breadbin code; then kloot forked
+// process; result is this demo, dedicated to X2026.
 //==================================================================
 text_years:        // "years went by" — 13 chars
         .byte $19, $05, $01, $12, $13, $20, $17, $05, $0E, $14, $20, $02, $19
 text_no_time:      // "no time for breadbin code" — 25 chars
         .byte $0E, $0F, $20, $14, $09, $0D, $05, $20, $06, $0F, $12, $20
         .byte $02, $12, $05, $01, $04, $02, $09, $0E, $20, $03, $0F, $04, $05
-text_kloot_walked: // "then kloot walked in" — 20 chars (catalyst,
+text_kloot_forked: // "kloot forked process" — 20 chars (catalyst,
                    // echoes interlude bass-return)
-        .byte $14, $08, $05, $0E, $20, $0B, $0C, $0F, $0F, $14
-        .byte $20, $17, $01, $0C, $0B, $05, $04, $20, $09, $0E
+        .byte $0B, $0C, $0F, $0F, $14, $20, $06, $0F, $12, $0B
+        .byte $05, $04, $20, $10, $12, $0F, $03, $05, $13, $13
 text_pair:         // "patient pair coder" — 18 chars
         .byte $10, $01, $14, $09, $05, $0E, $14, $20, $10, $01, $09, $12
         .byte $20, $03, $0F, $04, $05, $12

@@ -241,7 +241,7 @@ they become chunky blobs.
 ### Levers we kept on the table
 
 - **Custom MC-native font**: glyphs designed natively for 4 MC pixels
-  wide. Cleaner result but ~184 bytes of hand-drawn glyph data plus
+  wide. Cleaner result but ~184 bytes of custom glyph data plus
   encoding work. Postponed.
 - **Mode-switch to HIRES on the text row**: would give 8 hires pixels
   per cell with full chargen quality. Mid-frame `$D016` toggle is
@@ -366,7 +366,7 @@ part; the fld standalone is just the FLD intro.
 Useful subdirectories from the lft-loader repo:
 
 - **`defeest-intro/`** — sprite-letters bouncing-wave intro. 7 multi-
-  colour sprites each carry one hand-drawn letter of "deFEEST". Five-
+  colour sprites each carry one custom letter of "deFEEST". Five-
   IRQ chain, phase-offset Y bounce per sprite, text-mode bottom-row
   scroller. The notable trick is **shape-sharing**: sprites 1, 3, 4
   all point at sprite block `$3040` (= letter 'e') — three 'e's in

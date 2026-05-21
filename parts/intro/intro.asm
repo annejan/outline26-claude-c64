@@ -22,7 +22,7 @@
 // its T_* threshold; balls spawn one-at-a-time at T_BALLS + N*8 ticks.
 // Outro cascade: zp_outro arms when scroll_text hits $ff and unwinds
 // the same elements in reverse, ending with `jsr $200 / jmp $3800` to
-// hand off to part 3 (the credit roll).
+// transition to part 3 (the credit roll).
 //==================================================================
 
 .const SPR_X        = $d000
@@ -1798,7 +1798,7 @@ scroll_text:
         // block (block2_end-1 → block2_start) so the source reads
         // forward despite chars sliding rightward off cell 0.
 block2_start:
-        .text "                           Open borders, FLD-bounce logo, rainbow bars, 8-sprite balls, hand-written SID."
+        .text "                           Open borders, FLD-bounce logo, rainbow bars, 8-sprite balls, custom SID."
         .byte $fe
 block2_end:
         // ---- block 3: mode 2 (zig-zag split) ----

@@ -40,7 +40,7 @@ Bouncing logo, raster bars, balls. "deFEEST presents… a C64 demo
 for X2026… Anus and Claude Opus and Augurk and Cinder and…"
 The classic intro shape: chord pad + lead + arp running, and 20
 seconds in the **drums kick in late** — that's the moment the demo
-properly starts. The intro hands off mid-thump.
+properly starts. The intro transitions out mid-thump.
 
 ### 3. The confession (interlude — story line 1)
 

@@ -1139,10 +1139,10 @@ is_header:
         .byte 0,0,0,0       // 16..19 four code credits
         .byte 0             // 20     blank
         .byte 1             // 21     music
-        .byte 0,0,0         // 22..24 composed/by Anus/with help
+        .byte 0,0,0         // 22..24 coded/by Anus/with help
         .byte 0             // 25     blank
         .byte 1             // 26     graphics
-        .byte 0,0           // 27..28 defeest.nl / hand pixeled with love
+        .byte 0,0           // 27..28 defeest.nl / pixeled with love
         .byte 0             // 29     blank
         .byte 1             // 30     tools
         .byte 0,0,0,0,0     // 31..35 five tools
@@ -1199,13 +1199,13 @@ credit_text:
         row("              Cinder/deFEEST            ")
         row("                                        ")
         row("           music                        ")
-        row("              composed and arranged     ")
+        row("              coded and sequenced       ")
         row("              by Anus                   ")
         row("              with help from Kloot AI   ")
         row("                                        ")
         row("           graphics                     ")
         row("              defeest.nl                ")
-        row("              hand pixeled with love    ")
+        row("              pixeled with love         ")
         row("                                        ")
         row("           tools                        ")
         row("              claude code               ")

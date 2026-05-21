@@ -101,7 +101,7 @@ the voice for the entire part).
 ### K-S-K-S kit (since 2026-05-20)
 
 The original "single rumble" kick has been replaced by a two-drum
-kit walked from a 16-byte table (`drum_table` at the end of intro's
+kit built from a 16-byte table (`drum_table` at the end of intro's
 music segment). Both drums share the same DRUM_LEN=4 window, the
 same V1 sub-bass layer, and the same gate-on-throughout / peak-ADSR
 pattern — the character difference is the V3 voicing.

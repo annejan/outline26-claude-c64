@@ -22,8 +22,8 @@ shape of the process:
   freezes the demo, the first debug move is usually `vice.registers.get`
   + `vice.memory.read` to see exactly which 12 bytes got corrupted and
   why (see e.g. the `feedback-kickass-hi-byte-precedence` memory note —
-  a `>label + N` parser-precedence trap that walked DEFEEST screencodes
-  through all 64 KB of memory).
+a `>label + N` parser-precedence trap that spread DEFEEST screencodes
+through all 64 KB of memory).
 - **Claude keeps a persistent memory** of the project's anchor commit,
   toolchain quirks, raster-bar timing rules, sprite write windows,
   Spindle script byte-counts, KA syntax gotchas, etc. — so re-discovered
@@ -61,7 +61,7 @@ trigger. The end card is the only "stay" loop.
 
 - **Animated radial deFEEST bloom.** Setup precomputes a 1024-byte
   `char_table` (each cell's final deFEEST character, picked by a rotating
-  bit-mask walk over upper/lower case). Interrupt then reveals the text
+  bit-mask sweep over upper/lower case). Interrupt then reveals the text
   ring-by-ring: every 6 frames, all cells whose `dist_table` value
   equals the current `RADIUS` get copied from `char_table` into screen
   RAM. 16 rings ≈ 1.9 s of bloom.
@@ -328,7 +328,7 @@ thing.
 | `$07f8-$07ff`  | Sprite pointers                                |
 | `$0810-$0a46`  | Main code + IRQs (entry point: `$0810`)        |
 | `$0b00-$0b3f`  | Sprite shape data (block `$2c`)                |
-| `$1000-$1275`  | Hand-written 3-voice SID player + patterns     |
+| `$1000-$1275`  | Custom 3-voice SID player + patterns          |
 | `$2000-$3f3f`  | Logo bitmap (multicolour, 8000 bytes)          |
 | `$4000-$47ff`  | Page-aligned tables (palette, sines, bounce)   |
 | `$4c00-$53ff`  | Chargen-ROM copy (mixed-case font for scroll)  |
@@ -346,7 +346,7 @@ thing.
   (black/blue/yellow/white) so every cell has the same 4 colours —
   works for logos with a small palette.
 - `tools/koala_to_logo_png.py` — export logo rows 8-16 from a Koala
-  as a paletted 320×72 PNG for hand-editing.
+  as a paletted 320×72 PNG for pixel-editing.
 - `tools/logo_png_to_asm.py` — import an edited PNG back to
   `logo_rows.asm`, preserving original screen RAM colour assignments.
 - `tools/render_kloot_star.py` — pre-render Kloot star rotation frames.

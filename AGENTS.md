@@ -139,7 +139,7 @@ The intro logo occupies bitmap character rows 8-16 (pixel rows 64-135,
 bytes); screen RAM and colour RAM are filled uniformly at runtime by
 `clear_screen`.
 
-To hand-pixel the logo:
+To pixel-edit the logo:
 
 ```bash
 # 1. Export current logo as paletted 320×72 PNG (Pepto C64 palette)
@@ -239,7 +239,7 @@ cmp #((>char_table) + 4) ; what you actually want
 
 The `>` (hi-byte) operator binds **tighter** than `+`. We've shipped a
 bug where a wrap-page stop comparison silently never matched and
-walked DEFEEST screencodes across all 64 KB of memory, corrupting the
+spread DEFEEST screencodes across all 64 KB of memory, corrupting the
 code beneath it. Always parenthesise hi-byte arithmetic.
 
 ### Local labels: `!label+` vs `!label-`
