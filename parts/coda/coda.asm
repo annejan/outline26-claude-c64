@@ -209,10 +209,13 @@
 
         .const zp_timer       = $f6           // transition: set to $30 to trigger pefchain
 .const zp_kick_count  = $f7           // IRQ countdown to next beat
-.const zp_kick_state  = $f8           // 0=idle, KICK_LEN+1=hard-restart frame,
-                                      //         1..KICK_LEN=body frames
-                                      // Avoid $f9/$fa — intro's my_music_play
-                                      // clobbers them every JSR.
+// kick_state used to live at $F8 — but intro's resident my_music_play
+// READS $F8 every frame as `zp_intro` to compute master volume (vol =
+// $F8 >> 3, clamped to $0F). Parking kick_state there pinned the music
+// to silence in coda because the state spends ~38/50 frames at 0.
+// Now in code RAM, see `kick_state:` near the other coda state below.
+// Same reason $F9/$FA are off-limits — `zp_tmp`/`zp_msb` get clobbered
+// inside my_music_play.
 .const zp_subtick     = $fb           // half-rate divider toggle
 .const zp_frame       = $fc           // animation tick (0..N_FRAMES-1)
                                       // zp_kick_freq lives in code RAM (not zp)
@@ -230,7 +233,7 @@ setup:
         sta zp_timer
         sta zp_subtick
         sta zp_frame
-        sta zp_kick_state                // idle until first beat
+        sta kick_state                // idle until first beat
 
         // Coda owns V3 — pre-load the kick ADSR shape so each beat
         // gets a real attack→decay envelope. The arp (V3) would
@@ -562,6 +565,14 @@ fadeout:
 //==================================================================
 interrupt:
         jsr INTRO_MUSIC_PLAY
+        // Re-assert master vol: my_music_play computes $D418 from
+        // $F8 (zp_intro) every frame, which would only matter if
+        // something accidentally wrote to $F8 — but it's cheap
+        // belt-and-braces given coda's near-silence regression came
+        // from exactly this path. Same idiom interlude / sinus /
+        // greets use.
+        lda #$1f
+        sta SID_VOL
 
         jsr star_field
         jsr coda_kick
@@ -828,33 +839,33 @@ interrupt:
 // sound. Envelope state is owned by us via V3's ADSR (set in setup).
 //
 // State machine:
-//   zp_kick_state == 0       : idle. Decrement zp_kick_count; when
+//   kick_state == 0       : idle. Decrement zp_kick_count; when
 //                              it reaches 0, arm a new beat by
 //                              writing CTRL = $10 (triangle, gate
 //                              OFF) — this starts the envelope's
 //                              release (R=0 → instant to zero) so
 //                              the next frame's gate=1 gives a
 //                              clean fresh attack.
-//   zp_kick_state == KICK_LEN: body frame 0 — the FIRST tick after
+//   kick_state == KICK_LEN: body frame 0 — the FIRST tick after
 //                              hard restart. Set fresh freq, write
 //                              CTRL = $11 (triangle + gate ON). The
 //                              envelope sees a 0→1 transition and
 //                              starts a fresh attack from zero.
-//   zp_kick_state in 1..KL-1 : body frames. Sweep freq down, keep
+//   kick_state in 1..KL-1 : body frames. Sweep freq down, keep
 //                              CTRL = $11 (no waveform retrigger,
 //                              envelope decays naturally per AD).
-//   zp_kick_state == 0 again : body done. Reset zp_kick_count for
+//   kick_state == 0 again : body done. Reset zp_kick_count for
 //                              next beat. V3 envelope sits at S=0.
 //==================================================================
 coda_kick:
-        lda zp_kick_state
+        lda kick_state
         bne !body+
         // ---- idle phase: count down to next beat ----
         dec zp_kick_count
         bne !done+
         // arm: hard restart this frame, body starts next frame
         lda #KICK_LEN
-        sta zp_kick_state
+        sta kick_state
         lda #KICK_FREQ_HI
         sta kick_freq
         lda #$10                        // triangle + gate OFF
@@ -887,7 +898,7 @@ coda_kick:
         sta SID_V3_FREQHI
         lda #$11                        // triangle + gate ON
         sta SID_V3_CTRL
-        dec zp_kick_state
+        dec kick_state
 !done:
         rts
 
@@ -895,6 +906,13 @@ coda_kick:
 // Kick freq shadow — lives in code RAM rather than zp because the
 // zp_f6..f8 window is already crowded.
 kick_freq:
+        .byte 0
+
+// kick state-machine counter (0..KICK_LEN). Lives in code RAM
+// because $F8 — its natural home — is `zp_intro` to intro's resident
+// my_music_play, which reads $F8 every frame as the master-volume
+// source. Parking state there pinned coda's chord pad to silence.
+kick_state:
         .byte 0
 
 

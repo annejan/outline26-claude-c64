@@ -64,15 +64,22 @@
 .const zp_wobble_pos     = $f5
 .const zp_beat_count     = $f6
 .const zp_scroll_pos     = $f7  // 16-bit lo (was 8-bit only)
-.const zp_scroll_tick    = $f8
-.const zp_scroll_pos_hi  = $f9  // 16-bit hi — message > 256 B needs this
-.const zp_damp_shift     = $fa  // 0..5 — ASR count for fade-phase damp
 .const zp_beat_kick      = $f3  // beat-sync Y kick (decays 0→0)
+
+// scroll_tick / scroll_pos_hi / damp_shift used to live at $F8/$F9/$FA
+// — exactly the slots intro's resident my_music_play reads ($F8 =
+// zp_intro for vol) and writes ($F9 = zp_tmp, $FA = zp_msb as scratch
+// during music_play). Parking state there meant scroll_pos_hi was
+// overwritten every frame and the message scrolled into random pages
+// past offset 255. Now in code RAM (1 extra cycle/access — fine).
+scroll_tick:    .byte 0
+scroll_pos_hi:  .byte 0    // hi byte of 16-bit scroll position
+damp_shift:     .byte 0    // 0..5 — ASR count for fade-phase damp
 
 // (Dead greets kick code removed — drums now ride on intro's
 // resident `my_music_play` via the K-S-K-S kit + V1 bass-bleed.
-// $fa still reserved by EFO claim as scratch; update_sprite_ptrs
-// uses $fb/$fc which sit outside the claim — fine during IRQ.)
+// update_sprite_ptrs uses $fb/$fc which sit outside the EFO Z claim
+// — fine during IRQ since the CPU is ours.)
 
 
 * = $8000 "Greets"
@@ -119,7 +126,7 @@ setup:
         // initial sprite pointers: first 8 chars of message
         lda #0
         sta zp_scroll_pos
-        sta zp_scroll_pos_hi
+        sta scroll_pos_hi
         jsr update_sprite_ptrs
 
         // X-expand all 8, no Y-expand, mono, in front
@@ -164,9 +171,9 @@ setup:
         lda #0
         sta zp_beat_phase
         sta zp_beat_count
-        sta zp_scroll_tick
+        sta scroll_tick
         sta zp_beat_kick
-        sta zp_damp_shift
+        sta damp_shift
 
         lda #$00
         sta VIC_RASTER
@@ -217,7 +224,7 @@ interrupt:
 !no_beat:
 
         // ----- Fade-phase damp_shift -----
-        // From FADE_BEAT_START up to SETTLE_BEAT, ramp `zp_damp_shift`
+        // From FADE_BEAT_START up to SETTLE_BEAT, ramp `damp_shift`
         // from 0 → 5 in steps of 1 every 4 beats. The DYCP/DXCP code
         // below applies that many arithmetic-shift-rights to each
         // sine sample, so the wobble amplitude shrinks 2 → 1 → 0 px.
@@ -229,7 +236,7 @@ interrupt:
         cmp #FADE_BEAT_START
         bcs !in_fade+
         lda #0
-        sta zp_damp_shift
+        sta damp_shift
         jmp !damp_done+
 !in_fade:
         sec
@@ -240,7 +247,7 @@ interrupt:
         bcc !clamp_ok+
         lda #5
 !clamp_ok:
-        sta zp_damp_shift
+        sta damp_shift
 !damp_done:
 
         // ----- Settle gate -----
@@ -330,9 +337,9 @@ interrupt:
         adc zp_wobble_pos
         tay
         lda sine_table,y           // signed -2..+2
-        // Sign-preserving arithmetic shift right, zp_damp_shift times.
+        // Sign-preserving arithmetic shift right, damp_shift times.
         // shift 0 = full amplitude; shift 5 = effectively 0.
-        ldy zp_damp_shift
+        ldy damp_shift
         beq !d_no_damp+
 !d_damp:
         cmp #$80                   // C := bit 7 (sign)
@@ -373,7 +380,7 @@ interrupt:
         tay
         lda sine_table_x,y         // signed -1..+1
         // Same damp ramp as DYCP — ASR sign-preserving.
-        ldy zp_damp_shift
+        ldy damp_shift
         beq !x_no_damp+
 !x_damp:
         cmp #$80
@@ -399,20 +406,20 @@ interrupt:
         // the fade ramps up to 64 so the scroll smoothly slows toward
         // a stop alongside the wobble damp. 16-bit scroll_pos carries
         // lo → hi on overflow so the full ~700 B message is reachable.
-        ldy zp_damp_shift
+        ldy damp_shift
         lda SCROLL_DELAY_TABLE,y
         sta $fc                    // scratch (outside EFO claim, IRQ-owned)
-        ldx zp_scroll_tick
+        ldx scroll_tick
         inx
         cpx $fc
         bcc !no_scroll+
         ldx #0
         inc zp_scroll_pos
         bne !no_scroll_carry+
-        inc zp_scroll_pos_hi
+        inc scroll_pos_hi
 !no_scroll_carry:
 !no_scroll:
-        stx zp_scroll_tick
+        stx scroll_tick
 
         jmp !irq_exit+
 
@@ -423,7 +430,7 @@ interrupt:
         lda #<(settle_text - message)
         sta zp_scroll_pos
         lda #>(settle_text - message)
-        sta zp_scroll_pos_hi
+        sta scroll_pos_hi
         jsr update_sprite_ptrs
 
         // Colour cycle keeps shimmering so the held phrase doesn't
@@ -508,7 +515,7 @@ update_sprite_ptrs:
         adc zp_scroll_pos
         sta msg_lookup + 1
         lda #>message
-        adc zp_scroll_pos_hi
+        adc scroll_pos_hi
         sta msg_lookup + 2
 
         ldx #0

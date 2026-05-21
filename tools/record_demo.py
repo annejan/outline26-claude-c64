@@ -27,11 +27,14 @@ that they'll bleed into the audio track.
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
 import urllib.request
 
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DEFAULT_D64 = os.path.join(REPO_ROOT, "outline-64.d64")
 DEFAULT_URL = "http://127.0.0.1:6510/mcp"
 DEFAULT_WIN_NAME = "VICE (C64SC)"
 DEFAULT_DURATION_S = 210
@@ -103,7 +106,7 @@ def find_speaker_monitor() -> str:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--d64", default="/home/annejan/Projects/x2026/outline-64.d64",
+    p.add_argument("--d64", default=DEFAULT_D64,
                    help="path to the .d64 to autostart (default: %(default)s)")
     p.add_argument("-o", "--output", default=DEFAULT_OUTPUT,
                    help="output .mp4 path (default: %(default)s)")

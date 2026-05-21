@@ -22,3 +22,8 @@ __pycache__/
 KickAssembler.zip
 kickass/
 chargen.bin
+
+# ...but DO ship the C64 chargen ROM in greets so `git clone &&
+# ./build.sh` works out of the box. greets/interlude LoadBinary it
+# at assembly time; without it a fresh checkout fails immediately.
+!parts/greets/chargen.bin
