@@ -125,46 +125,54 @@ so we never touch CIA2 `$DD00` after the initial Spindle setup.
 | Range          | screenfill | intro      | interlude | sinus     | greets    | coda      | end       |
 |----------------|------------|------------|-----------|-----------|-----------|-----------|-----------|
 | `$0200-$03FF`  | Spindle    | Spindle    | Spindle   | Spindle   | Spindle   | Spindle   | Spindle   |
-| `$0400-$07FF`  | screen RAM | bitmap colour info | screen + plasma | screen (DEFEEST) | screen + chars | title screen | screen + credits |
-| `$0800-$0BFF`  | —          | code + IRQs + sprite shapes | code + tables | code + tables | —     | code + state + tier tables | — |
-| `$0C00-$0CFF`  | —          | (free)     | code+     | code (tail) | —       | code (cont.) + ping-pong state + starfield init data | — |
-| `$0D00-$0DFF`  | —          | —          | code+     | —         | —         | code (cont.) + title text | — |
-| `$0E00-$0EFF`  | —          | —          | code (interlude) | — | —         | col_tab   | —         |
-| `$0F00-$0FFF`  | —          | —          | —         | —         | —         | sin_tab   | —         |
+| `$0400-$07FF`  | screen RAM | bitmap colour info | screen + plasma | screen (DEFEEST) | bitmap colour attrs (koala c1+c2) | title screen | screen + credits |
+| `$0800-$0BFF`  | —          | code + IRQs + sprite shapes | code + tables | code + tables | DYCP sprite font (A-Z + blank + hyphen, 2 KB total) | code + state + tier tables | — |
+| `$0C00-$0CFF`  | —          | (free)     | code+     | code (tail) | sprite font (cont.) | code (cont.) + ping-pong state + starfield init data | — |
+| `$0D00-$0DFF`  | —          | —          | code+     | —         | sprite font (cont.) | code (cont.) + title text | — |
+| `$0E00-$0EFF`  | —          | —          | code (interlude) | — | sprite font (cont.) | col_tab   | —         |
+| `$0F00-$0FFF`  | —          | —          | —         | —         | sprite font (cont.) | sin_tab   | —         |
 | `$1000-$125D`  | —          | **resident music tables + `my_music_play` — inherited by interlude / sinus / greets / coda; end uses its own player** ||||||
 | `$1300-$1FFF`  | —          | compact logo_rows | —    | —         | —         | —         | —         |
-| `$2000-$27FF`  | —          | logo bitmap (multicolour) | — | —    | sprite font | Kloot-star TR + TL shapes (24 frames ea.) | — |
-| `$2800-$2BFF`  | —          | (logo bitmap continues) | — | —     | —         | Kloot-star TL shapes (cont.) | — |
-| `$2C00-$31FF`  | —          | (logo bitmap continues) | — | —     | —         | Kloot-star BL shapes (24 frames) | — |
-| `$3200-$37FF`  | —          | (logo bitmap continues) | — | —     | —         | Kloot-star BR shapes (24 frames) | — |
-| `$3800-$3F3F`  | —          | (logo bitmap continues) | — | —     | —         | —         | end font + code |
+| `$2000-$27FF`  | —          | logo bitmap (multicolour) | — | —    | koala bitmap (320×200 MCM) | Kloot-star TR shapes (24 frames) | — |
+| `$2800-$2BFF`  | —          | (logo bitmap continues) | — | —     | koala bitmap (cont.) | Kloot-star TL shapes (cont.) | — |
+| `$2C00-$31FF`  | —          | (logo bitmap continues) | — | —     | koala bitmap (cont.) | Kloot-star BL shapes (24 frames) | — |
+| `$3200-$37FF`  | —          | (logo bitmap continues) | — | —     | koala bitmap (cont.) | Kloot-star BR shapes (24 frames) | — |
+| `$3800-$3F3F`  | —          | (logo bitmap continues) | — | —     | koala bitmap (cont.) | —         | end font + code |
 | `$4000-$47FF`  | —          | rainbow palette + sine + bounce tables | — | — | — | — | — |
 | `$4C00-$53FF`  | —          | chargen-ROM copy (for scroll) | — | — | — | — | — |
 | `$5400-$5BBC`  | —          | bitmap scroller + scroll text + extra sprite shape | — | — | — | — | — |
 | `$8000-$85FF`  | —          | —          | —         | —         | code + IRQ + DYCP tables | —     | —         |
-| `$8600-$88B7`  | —          | —          | —         | —         | scroll message + settle_text | — | — |
-| `$88B8-$8F37`  | —          | —          | —         | —         | sprite-font glyph data (A-Z + `$9A` blank) | — | — |
+| `$8700-$8901`  | —          | —          | —         | —         | scroll message + settle_text | — | — |
+| `$8902-$90FF`  | —          | —          | —         | —         | sprite-font glyph data (built at assembly time) | — | — |
+| `$9800-$9BE7`  | —          | —          | —         | —         | koala screen-RAM buffer (CPU-copied to $0400 at setup) | — | — |
+| `$9C00-$9FE8`  | —          | —          | —         | —         | koala colour-RAM buffer + bg byte (CPU-copied to $D800 at setup) | — | — |
 | `$C000-$CAFF`  | code + dist_table + ripple palette + char_table | — | — | — | — | — | — |
 
 EFO `'P'` claims as of today:
 
-| Part       | Page claims           |
-|------------|-----------------------|
-| screenfill | `$C0-$CA`             |
-| intro      | `$04-$5B`, `$10-$12`  |
-| interlude  | `$08-$0E`             |
-| sinus      | `$08-$0D`             |
-| greets     | `$80-$8F`, `$20-$27`  |
-| coda       | `$08-$0F`, `$20-$37`  |
-| end        | `$30-$44`             |
+| Part       | Page claims                       |
+|------------|-----------------------------------|
+| screenfill | `$C0-$CA`                         |
+| intro      | `$04-$5B`, `$10-$12`              |
+| interlude  | `$08-$0E`                         |
+| sinus      | `$08-$0D`                         |
+| greets     | `$08-$0F`, `$20-$3F`, `$80-$9F`   |
+| coda       | `$08-$0F`, `$20-$37`              |
+| end        | `$30-$44`                         |
 
-Coda reuses the same `$0800` pages sinus claimed earlier in the chain
-— sinus is long gone by the time coda loads, so the bytes are free
-to repurpose. Greets' sprite font at `$2000-$27FF` and coda's Kloot
-sprite shapes at `$2000-$37FF` both overlap the area intro used for
-its bitmap; intro is also gone by then. Coda also claims `$30-$37`
-which overlaps with end's `$30-$44` — end runs strictly after coda,
-so pefchain defers ~2 KB of end's payload to a post-coda load chunk
+Greets has the biggest claim now — sprite font at `$08-$0F` (2 KB),
+koala bitmap at `$20-$3F` (8 KB), code + message + font_data + koala
+screen/colour buffers at `$80-$9F` (8 KB). Total ~18 KB of greets data
+needs to load before the part starts, which is why the longest blank-
+filler gap in the demo sits between sinus and greets (~11 s of
+pefchain-managed loading masked by black-screen blank effects that
+still call music via the `'M' + bit !0` mechanism).
+
+Coda reuses the same `$0800` pages sinus and greets claimed earlier
+in the chain — those parts are long gone by the time coda loads, so
+the bytes are free to repurpose. Coda also claims `$30-$37` which
+overlaps with end's `$30-$44`; end runs strictly after coda, so
+pefchain defers ~2 KB of end's payload to a post-coda load chunk
 (visible as ~0.5 s gap at the coda → end transition).
 
 The Kloot-star shapes don't live in coda's `.prg` (which would force
@@ -229,11 +237,12 @@ grow coda's code, watch `parts/coda/coda.sym` for `sin_tab=$1000+`
   VIC bank as the screen RAM at `$0400`, and `$D018` selects it via
   the chargen bits.
 
-- **greets' sprite font is at `$2000-$27FF`**. That's the same area
-  intro uses for its bitmap (`$2000-$3FFF`), but by the time greets
-  runs intro is gone, so the bytes are free to repurpose. Pefchain
-  doesn't know or care — it just sees the EFO header's `'P',$20,$23`
-  claim and protects those pages while greets is the active part.
+- **greets' sprite font moved to `$0800-$0FFF`** (was `$2000-$27FF`
+  in earlier text-mode-only versions). Reason: greets is now in
+  multi-colour bitmap mode with the koala backdrop at `$2000-$3F3F`,
+  so the sprite font needed to relocate out of that region. Sprite
+  pointer values shifted from `$80-$9F` to `$20-$3F` to match.
+  `ptr_lookup` was updated to map A-Z → `$20+(c-$41)`.
 
 ## Background loading and the load-gap problem
 

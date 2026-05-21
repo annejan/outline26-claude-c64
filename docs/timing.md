@@ -113,10 +113,11 @@ characters; end-of-text = `$FF` triggers outro.
 
 | Beat | Time | Event |
 |------|------|-------|
-| 0–5 | 0–2.9 s | Pad-only: V1 bass muted ($D404 = 0). Plasma + line A typewriter "FOR YEARS NO TIME FOR BREADBIN CODE" reveals over 2.8 s. |
+| 0 | 0 s | Setup: V3 muted via `$D418` bit 7 (no drums, no arp), V1 muted via `$D404 = 0` (no bass) → ONLY V2 lead audible. `mu_step` forced to 32 (phrase 2 = active 8ths) so the lead is moving under the typewriter. V2 PWM modulated via `zp_xphase` for a phaser feel. |
+| 0–5 | 0–2.9 s | Pad-only: solo V2 lead with PWM phaser + plasma + line A typewriter "FOR YEARS NO TIME FOR BREADBIN CODE" reveals over 2.8 s. Music-box feel under the confession. |
 | 5 | 2.9 s | Line A fully revealed. ~0.1 s reading time before buildup. |
-| 6 (BUILDUP_BEAT) | 2.9 s | V1 bass re-enabled. LP filter sweep starts at cutoff=$40. Raster bars appear. SPARKED sprite letters begin fly-in. |
-| 7–15 | 3.4–7.2 s | Filter cutoff += $16 per beat: $40 → $56 → $6C → … → $FF (saturates at beat ~12). SPARKED settles at beat ~7, bounces, white border flash on landing. |
+| 6 (BUILDUP_BEAT) | 2.9 s | `$D418` bit 7 clears = V3 on (K-S-K-S kit + arp slam back in). V1 bass re-enabled. LP filter sweep starts at cutoff=$70. Raster bars appear. SPARKED sprite letters begin fly-in. |
+| 7–15 | 3.4–7.2 s | Filter cutoff += $16 per beat: $70 → $86 → $9C → … → $FF (saturates). SPARKED settles at beat ~7, bounces, white border flash on landing. PHASE_DONE freezes the sprite state once FLY_OUT completes (no second fly). |
 | 15 | 7.2 s | SPARKED letters fly out. |
 | **16 (= $10)** | **7.7 s** | pefchain loads sinus. |
 
@@ -181,7 +182,10 @@ Part length is now coupled to message length: add or remove names in
 
 ## Part 6 — coda (`parts/coda/`)
 
-`N_FRAMES = 250` half-rate ticks (~10.0 s at the 25 Hz subtick divider).
+`N_FRAMES = 800` half-rate ticks (~32 s at the 25 Hz subtick divider).
+This is the **triumphant trophy** moment — full K-S-K-S kit + V1 bass
+pattern + V2 lead + V3 triangle arp, held under the title for ~32 s
+while the twin Kloot stars dance behind it.
 
 Twin 4-sprite Kloot stars: sprites 0-3 (star 1, brown `$09`) and 4-7
 (star 2, cyan `$0E`) each form a 2×2 grid, X+Y-expanded (48×42 per
@@ -191,24 +195,24 @@ sprite-pointer bases `$80/$98/$B0/$C8`, 24 frames each).
 
 | Frame | Time | Event |
 |-------|------|-------|
-| 0 | 0 s | Setup: text mode, ROM uppercase chargen at `$1000`, screen `$0400`. Title text painted on rows 11 and 13. V3 ADSR pre-loaded with kick shape (`AD=$08, SR=$00`). `$F6` zeroed → drums from intro's `my_music_play` silenced. All 8 sprites enabled (`$D015=$FF`) at fixed quad positions. Parallax starfield seeded (32 stars at predetermined rows, all initial ticks loaded from `tier_speed[]`). |
-| 0 → 249 | 0 → 10.0 s | **Stage F ping-pong zoom breath**: star 1 starts at shape=0 dir=forward → opens with zoom-in; star 2 starts at shape=23 dir=backward → opens with zoom-out. Each star's `kloot_shape_N` walks 0→23→0 via shared `kloot_advance` subroutine. Rotation reverse-loop is invisible (12-fold symmetry). |
-| ~26 raw = zp_frame 13 | ~0.52 s | First audible V3 kick (after 25-frame lead-in countdown). Kick fires every 50 raw frames thereafter (~60 BPM). |
-| each zp_frame tick | 25 Hz | Independent ping-pong shape dividers (`SHAPE_DIV_1=3`, `SHAPE_DIV_2=2`) → fundamentally different rotation rates so lobes drift apart. Independent orbital phases (`ORBIT_SPEED_1=1`, `ORBIT_SPEED_2=2`) for the sine-path orbits. |
-| ~64-frame periods | varies | Priority swap fires on bit-6 transition of `(star2_phase - star1_phase)` — happens at max separation so invisible. Swaps sprite slot assignments + colour registers (brown stays brown) and toggles `$D01B` so the in-front star alternates. |
+| 0 | 0 s | Setup: text mode, ROM uppercase chargen at `$1000`, screen `$0400`. Title text painted on rows 11, 13, 15 (KLOTEN MET DE BROODTROMMEL / A DIGITAL LUNCH EXPERIENCE / RELEASED AT X2026). `$F6 = $01` enables drum gate so intro's K-S-K-S kit fires through the whole part. `$F8 = $80` restores zp_intro between T_BARS and T_SCROLLER so V1+V2 freq writes fire but V3 stays as triangle (drum_tick's last waveform). All 8 sprites enabled (`$D015=$FF`) with twin-star orbit math driving X/Y every frame. Parallax PETSCII starfield seeded (32 stars across 4 speed tiers). |
+| 0 → 799 | 0 → 32.0 s | **Stage F ping-pong zoom breath**: star 1 starts at shape=0 dir=forward → opens with zoom-in; star 2 starts at shape=23 dir=backward → opens with zoom-out. `kloot_shape_N` walks 0→23→0 via shared `kloot_advance` subroutine; rotation reverse-loop is invisible (12-fold symmetry). |
+| each zp_frame tick | 25 Hz | Independent shape dividers (`SHAPE_DIV_1=3`, `SHAPE_DIV_2=2`) → fundamentally different rotation rates so lobes drift apart. Independent orbital phases (`ORBIT_SPEED_1=2`, `ORBIT_SPEED_2=3`) for the sine-path orbits at `ORBIT_RADIUS=56`. |
+| each frame | 50 Hz | Priority swap fires on bit-6 transition of `(star2_phase - star1_phase)` — happens at max separation so invisible. Swaps sprite slot assignments + colour registers (brown stays brown) and toggles `$D01B` so the in-front star alternates ~every 1.3 s. |
 | each half-rate tick | 25 Hz | Parallax starfield: each star's tick decrements; on zero the star erases its current col, dec col with wrap 0→39, draws tier char + colour at the new col. 4 tiers × 8 stars; tier speeds 3/5/8/14. |
-| 0 → 249 | 0 → 10.0 s | Border colour cycles through `col_tab` (256-entry slow sine). |
-| **250** | **10.0 s** | IRQ writes `$F6 = $30`, border snaps to black, `$D015 = $00` hides sprites; pefchain's `f6 = 30` fires, end loads. |
+| each frame | 50 Hz | V2-cutoff LFO: `$d416 = sin_tab[zp_frame] + $a0` so the filtered lead breathes through the held title (sin_tab values ±56 give a $4a..$d8 cutoff sweep — wide-open, bright). |
+| 0 → 799 | 0 → 32.0 s | Border colour cycles through `col_tab` (256-entry slow sine). |
+| **800** | **32.0 s** | IRQ writes `$F6 = $30`, border snaps to black, `$D015 = $00` hides sprites; pefchain's `f6 = 30` fires, end loads. |
 
-Per-frame: `INTRO_MUSIC_PLAY` (chord pad + lead on V1/V2), then
-`star_field` (parallax tick), then `coda_kick` on V3 (12-frame
-pitch sweep, hard restart each beat). Sprite pointers re-written at
-50 Hz (every IRQ) via a 4-iteration Y-indexed loop over
-`sprite_bases` so the Spindle NMI loader can't drag them away.
-`zp_subtick` toggles each IRQ; only every second IRQ increments
-`zp_frame`. Sprite pointers written every IRQ (50 Hz) to guard
-against Spindle NMI clobber — same pattern as greets'
-`update_sprite_ptrs`.
+Per-frame: orbit math + sprite-position writes FIRST (so VIC's
+per-raster sprite-Y check sees the new positions before raster 52,
+preventing the top/bottom-quad gap), then `INTRO_MUSIC_PLAY` (chord
+pad + lead + K-S-K-S kit on V3), then `star_field` (parallax tick).
+Sprite pointers re-written every IRQ (50 Hz) via a 4-iteration
+Y-indexed loop over `sprite_bases` so the Spindle NMI loader can't
+drag them away. `zp_subtick` toggles each IRQ; only every second IRQ
+increments the 16-bit half-rate frame counter (`zp_frame` + `frame_hi`)
+used to compare against `N_FRAMES`.
 
 **EFO ownership**: `'P', $08, $0F` (code + state + col_tab + sin_tab,
 8 pages — `sin_tab` MUST end before `$1000` or it stomps the

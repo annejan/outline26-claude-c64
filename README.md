@@ -250,18 +250,22 @@ trigger. The end card is the only "stay" loop.
 - **Slow border colour cycle** through a 256-entry calm palette
   (black / blue / light-blue / light-grey), driven by
   `col_tab[zp_frame]`.
-- **Dedicated V3 kick** — coda "owns" V3 (no arp competing), so it
-  sets a real kick ADSR (`A=0, D=8, S=0, R=0`) once in setup and runs
-  a hard-restart state machine each beat: gate-off frame → fresh
-  gate-on + pitch-swept body. ~60 BPM, simpler than greets' kicks
-  because there's nothing to fight with on the voice. See
-  [`docs/sid-drums.md`](./docs/sid-drums.md).
+- **Triumphant K-S-K-S kit + V1 bass-bleed sub-thump** — setup sets
+  `$F6 = $01` so intro's resident drum kit fires through the whole
+  part (no dedicated coda kick anymore). V3 alternates between the
+  triangle kick pitch-slam and the snare during drum windows; V1's
+  `N_C1` (~33 Hz) bleed gives the sub body on every hit. Also
+  `$F8 = $80` puts `zp_intro` between `T_BARS` and `T_SCROLLER` so
+  V1+V2 walk their patterns but V3's ctrl stays as triangle (= mellow
+  arp between drum hits instead of pulse). See
+  [`docs/sid-drums.md`](./docs/sid-drums.md) for the K-S-K-S kit.
+- Filter routing inherits greets' `$D417 = $42` (V2 routed through
+  LP); coda then runs a slow sin-LFO on `$D416` (cutoff) for a
+  ~10 s breath under the held title.
 - Half-rate divider on `zp_subtick` keeps `zp_frame` ticking at
-  25 Hz; after `N_FRAMES = 250` (~10 s) the IRQ writes `$30` to
-  `$f6` and pefchain advances to end.
-- Inherits intro's music pages (`'I', $10, $12`). Drums from intro's
-  `my_music_play` are silenced (`zp_outro` gate stays zero because
-  coda's setup zeros `$f6`); only the coda's own V3 kick sounds.
+  25 Hz; after `N_FRAMES = 800` half-rate ticks (~32 s) the IRQ
+  writes `$30` to `$f6` and pefchain advances to end.
+- Inherits intro's music pages (`'I', $10, $12`).
 - EFO claims `'P', $08, $0F` for code + `col_tab` + `sin_tab`
   (8 pages — `sin_tab` MUST end before `$1000` or it stomps the
   inherited intro music tables), and `'P', $20, $37` for the
