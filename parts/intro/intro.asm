@@ -1790,7 +1790,7 @@ sine_bot:
 scroll_text:
         .text "                                        "
         // ---- block 1: mode 0 (left scroll, normal) ----
-        .text " deFEEST presents Anus and Kloot using codebase.c64.org                         "
+        .text " deFEEST presents Anus and Kloot using codebase.c64.org                       "
         .byte $fe
         // ---- block 2: mode 1 (right scroll) ----
         // update_bmp_scroll walks zp_text_ptr backwards across this
