@@ -412,6 +412,9 @@ you mute the other voices in a SID player.
 - **Build-up bars** — if the part is building tension, no-drums-yet
   is itself a build-up element.
 
-We use this in interlude: pad-only first 24 beats (no drums, V1 muted),
-build-up beats 24-31 (V1 returns + filter sweep, still no drums),
-greets (drums + bass + full mix = climax), end (drum-free reprise).
+We use this in interlude: pad-only first ~6 beats (V1 muted via
+$D404=0 AND V3 muted via $D418 bit 7 = "V3 off", so the K-S-K-S kit
+and the arp are both silent — only V2 lead audible under the
+typewriter), build-up from BUILDUP_BEAT onward (V3 bit clears →
+drums + arp slam back in, V1 returns, LP filter sweep), greets
+(drums + bass + full mix = climax), end (drum-free reprise).
