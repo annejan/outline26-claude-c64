@@ -150,8 +150,10 @@ def main() -> int:
 
     if not args.no_reset:
         # Ensure real-time playback (no warp).
+        # WarpMode 0 = real-time capture; SidModel 1 = 8580 (our declared
+        # submission target — reproducible filter, see docs/music-theory.md).
         mcp_call(args.mcp_url, "vice.machine.config.set",
-                 resources={"WarpMode": 0})
+                 resources={"WarpMode": 0, "SidModel": 1})
         mcp_call(args.mcp_url, "vice.machine.reset", mode="hard")
         time.sleep(0.3)
         mcp_call(args.mcp_url, "vice.autostart", path=args.d64)

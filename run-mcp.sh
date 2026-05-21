@@ -37,9 +37,14 @@ if ! ss -tln | grep -q 6510; then
     exit 1
 fi
 
-# Enable 1541 drive (the MCP build defaults to 0 = no drive).
+# Enable 1541 drive (the MCP build defaults to 0 = no drive) AND
+# select SID 8580 (= SidModel 1) — the demo's declared submission
+# preference. The 8580's digital filter is reproducible across
+# C64 hardware, so the filter sweeps in interlude / sinus / greets /
+# end land identically every time. See docs/music-theory.md
+# "Target SID chip: 8580" for the rationale.
 curl -s -H "Content-Type: application/json" http://127.0.0.1:6510/mcp \
-    -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"vice.machine.config.set","arguments":{"resources":{"Drive8Type":1541}}}}' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"vice.machine.config.set","arguments":{"resources":{"Drive8Type":1541,"SidModel":1}}}}' \
     > /dev/null
 
 # Autostart the disk.
