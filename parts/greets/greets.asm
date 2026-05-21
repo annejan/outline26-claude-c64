@@ -640,13 +640,13 @@ message:
 .text "    PADUA   ATLANTIS   ELYSIUM            "
 .text "    EXCESS   TRIAD   NEOPLASIA            "
 .text "    THE DREAMS   RADWAR   PERFORMERS      "
-.text "    VANDALISM NEWS   NAH-KOLOR   LOTEK    "
+.text "    VANDALISM NEWS   NAH KOLOR   LOTEK    "
 .text "    CHOCOTROPHY   PHOBOS TEAM             "
 .text "    SIDMASTERS   THE WEEKENDERS           "
 .text "    LETHARGY   ONSLAUGHT   LEVEL          "
 .text "    SUCCESS   ARTLINE   RESOURCE          "
 .text "    PLUSH   FINNISH GOLD  NURDS           "
-.text "    OFFENCE   POO-BRAIN   RABENAUGE       "
+.text "    OFFENCE   POO BRAIN   RABENAUGE       "
 .text "    HOKUTO FORCE ABYSS CONNECTION         "
 // label fill the on-screen 8-sprite window once settle kicks in;
 // pad with trailing spaces so even if the scroller drifts past it

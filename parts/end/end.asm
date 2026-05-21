@@ -56,6 +56,10 @@
 .const zp_mu_step    = $f4       // music step 0..127 (lead pattern index; chord = step & 31)
 .const zp_mu_frame   = $f3       // within-step frame counter, 0..END_STEP_FRAMES-1
 .const END_STEP_FRAMES = 24      // 4× slower than intro's 6 — chord lasts ~3.8s, full progression ~15s
+
+// Mood LFO offset: `wave_xscroll[192]` lands on the sine trough (= 0),
+// so depth starts at 0 → credits always open clean.
+.const MOOD_PHASE_TROUGH = $c0
 .const NOTE_REST     = $FF
 
 // Music data lives in intro.asm's $1000-$125D segment which is still
@@ -949,13 +953,11 @@ end_music_init:
         lda #$10
         sta $d418
 
-        // Reset music step counters
+        // Reset music step counters + mood LFO (depth starts at 0 →
+        // credits open in the clean, narrow-sweep filter mood).
         lda #0
         sta zp_mu_step
         sta zp_mu_frame
-        // Reset mood LFO so the credits always START in the clean
-        // (narrow-sweep) mood and drift outward — never start dark.
-        sta mood_tick
         sta mood_phase
         sta mood_depth
         rts
@@ -984,75 +986,59 @@ end_music_play:
 !vol_ok:ora #$10                  // bit 4 = LP filter on
         sta $d418
 
-        // --- Slow mood LFO — clean ↔ dark filter sweep ---
-        // mood_phase advances 1 step every 4 frames → 256 × 4 frames =
-        // 1024 frames = ~20.5 s for a full cycle. The depth value comes
-        // from wave_xscroll[(mood_phase + 192) & $FF] which puts the
-        // sine's trough (= 0) at phase 0 → credits START fully clean,
-        // drift into dark mood, and back. See sound-arc.md "End-credits
-        // darkening" / "Future polish — modulate between clean and dark".
-        inc mood_tick
-        lda mood_tick
-        cmp #$04
-        bcc !mood_keep+
-        lda #$00
-        sta mood_tick
+        // --- Mood LFO — credits open clean, breathe to dark, back ---
+        // Offset MOOD_PHASE_TROUGH puts wave_xscroll's sine trough at
+        // phase 0 so depth starts at 0 every time end_music_init runs.
+        lda zp_frame
+        and #$03                  // /4 prescaler — reuses free-running zp_frame
+        bne !mood_keep+
         inc mood_phase
 !mood_keep:
         lda mood_phase
         clc
-        adc #192                  // shift: wave_xscroll[192] = 0
+        adc #MOOD_PHASE_TROUGH
         tax
-        lda wave_xscroll,x        // depth 0..7, starts at 0
+        lda wave_xscroll,x
         sta mood_depth
 
-        // --- V3 arp shimmer: PWM (fixed) + LFO-modulated filter sweep ---
-        // PWM still cycles 4..11 over its 5.12 s sine — that's the
-        // intentional "gentle phaser tone" on the arp. The mood LFO
-        // only modulates the FILTER CUTOFF SWEEP AMPLITUDE, which is
-        // the audible "phaser depth": narrow sweep ($30..$4C) reads as
-        // calm, wide sweep ($29..$56) reads as the post-PR-#31 dark
-        // flanger.
+        // PWM stays fixed (the "gentle phaser" on the arp); the LFO
+        // only modulates the filter sweep amplitude — that's where
+        // the audible clean ↔ dark difference lives.
         ldx zp_frame
-        lda wave_xscroll,x        // 0..7
+        lda wave_xscroll,x
         clc
         adc #$04                  // 4..11
         and #$0f
-        sta $d411                 // V3 pulse hi nibble
+        sta $d411
 
-        // Filter cutoff: cutoff = wave * amp + offset, where:
+        // cutoff = wave * amp + offset
         //   amp    = 4 + (depth >> 1)   → 4 (clean) .. 7 (dark)
         //   offset = $30 - depth        → $30 (clean) .. $29 (dark)
-        // → at depth=0: wave*4 + $30 → $30..$4C   (clean, narrow sweep)
-        // → at depth=7: wave*7 + $29 → $29..$56   (dark,  wide sweep)
-        // Multiply implemented by `amp`-times add (max 7 iterations,
-        // ~42 cy worst case — fine at 50 Hz).
+        // Multiply is repeat-add: amp ∈ 4..7, max 7×7=49, no overflow.
         txa
         clc
-        adc #$40                  // 90° phase offset on the filter wave
+        adc #$40                  // 90° phase on the filter wave
         tax
-        lda wave_xscroll,x        // 0..7 filter sine value
-        sta mood_wave_tmp
+        lda wave_xscroll,x
+        sta zp_tmp
 
         lda mood_depth
-        lsr                       // depth >> 1
+        lsr
         clc
-        adc #$04                  // amp = 4 + (depth >> 1), range 4..7
-        tay                       // Y = amp = loop count
+        adc #$04
+        tay                       // amp
 
         lda #$00
 !mul_loop:
         clc
-        adc mood_wave_tmp
+        adc zp_tmp
         dey
         bne !mul_loop-
-        sta mood_wave_tmp         // 0..49 (wave * amp)
 
-        sec
-        lda #$30
-        sbc mood_depth            // $30 - depth, range $30..$29
         clc
-        adc mood_wave_tmp         // final cutoff
+        adc #$30
+        sec
+        sbc mood_depth
         sta $d416
 
         // --- V3 arp: change freq every 4 frames within step ---
@@ -1151,15 +1137,10 @@ wave_xscroll:
         .fill 256, round(3.5 + 3.5 * sin(toRadians(i * 360 / 256)))
 
 
-//==================================================================
-// Mood LFO state — clean ↔ dark filter sweep modulation for the
-// credit roll. See end_music_play for the math; sound-arc.md for
-// the design intent.
-//==================================================================
-mood_tick:      .byte 0        // 0..3, increments every frame
-mood_phase:     .byte 0        // 0..255, increments every 4 frames (slow LFO)
-mood_depth:     .byte 0        // 0..7, current attenuation factor
-mood_wave_tmp:  .byte 0        // scratch for the per-frame multiply
+// Mood LFO — slow filter-sweep modulation for the credit roll. See
+// end_music_play for the math and sound-arc.md for the design intent.
+mood_phase:     .byte 0
+mood_depth:     .byte 0
 
 //==================================================================
 // row_colour — 25-entry cool gradient (light-blue → cyan → light-
