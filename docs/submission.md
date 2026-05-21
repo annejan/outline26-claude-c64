@@ -1,0 +1,126 @@
+# Submission plan — X 2026
+
+Audit item #10 from issue #38: produce a `tools/bundle_submission.sh`
+that mechanically generates everything the party + post-party release
+need.
+
+## What X2026 actually requires
+
+Per [xparty.net/compos](https://xparty.net/compos):
+
+| Requirement | Our status |
+|---|---|
+| `.d64` image (or `.prg` for Onefile award) | `.d64` — we're multi-part, Onefile doesn't fit |
+| Stock C64 + 1541-compatible drive | ✅ runs on 1541-Ultimate (the compo hardware) |
+| 6581 *or* 8580 SID preference declared | **6581** — filter character was tuned in VICE's 6581 emulation |
+| No BASIC entries | ✅ pure 6502 + Spindle, no BASIC stub |
+| No remote entries — physical submission via `votox` | submitted on-site by a human |
+| Pro tip: tell them the demo's duration in the private comment field | one-pass runtime ~3 min |
+
+Everything else (screenshots, NFO, source) is voluntary — done for
+the post-party CSDb release and as a courtesy to the compo crew.
+
+## What the script will produce
+
+```
+submission/
+├── defeest-kloten_met_de_broodtrommel.d64                ← upload to votox
+└── defeest-kloten_met_de_broodtrommel-x2026.zip          ← release bundle
+    └── defeest-kloten_met_de_broodtrommel/
+        ├── defeest-kloten_met_de_broodtrommel.d64
+        ├── defeest-kloten_met_de_broodtrommel.nfo
+        ├── README.txt
+        ├── screenshots/
+        │   ├── 01-screenfill.png
+        │   ├── 02-intro.png
+        │   ├── 03-interlude.png
+        │   ├── 04-sinus.png
+        │   ├── 05-greets.png
+        │   ├── 06-coda.png
+        │   └── 07-end.png
+        └── sources/
+            ├── source.zip          ← `git archive HEAD` snapshot
+            └── how-it-was-made.md  ← assembled from docs/ + git log
+```
+
+## Filename convention
+
+X-Party doesn't mandate one. Going with the CSDb / scene-typical
+shape: `<group>-<demo_short>` for the artefacts, `<group>-<demo_short>-<party>` for the release archive.
+
+- `defeest-kloten_met_de_broodtrommel.d64` — short snake-case
+- `.zip` adds `-x2026` so the same generation script can produce
+  variants for other parties later (Evoke, Outline, …)
+
+## NFO content
+
+Plain ASCII (79-col wide), no PETSCII characters in case the
+reading tool isn't C64-aware. Sections:
+
+- Title + group + party banner
+- System requirements (`stock C64 + 1541`, `PAL`, **`6581 preferred`**)
+- One-pass duration (`~3:00` before credits loop)
+- Build SHA + date for traceability
+- Credits (Anus / Kloot / Augurk / TL-Buis / Ranzbak / Cinder), tools
+- One-paragraph story (the AI-pair-programmer arc)
+- GitHub source URL + commit SHA
+
+## Screenshots — timing source of truth
+
+Timestamps from `docs/timing.md` (currently):
+
+| # | File | Part | Boot offset | Why this moment |
+|---|---|---|---|---|
+| 01 | `01-screenfill.png` | screenfill | 3 s | radial bloom mid-reveal |
+| 02 | `02-intro.png` | intro | 10 s | bars + balls + logo bouncing |
+| 03 | `03-interlude.png` | interlude | 83 s | SPARKED letters landing |
+| 04 | `04-sinus.png` | sinus | 88 s | DEFEEST sine wobble live |
+| 05 | `05-greets.png` | greets | 120 s | mid-scroll, several groups visible |
+| 06 | `06-coda.png` | coda | 175 s | KLOTEN MET DE BROODTROMMEL title + twin stars |
+| 07 | `07-end.png` | end | 200 s | credit roll mid-scroll |
+
+If part durations move, the timing offsets need re-syncing. The
+script will fail loudly if a screenshot lands in the wrong part
+(checked by polling `$F6` after each capture).
+
+## "How it was made" — content
+
+A single Markdown file `how-it-was-made.md` distilled from:
+
+- `docs/narrative-arc.md` (story side)
+- `docs/sound-arc.md` (audio side)
+- `docs/two-weeks-out.md` (the sprint stocktake)
+- top-level `README.md` "How this was built" section
+
+… edited down to ~1 page. The pitch:
+
+> A human who hadn't touched the breadbin in years sat down with
+> Claude (Anthropic Opus 4.7), OpenCode, and ChatGPT for three
+> weeks. The demo's narrative is the demo's own making.
+
+This is also genuinely interesting to the scene — AI-pair-programmed
+C64 demo work is novel in 2026.
+
+## Implementation plan
+
+Three files:
+
+1. `tools/bundle_submission.sh` — top-level orchestrator. Cleans
+   `submission/`, runs `build.sh`, calls steps 2 and 3, then zips.
+2. `tools/capture_part_screenshots.sh` — boots VICE-MCP, polls
+   `$F6` to verify part transitions, calls
+   `vice.display.screenshot` at the right moments.
+3. `tools/nfo_template.txt` — the NFO source with `{{TITLE}}`,
+   `{{SHA}}`, `{{DURATION}}` placeholders.
+
+Source snapshot via `git archive HEAD` — clean, reproducible,
+exactly what's at the commit named in the NFO.
+
+## What's deferred
+
+- **Preview MP4** — `tools/record_demo.py` already does this; bundle
+  doesn't need to embed it (large file, also already on YouTube).
+- **CSDb XML / metadata** — only relevant after the party. Bundle
+  has everything CSDb needs but doesn't pre-format it.
+- **Multi-party variants** — the script is parameterised but only
+  `--party x2026` is wired up. Easy to extend.
