@@ -72,42 +72,36 @@ warm hum. Drums stop. Volume fades. The eye of the storm. About 5
 seconds where the audience can absorb what just happened and
 anticipate what's next.
 
-### 5. The party (greets — story line 2)
+### 5. The greets (greets — community)
 
 Drums come back full. V1 bass on the pattern. V2 lead doing its
 filtered "wah" through the chord cycle. Across the middle of the
-screen, eight X-expanded sprite letters DYCP-wave the greets:
+screen, eight X-expanded sprite letters DYCP-wave through a list
+of demogroup names — the loudest moment, everyone gets a shoutout.
+~77 seconds, scrolling through a wall of crew handles, landing on
+"KLOOT."
 
-> GREETZ TO ALL LUNCHBASED LIFEFORMS  
-> IN ROTTERDAM AND BEYOND  
-> NO BREAD WAS HARMED DURING THIS PRODUCTION  
-> EXCEPT THE PINDKAAS SANDWICH LEFT IN DRIVE 1541  
-> KLOTEN MET DE BROODTROMMEL IS THE OFFICIAL LUNCHTIME RELEASE OF X2026  
-> *(demo group greetz — XENON, SCS TRC, FOCUS, FAIRLIGHT, BONZAI, …)*  
-> ESPECIALLY KLOOT, FOR MAKING IT HAPPEN  
-> NOW GO EAT YOUR LUNCH
-
-This is the loudest moment. Everyone's named. The scene's saluted.
-The lunch joke earns its closing line. Climax, in the demo sense.
+No story text here. The story already happened in interlude.
 
 ### 6. The trophy (coda — story closing)
 
-Cut to quiet. Two title lines, big and centred:
+Cut to quiet. Three title lines, centred:
 
 ```
        KLOTEN MET DE BROODTROMMEL
        A DIGITAL LUNCH EXPERIENCE
+         ESPECIALLY KLOOT
 ```
 
 Behind them, two 12-lobe Claude-style stars (one brown, one cyan)
 orbit each other on sine paths, alternating which is in front of
-the text every ~1.3 seconds. Asterisk star-field sparkles around
-the title. A sparse 60-BPM sub-bass kick lands under the held
-chord — the *thump* of *this is real, it shipped*. About 10
+the text every ~1.3 seconds. Parallax PETSCII starfield sparkles
+around the title. A sparse 60-BPM sub-bass kick lands under the
+held chord — the *thump* of *this is real, it shipped*. About 10
 seconds.
 
-The title is the trophy. *This happened. You watched it. We made
-it. Kloot helped.*
+The title is the trophy. The dedication on row 15 is the thank you.
+*This happened. You watched it. Kloot made it happen.*
 
 ### 7. The bow (end)
 
@@ -121,13 +115,16 @@ Lunch was served.
 ```
 beat:    quiet  →  build  →  confess  →  breathe  →  drop  →  settle  →  bow
 visual:  load   →  intro   →  text drop →  wobble  →  greetz →  twin star → credits
-story:   --     →  hello   →  SPARKED   →  --       →  thanks →  trophy   →  --
+story:   --     →  hello   →  SPARKED   →  --       →  --     →  trophy + dedication → credits
 music:   silent →  drums in→  filter rise→ filter close→full kit→ slow kick→ chord reprise
 ```
 
-When the SPARKED letters drop, the bass returns and the filter
-opens. When the sinus filter closes, the drums stop. When the
-greets drums come back, the lead's wah kicks in. When the coda
+The story lands in two places: interlude (FOR YEARS NO TIME →
+SPARKED) tells the confession; coda ("ESPECIALLY KLOOT") delivers
+the thank you. Greets is the party — no story, just community
+shoutouts. When the SPARKED letters drop, the bass returns and the
+filter opens. When the sinus filter closes, the drums stop. When
+the greets drums come back, the lead's wah kicks in. When the coda
 title lands, the drums sparse out to one beat per second. Each
 text reveal sits on an audio shift. Each visual climax has a
 music moment under it. That's the cohesion — the arcs aren't

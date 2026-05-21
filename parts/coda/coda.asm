@@ -506,6 +506,22 @@ setup:
         cpx #26
         bne !c2-
 
+        // ---- dedication: "  ESPECIALLY KLOOT  " at row 15, col 10 ----
+        // Row 15: $0400 + 15*40 = $0658; colour RAM: $D800 + 15*40 = $DA58.
+        ldx #0
+!t3:    lda title_dedication,x
+        sta $0658 + 10,x
+        inx
+        cpx #20
+        bne !t3-
+
+        ldx #0
+        lda #$0b                        // dark grey — readable but subtle
+!c3:    sta $DA58 + 10,x
+        inx
+        cpx #20
+        bne !c3-
+
         // Settle SID: drums OFF (zp_timer = $00 gates the percussion
         // in intro's my_music_play). Vol restored to max.
         lda #$1f
@@ -1069,7 +1085,7 @@ row_start_hi: .fill 25, >($0400 + i * 40)
 star_init_row:
         .byte  0,  0,  0,  1,  2,  2,  2,  3
         .byte  3,  4,  5,  5,  5,  6, 12, 12
-        .byte 14, 15, 16, 18, 19, 20, 20, 20
+        .byte 14, 10, 16, 18, 19, 20, 20, 20     // index 17 moved from 15→10 for dedication
         .byte 21, 22, 22, 22, 22, 23, 24, 24
 star_init_col:
         .byte  5, 17, 25, 25,  1,  5, 27,  7
@@ -1103,6 +1119,17 @@ title_sub:
         .byte $04, $09, $07, $09, $14, $01, $0C, $20            // DIGITAL_
         .byte $0C, $15, $0E, $03, $08, $20                     // LUNCH_
         .byte $05, $18, $10, $05, $12, $09, $05, $0E, $03, $05  // EXPERIENCE
+
+// "  ESPECIALLY KLOOT  "  (20 chars)
+//   _=20 _=20
+//   E=05 S=13 P=10 E=05 C=03 I=09 A=01 L=0C L=0C Y=19 _=20
+//   K=0B L=0C O=0F O=0F T=14 _=20 _=20
+title_dedication:
+        .byte $20, $20                                           // __
+        .byte $05, $13, $10, $05, $03, $09, $01, $0C, $0C, $19  // ESPECIALLY
+        .byte $20                                                // _
+        .byte $0B, $0C, $0F, $0F, $14                           // KLOOT
+        .byte $20, $20                                           // __
 
 
 //==================================================================
