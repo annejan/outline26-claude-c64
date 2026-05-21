@@ -121,7 +121,7 @@ The title is the trophy. Row 15 is the party tag.
 *This happened. You watched it. Lunch is served.*
 
 (Earlier drafts had row 15 say "ESPECIALLY KLOOT". Pulled because
-the AI-character nod was already in the greets settle on `KLOOT`
+the AI-character nod was already in the greets settle on `KLOTEN`
 and in the disk dirart — three on-screen mentions read as
 ego-stroking. One is enough.
 
@@ -149,7 +149,7 @@ music:   silent →  drums in→  filter rise→ filter close→full kit→ slow
 
 The story lands in two places: interlude (FOR YEARS NO TIME →
 SPARKED) tells the confession; coda lands the trophy with the
-title + the X2026 release tag, while the greets settle on `KLOOT`
+title + the X2026 release tag, while the greets settle on `KLOTEN`
 gives the AI-character one subtle nod. Greets itself is the
 party — no story, just community shoutouts. When the SPARKED letters drop, the bass returns and the
 filter opens. When the sinus filter closes, the drums stop. When

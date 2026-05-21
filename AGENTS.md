@@ -42,7 +42,7 @@ Seven parts loaded by Spindle's pefchain framework:
 | 2 | `parts/intro/`       | Logo bounce, scroller, rasterbars, 8 sprites, 3-voice SID + K-S-K-S kit | `$F6 = $F0` (`zp_outro` hits `T_OUTRO_DONE`) |
 | 3 | `parts/interlude/`   | Plasma + bars-on-buildup, typewriter "FOR YEARS…" + sprite-letter "SPARKED" drop with white-border flash, LP V1+V2 filter sweep | `$F6 = $10` (~16 beats ≈ 7.7 s) |
 | 4 | `parts/sinus/`       | Comedown: sine-wobble DEFEEST + colour cycling + LP filter close on V1+V2; drums silent | `$F6 = $30` (frame counter hits 250) |
-| 5 | `parts/greets/`      | Climax: 16-bit DYCP sprite-font scroller (~77 s, lunchbox greets), fade-then-settle landing on "KLOOT", drums returning, V2 LP "wah" | `$F6 = $A0` (160 beats ≈ 77 s) |
+| 5 | `parts/greets/`      | Climax: smooth-pixel DYCP sprite-font scroller (~50 s, scroll-driven) over a multi-colour koala backdrop. Sprite-7 carousel for clean right-edge entry. Snap landing on " KLOTEN " (the demo title's first word). Drums returning, V2 LP "wah". | `$F6 = $82` (scroll-driven settle + 4 beats) |
 | 6 | `parts/coda/`        | "KLOTEN MET DE BROODTROMMEL / A DIGITAL LUNCH EXPERIENCE / RELEASED AT X2026", twin brown+cyan Kloot stars (Stage F ping-pong zoom breath) on wide sine orbits, alternating priority + in/out of title plane, 32-star 4-tier parallax PETSCII starfield, **triumphant full K-S-K-S kit + V1 bass-bleed sub-thump** (setup sets `$F6 = $01` so intro's drums fire through the held title) | `$F6 = $30` |
 | 7 | `parts/end/`         | Credit roll, side bars, slow chord/lead reprise (PWM + LP filter sweep, "dark phaser" mood since PR #31) | `stay` (loops) |
 
@@ -609,11 +609,15 @@ stocktake + recommended focus plan for the X2026 runup.
 - **Coda NMI-clobber jitter fix** (direct commit `ae80273`) — sprite
   pointers re-written every frame at 50 Hz so the Spindle NMI loader
   can't drag them off-screen between IRQs.
-- **Greets epic-extended** (PR #32) — 15 s → 77 s scroller with
-  16-bit `scroll_pos`, fade-then-settle landing on "KLOOT", clean
-  fadeout sprite-off, `.fill 64, 0` for the `$9A` blank glyph slot.
-- **Greets DYCP wobble trimmed** (PR #34) — sine amplitudes
-  3→2 (Y) and 2→1 (X) for legibility.
+- **Greets epic-extended** (PR #32) — 15 s scroller stretched out with
+  16-bit `scroll_pos`. (Post-PR-#32 the scroll is now smooth-pixel
+  at 9 px/frame, scroll-driven settle on " KLOTEN ", and runs over
+  a multi-colour koala backdrop — see [the greets backdrop section
+  in greets.asm](parts/greets/greets.asm) for the bitmap-mode
+  config.)
+- **Greets DYCP wobble** — sine amplitudes ±3 (Y) and ±2 (X). Was
+  lower at one point for legibility but bumped back up alongside the
+  faster scroll where each name is on screen for less time anyway.
 - **Interlude breathing room + SPARKED border flash** (direct commit
   `8ed0777`) — `BEAT_PERIOD 20→24`, `BUILDUP_BEAT 4→6`,
   `TRANSITION_BEAT 10→16`, white-border flash on SPARKED landing.

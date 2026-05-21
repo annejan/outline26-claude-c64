@@ -48,13 +48,9 @@
 .const COL_RAM    = $d800
 
 .const SID_VOL    = $d418
-.const SID_V3_FREQLO = $d40e
-.const SID_V3_FREQHI = $d40f
-.const SID_V3_PULSEL = $d410
-.const SID_V3_PULSEH = $d411
-.const SID_V3_CTRL = $d412
-.const SID_V3_AD = $d413
-.const SID_V3_SR = $d414
+// (V3 SID-register constants pulled with the coda_kick removal —
+// nothing in the current coda touches V3 directly; intro's resident
+// my_music_play owns V3 for the arp + K-S-K-S drum kit.)
 
 .const N_FRAMES   = 800               // ~32 s at the half-rate divider
                                       // (800 ticks @ 25 Hz). Iteration
@@ -180,30 +176,12 @@
 .const KLOOT_DX = KLOOT_X_RIGHT - KLOOT_X_CENTRE      // = 24 — quad half-width
 .const KLOOT_DY = KLOOT_Y_BOT   - KLOOT_Y_CENTRE      // = 21 — quad half-height
 
-// Coda V3 kick — coda has the unique luxury of "owning" V3 for the
-// duration of the part (zp_outro=0 keeps intro's drum gate closed,
-// and we override the arp's per-frame writes every IRQ). So we can
-// use a real kick ADSR and a proper hard-restart cycle without
-// breaking the arp recovery the way it would in intro/interlude.
-//
-// Technique (a simplified take on lft's "new hard-restart" idea —
-// the full stabiliseRC3 dance is overkill for a single sub-bass kick
-// at 60 BPM):
-//   beat frame   :  CTRL = $10  (triangle, gate OFF) → envelope
-//                   releases through R=0 = instant down to 0.
-//                   Set freq HIGH (the click transient).
-//   next frame   :  CTRL = $11  (triangle, gate ON)  → fresh attack,
-//                   envelope rises A=0 to peak, then D=8 decay.
-//   body frames  :  sweep freq down for the 808 thump.
-//
-// V3's ADSR is set once in setup ($d413=$08, $d414=$00) and stays
-// kick-shaped for the whole part — there's no arp on V3 here to
-// fight with.
-.const KICK_PERIOD  = 50              // ~1 s between kicks @ 50 Hz (60 BPM)
-.const KICK_LEN     = 12              // body frames
-.const KICK_FREQ_HI = $18             // start pitch (~360 Hz click)
-.const KICK_FLOOR   = $03             // end pitch (~46 Hz body)
-.const KICK_SWEEP   = $02             // hi-byte decrement per frame
+// (A "Coda V3 kick" state machine used to live here, with its own
+// KICK_PERIOD / KICK_LEN / KICK_FREQ_HI / KICK_FLOOR / KICK_SWEEP
+// constants — a dedicated sparse V3 thump at ~60 BPM. Removed when
+// coda switched to the resident K-S-K-S kit; constants pulled too
+// when the routine + state bytes were deleted. Recover from git
+// history if you ever want a separate thump back.)
 
 .const INTRO_MUSIC_PLAY = $119e
 // Intro music tables (resident at $1000-$125D, see intro.sym). Coda
@@ -243,15 +221,11 @@
 .const SHAPE_DIV_1 = 3                  // star 1: advance every 3rd half-rate tick
 .const SHAPE_DIV_2 = 2                  // star 2: advance every 2nd tick
 
-        .const zp_timer       = $f6           // transition: set to $30 to trigger pefchain
-.const zp_kick_count  = $f7           // IRQ countdown to next beat
-// kick_state used to live at $F8 — but intro's resident my_music_play
-// READS $F8 every frame as `zp_intro` to compute master volume (vol =
-// $F8 >> 3, clamped to $0F). Parking kick_state there pinned the music
-// to silence in coda because the state spends ~38/50 frames at 0.
-// Now in code RAM, see `kick_state:` near the other coda state below.
-// Same reason $F9/$FA are off-limits — `zp_tmp`/`zp_msb` get clobbered
-// inside my_music_play.
+.const zp_timer       = $f6           // transition: set to $30 to trigger pefchain
+// $F9/$FA are off-limits — `zp_tmp`/`zp_msb` get clobbered inside
+// my_music_play, so any state living there would be trashed every
+// frame. $F8 is also off-limits as `zp_intro` (my_music_play reads
+// it for master volume).
 .const zp_subtick     = $fb           // half-rate divider toggle
 .const zp_frame       = $fc           // animation tick (0..N_FRAMES-1)
                                       // zp_kick_freq lives in code RAM (not zp)
@@ -575,8 +549,11 @@ setup:
 
         // Row 15: party-release tag in dark grey under the title.
         // Used to be "ESPECIALLY KLOOT" — pulled because three on-screen
-        // mentions of the AI character read as ego-stroking (one in
-        // greets settle is enough). The release tag keeps the gradient
+        // mentions of the AI character read as ego-stroking. (Since
+        // then the greets settle text was renamed to KLOTEN too, so
+        // there's no on-screen AI character namecheck during the demo
+        // itself — only the end-credits "kloot finally got me here"
+        // thought remains.) The release tag keeps the gradient
         // (white / lt grey / dk grey) and gives the title card three
         // lines of weight without name-dropping the helper.
         // " RELEASED AT X2026  " — 20 chars; col 10..29.
@@ -837,16 +814,14 @@ musichook:
         sta $d416
 
         jsr star_field
-        // coda_kick used to fire here as a dedicated sparse V3 thump.
+        // (coda_kick used to fire here as a dedicated sparse V3 thump.
         // Removed for the TRIUMPHANT coda revision — intro's resident
         // K-S-K-S kit (kick + snare alternating) + V1 bass-bleed
-        // sub-thump now play through the whole part because we set
-        // zp_timer = $01 in setup (= drum gate ON). The kit's kick
-        // already IS a triangle pitch-slam thump on V3, the
-        // bass-bleed IS the sub body on V1. Both layers carry the
-        // "trophy" weight without needing a separate machine. The
-        // coda_kick subroutine remains in the source as dead code
-        // in case we want it back; just `jsr coda_kick` to re-enable.
+        // sub-thump play through the whole part because setup sets
+        // zp_timer = $01 = drum gate ON. The kit's V3 triangle
+        // pitch-slam IS the kick and V1's N_C1 bleed IS the sub. The
+        // subroutine itself was deleted on 2026-05-21; recover from
+        // git history if you ever want a dedicated thump back.)
 
         // half-rate divider — drives shape advance
         lda zp_subtick

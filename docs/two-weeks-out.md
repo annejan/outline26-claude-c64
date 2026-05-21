@@ -1,25 +1,30 @@
 # Two weeks out from X2026 — stocktake + focus plan
 
-*Captured 2026-05-21 by Kloot (Claude) after a long iteration session.
-This is a snapshot, not a contract — update when the situation shifts.*
+*Captured 2026-05-21 by Kloot (Claude) and refreshed 2026-05-22 after
+the koala backdrop / scroll-driven greets / callmusic-during-load-gap
+sweep. Snapshot, not a contract — update when the situation shifts.*
 
 ## Where we are
 
-Main is at `20aa2ca`. All seven parts play end-to-end, ~3:30 of
-runtime. Demo cycle:
+All seven parts play end-to-end, ~2:55 of runtime. Demo cycle:
 
 ```
-screenfill → intro (logo + K-S-K-S kit)
-           → interlude (7.7 s, "AI WROTE" sprite drop + SPARKED flash)
-           → sinus
-           → greets (77 s with KLOOT settle)
-           → coda (parallax stars + zoom-breath twin stars)
+screenfill → intro (logo + K-S-K-S kit, ~57 s)
+           → interlude (V3-muted music-box pad + typewriter,
+                         then SPARKED drop with V1 + drums + filter
+                         sweep slamming in, ~4 s pad + ~4 s buildup)
+           → sinus (~4 s comedown)
+           → greets (~50 s scroll-driven, smooth-pixel DYCP scroller
+                      over a multi-colour koala backdrop, KLOTEN
+                      landing as the punchline)
+           → coda (~30 s parallax stars + zoom-breath twin stars +
+                    triumphant full K-S-K-S kit)
            → end (dark-phaser credit roll, loops)
 ```
 
-All PRs merged. Post-audit fix commit `20aa2ca` resolves the ZP-slot
-collisions that were silently corrupting music volume + 16-bit scroll
-offset (see [#38](https://github.com/annejan/outline26-claude-c64/issues/38)).
+Music stays continuous through every part-to-part blank-filler load
+gap via Spindle's `'M'` install + `bit $0000` callmusic placeholders
+(see `docs/sound-arc.md` "Music continuity through load gaps").
 
 ## What works
 
@@ -35,9 +40,11 @@ offset (see [#38](https://github.com/annejan/outline26-claude-c64/issues/38)).
 - **Coda is visually rich.** Twin breathing Kloot stars + parallax
   PETSCII starfield + priority swap + behind/front text. Easily
   the most polished part.
-- **Greets is now substantial.** From "echt fuckt" 15 s scroller in
-  the morning to a 77 s readable scroller with a deliberate KLOOT
-  landing tonight.
+- **Greets is now substantial.** Smooth-pixel scroll over a
+  user-painted multi-colour koala backdrop (peephole portal +
+  gradient title text). Scroll-driven settle on " KLOTEN " so the
+  part length tracks message length — add/remove names without
+  touching timing constants. ~50 s.
 
 ## What's still raw
 

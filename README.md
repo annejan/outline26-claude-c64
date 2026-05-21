@@ -180,17 +180,19 @@ trigger. The end card is the only "stay" loop.
 - **Kick drums on V3** — pitch-swept noise burst on every beat (driven
   from intro's resident `my_music_play`; gated on `zp_outro != 0` which
   sinus resets, so drums silence in sinus and return here).
-- **Fade-then-settle ending.** Three phases of duration: 0..57 s scroll
-  at full DYCP amplitude; 57..69 s `zp_damp_shift` ramps 0→5 in
-  quarter-beat steps so both wobble (sign-preserving ASR per shift)
-  and scroll speed (lookup table `SCROLL_DELAY_TABLE`) decelerate
-  together; 69..77 s settle — scroll snaps to `settle_text` (the
-  KLOOT punchline), sprites freeze flat at `SPR_Y_BASE`, colour
-  cycle keeps shimmering. The deceleration masks the freeze.
-- Text advances 1 char per 8 frames (was 12). Greeting tells the
-  lunchbox-themed arc ending with KLOOT centred in the held landing.
-- Beat counter at `$f6` ticks every 24 frames. After 160 beats (~77 s)
-  pefchain advances to coda.
+- **Scroll-driven ending.** When `scroll_pos` reaches the start of
+  `settle_text` (the " KLOTEN " punchline at the tail of the
+  message), the IRQ forces `zp_beat_count = SETTLE_BEAT` so the row
+  snaps to centred KLOTEN. ~1.9 s later (4 beats) pefchain advances
+  to coda. Part length tracks message length: add/remove names and
+  the duration adjusts. Safety fallback at `$F6 == $82` (= ~62 s)
+  if scroll never reaches the punchline.
+- Smooth pixel-scroll at 9 px/frame (= ~11 chars/sec). Sprite-7
+  carousel doubles as the entering buffer for chars sliding in from
+  the right edge. Greeting tells the lunchbox-themed arc ending with
+  KLOTEN (= the demo title's first word) centred in the held landing.
+- Beat counter at `$f6` ticks every 24 frames. Safety-fallback
+  transition fires if the beat counter naturally reaches `$82`.
 - Inherits intro's music pages (`'I', $10, $12`).
 - **Bug fix in PR #32:** `ptr_lookup` maps every non-A-Z char to slot
   `$9A`. Before the fix, `font_data` emitted only the 26 A-Z glyphs
@@ -318,7 +320,7 @@ parts/screenfill/screenfill.pef     06 = 00
 parts/intro/intro.pef               f6 = f0
 parts/interlude/interlude.pef       f6 = 10
 parts/sinus/sinus.pef               f6 = 30
-parts/greets/greets.pef             f6 = a0
+parts/greets/greets.pef             f6 = 82
 parts/coda/coda.pef                 f6 = 30
 parts/end/end.pef                   stay
 ```
@@ -339,9 +341,11 @@ Each condition tells pefchain when to advance:
 - `f6 = 30` — wait for `$f6` (= sinus' transition byte) to be set to
   $30 by sinus once `$fc` (the actual frame counter, off-music-clobber)
   hits 250. Sinus's setup resets `$f6` to 0.
-- `f6 = a0` — wait for `$f6` (= greets' beat counter) to reach 160
-  (~77 s). Settle phase kicks in at beat 144 (~69 s); the last ~8 s
-  hold the screen on the KLOOT landing. Reset to 0 by greets' setup.
+- `f6 = 82` — wait for `$f6` (= greets' beat counter) to reach `$82`.
+  Greets is scroll-driven: when `scroll_pos` hits the " KLOTEN "
+  punchline the IRQ forces `$f6 = SETTLE_BEAT` and 4 beats later
+  (~1.9 s) we hit the trigger. Safety fallback fires at ~62 s if
+  scroll never reaches the end. Reset to 0 by greets' setup.
 - `f6 = 30` — wait for `$f6` (= coda's `zp_timer`) to be set to `$30`
   by coda's IRQ once its half-rate frame counter hits N_FRAMES
   (~10 s). Coda's setup resets `$f6` to 0.
