@@ -227,9 +227,9 @@
 // frame. $F8 is also off-limits as `zp_intro` (my_music_play reads
 // it for master volume).
 .const zp_subtick     = $fb           // half-rate divider toggle
-.const zp_frame       = $fc           // animation tick (0..N_FRAMES-1)
-                                      // zp_kick_freq lives in code RAM (not zp)
-                                      // since we're tight on $F6..$FC zp.
+.const zp_frame       = $fc           // animation tick (0..N_FRAMES-1, low byte
+                                      // of 16-bit half-rate frame counter;
+                                      // high byte is `frame_hi` in code RAM)
 
 
 * = $0800 "Coda"
@@ -628,8 +628,9 @@ interrupt:
         //
         // Without this reorder, the previous structure had position
         // writes near the END of the IRQ (after music_play / star_field
-        // / coda_kick / half-rate logic), which put them around raster
-        // 80-100. Top quad Y values < 80 then RACED VIC's sprite-Y
+        // / half-rate logic, back when a dedicated coda_kick also ran
+        // here), which put them around raster 80-100. Top quad Y
+        // values < 80 then RACED VIC's sprite-Y
         // check — the top quad displayed at LAST frame's Y while the
         // bottom quad (Y ≥ 94) saw the new Y. When stars moved
         // downward, the result was a one-raster gap between top and

@@ -61,10 +61,10 @@
 //                                              sprites perfectly flat,
 //                                              colour cycle still cycles
 // Scroll-DRIVEN transition (2026-05-21): the IRQ forces beat_count to
-// SETTLE_BEAT the moment scroll_pos crosses into the settle_text region
-// (= the last 8 chars of the visible window are about to show "  KLOOT").
-// That couples the part length to message length — add or remove names
-// in the .text below and the part shortens/lengthens automatically.
+// SETTLE_BEAT the moment scroll_pos reaches the start of settle_text
+// (= the visible window is about to show " KLOTEN "). That couples
+// the part length to message length — add or remove names in the
+// .text below and the part shortens/lengthens automatically.
 //
 // These three constants are therefore SAFETY FALLBACKS for the case
 // where scroll never reaches the end (data corruption, infinite scroll
@@ -76,7 +76,7 @@
                                //   pefchain_script's `f6 = 82`. After
                                //   scroll-driven settle fires, this is
                                //   reached 4 beats later = ~1.9 s of
-                               //   static "KLOOT" before the transition.
+                               //   centred " KLOTEN " before the transition.
 
 .const zp_beat_phase     = $f4
 .const zp_wobble_pos     = $f5
