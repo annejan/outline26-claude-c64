@@ -238,6 +238,14 @@ opens up with bass + lead (interlude build) → closes both (sinus
 breakdown) → wah on the lead (greets climax) → slightly closed for
 the breather (coda) → fading (end).
 
+**Target SID chip: 8580** — picked over 6581 because the 8580's
+digital filter has no per-unit cutoff drift, so the cutoff values
+listed above land identically on every C64. The 6581's analog
+filter character is unit-dependent; cutoff $40 on one 6581 sounds
+like $30 on another. Sidechain + LP-wah + dark-phaser tricks
+need that reproducibility to read the same to every audience.
+Declared in the submission NFO via `tools/bundle_submission.sh`.
+
 **Critical pitfall: $D417 voice routing.** `$D418` bit 4 sets LP
 mode, BUT the filter only affects voices whose bit is set in
 `$D417` (bits 0-2 = V1/V2/V3 routed through filter). Sinus shipped

@@ -12,7 +12,7 @@ Per [xparty.net/compos](https://xparty.net/compos):
 |---|---|
 | `.d64` image (or `.prg` for Onefile award) | `.d64` — we're multi-part, Onefile doesn't fit |
 | Stock C64 + 1541-compatible drive | ✅ runs on 1541-Ultimate (the compo hardware) |
-| 6581 *or* 8580 SID preference declared | **6581** — filter character was tuned in VICE's 6581 emulation |
+| 6581 *or* 8580 SID preference declared | **8580** — more reproducible (digital filter, no per-unit cutoff drift), and the cleaner character is what lets the sidechain + LP-wah + dark-phaser tricks land consistently on every C64 |
 | No BASIC entries | ✅ pure 6502 + Spindle, no BASIC stub |
 | No remote entries — physical submission via `votox` | submitted on-site by a human |
 | Pro tip: tell them the demo's duration in the private comment field | one-pass runtime ~3 min |
@@ -58,7 +58,7 @@ Plain ASCII (79-col wide), no PETSCII characters in case the
 reading tool isn't C64-aware. Sections:
 
 - Title + group + party banner
-- System requirements (`stock C64 + 1541`, `PAL`, **`6581 preferred`**)
+- System requirements (`stock C64 + 1541`, `PAL`, **`8580 preferred`**)
 - One-pass duration (`~3:00` before credits loop)
 - Build SHA + date for traceability
 - Credits (Anus / Kloot / Augurk / TL-Buis / Ranzbak / Cinder), tools
@@ -233,7 +233,7 @@ The script trusts these inputs to stay in sync with the demo:
 | Per-part screenshot timestamps | If a part's duration changes (greets/interlude/sinus most likely) | `tools/capture_part_screenshots.sh` `snapshot ... NN` lines |
 | `DURATION` in NFO + bundle README | Same — total runtime | `tools/bundle_submission.sh` config block |
 | Credits, story note, tools list, AI authorship note | Anytime team / tools / collaboration model shifts | `tools/nfo_template.txt` + `tools/how_it_was_made.md` |
-| SID preference (6581) | If we ever re-tune for 8580 | `tools/bundle_submission.sh` + NFO + how-it-was-made |
+| SID preference (8580) | If we ever re-tune for 6581 | `tools/bundle_submission.sh` + NFO + how-it-was-made |
 | `GROUP / DEMO_TITLE / PARTY` | If we release elsewhere later (Evoke, etc.) | `tools/bundle_submission.sh` config block |
 
 The script SHOULD WARN you about an dirty working tree (it does),

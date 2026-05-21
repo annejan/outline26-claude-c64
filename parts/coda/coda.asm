@@ -265,10 +265,13 @@ setup:
         // gets a real attack→decay envelope. The arp (V3) would
         // normally fight with this, but in coda we never let it run:
         // the IRQ overrides $D40E/$D40F/$D412 every frame.
-        lda #$08                        // A=0, D=8 → ~150 ms decay
+        lda #$08                        // A=0, D=8 → fast attack, ~150 ms decay
         sta SID_V3_AD
-        lda #$00                        // S=0, R=0 → silence between hits
-        sta SID_V3_SR
+        lda #$40                        // S=4 (held body), R=0 (silence at end)
+        sta SID_V3_SR                   // Was $00 (S=0) — kick was decaying to
+                                        //   silence within ~150 ms, audibly very
+                                        //   soft. S=4 lets the body hold across
+                                        //   the full 12-frame window.
         // Triangle waveform, gate off — V3 is silent until first beat.
         lda #$10
         sta SID_V3_CTRL
@@ -925,23 +928,32 @@ coda_kick:
         // ---- idle phase: count down to next beat ----
         dec zp_kick_count
         bne !done+
-        // arm: hard restart this frame, body starts next frame
+
+        // ---- ARM: hard restart this frame, body starts next frame ----
+        // (A V1 bass-bleed sub-thump used to live here for body weight,
+        // but it pushed sin_tab into chargen-ROM page $10 and the
+        // .errorif guard caught it. The noise-transient body below
+        // gives enough punch for the trophy beat without it.)
         lda #KICK_LEN
         sta kick_state
         lda #KICK_FREQ_HI
         sta kick_freq
-        lda #$10                        // triangle + gate OFF
+        lda #$10                        // triangle + gate OFF (envelope releases)
         sta SID_V3_CTRL
-        // Reset the period counter NOW so it's already armed for the
-        // beat after this one.
         lda #KICK_PERIOD
         sta zp_kick_count
         rts
+
 !body:
-        // ---- body phase: drive V3 freq + gate ----
+        // ---- body phase: drive V3 freq + waveform ----
+        // Frame 0 (= first audible tick) uses NOISE — Hubbard-style
+        // click attack. Subsequent frames use TRIANGLE for the
+        // pitch-swept sub-thump body. Waveform byte rides in X and
+        // is written via STX at the end so both paths share one
+        // freq+ctrl write block (~11 B saved vs duplicating).
         cmp #KICK_LEN
         beq !first+
-        // body frame 1..KICK_LEN-1 — sweep freq down
+        // body frame 1..KICK_LEN-1 — sweep freq down on triangle
         lda kick_freq
         sec
         sbc #KICK_SWEEP
@@ -950,16 +962,17 @@ coda_kick:
         lda #KICK_FLOOR
 !sweep_ok:
         sta kick_freq
-        jmp !write+
+        ldx #$11                        // triangle + gate ON
+        bne !write+                     // always taken ($11 ≠ 0)
 !first:
-        // body frame 0 (first audible tick) — keep starting freq
+        // body frame 0 — noise transient (1-frame pop)
+        ldx #$81                        // noise + gate ON
 !write:
         lda #$00
         sta SID_V3_FREQLO
         lda kick_freq
         sta SID_V3_FREQHI
-        lda #$11                        // triangle + gate ON
-        sta SID_V3_CTRL
+        stx SID_V3_CTRL                 // waveform from X
         dec kick_state
 !done:
         rts

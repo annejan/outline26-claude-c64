@@ -17,7 +17,7 @@
 #
 # Per X-Party rules (https://xparty.net/compos):
 #   - Stock C64 + 1541-compatible drive  ✅
-#   - 6581 SID preference DECLARED in NFO   ✅
+#   - 8580 SID preference DECLARED in NFO   ✅
 #   - No BASIC stub                      ✅
 #   - Physical submission via votox; pro tip: share duration in the
 #     private comment field — answer: ~3:00 one-pass.
@@ -43,7 +43,7 @@ GROUP="defeest"
 DEMO_SHORT="kloten_met_de_broodtrommel"
 DEMO_TITLE="Kloten met de broodtrommel"
 PARTY="x2026"
-SID_PREFERENCE="6581"
+SID_PREFERENCE="8580"
 DURATION="3:00"           # one-pass before credits loop — update if timing changes
 
 SUBMIT_DIR="$ROOT/submission"

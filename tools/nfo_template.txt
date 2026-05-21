@@ -13,11 +13,14 @@
                  Tested against 1541-Ultimate (the X2026 compo hardware).
                  No BASIC stub. Spindle 3.1 boots us straight in.
 
-   [ sid    ]    6581 preferred.
-                 The filter sweeps in interlude / sinus / greets / end
-                 were tuned against VICE's 6581 emulation. 8580 plays
-                 cleaner but loses the dark-flanger character on the
-                 end credits and the LP wah breath on greets' lead.
+   [ sid    ]    8580 preferred.
+                 The 8580 is the more REPRODUCIBLE chip across
+                 hardware (digital filter, no per-unit cutoff drift),
+                 and its cleaner filter character is what lets the
+                 sidechain + LP wah + dark-phaser tricks in
+                 interlude / sinus / greets / end land the same way
+                 on every C64. The 6581 will still play but the
+                 filter behaviour is unit-dependent.
 
    [ runtime ]   One-pass ~3:00 (~180 s boot to credits-roll-loops).
                  End credits then loop forever; the demo is over.
