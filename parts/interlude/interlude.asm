@@ -100,12 +100,28 @@ setup:
         sta VIC_BORDER
         sta VIC_BG
 
-        lda #$1f
+        // V3 off during pad ($D418 bit 7 = 1 mutes V3) so the resident
+        // K-S-K-S kit doesn't fire and the V3 arp drops out — leaves
+        // ONLY V2 lead audible (V1 is muted via $D404 = 0 below).
+        // Music-box pad feel under the typewriter confession. IRQ
+        // flips bit 7 back off at BUILDUP_BEAT so drums + arp slam
+        // in WITH the bass + filter sweep on SPARKED's drop.
+        lda #$9f
         sta $d418
         lda #$00
         sta $d404
         sta $d416
         sta $d417
+
+        // Jump intro's lead pattern to phrase 2 (active 8ths) at
+        // interlude START — gives the pad phase a moving lead line
+        // under the typewriter instead of phrase 4's natural sparse
+        // rests. mu_step lives in intro's resident music tables at
+        // $1148; mu_frame at $1149.
+        lda #32
+        sta $1148
+        lda #0
+        sta $1149
 
         lda #0
         sta zp_beat_phase
@@ -282,8 +298,29 @@ musichook:
                                    // between effects also call music
                                    // (= no SID dropout during load
                                    // gaps at transitions).
-        lda #$1f
+        // Master vol + V3 gate: $9F during pad (bit 7 mutes V3 = no
+        // arp, no resident-kit drums), $1F during buildup (V3 on).
+        lda zp_beat_count
+        cmp #BUILDUP_BEAT
+        bcs !v3_on+
+        lda #$9f
+        .byte $2c                  // skip next 2 bytes
+!v3_on: lda #$1f
         sta $d418
+
+        // V2 lead PWM — slowly sweep V2 pulse-width via zp_xphase so
+        // the lead line has a "breathing phaser" feel through the
+        // whole part. zp_xphase ticks +2/frame from the plasma, so
+        // /4 gives a smooth 0..7 walk; +4 keeps the width in the
+        // 4..11 range (avoids the degenerate near-0/15 widths that
+        // would make V2 nearly silent).
+        lda zp_xphase
+        lsr
+        lsr
+        and #$07
+        clc
+        adc #$04
+        sta $d40a
 
         // Border flash on SPARKED landing — white top border for 3 frames
         lda flash_cnt
@@ -331,17 +368,8 @@ musichook:
         bne !ramp+
         lda #FILT_CUT_LO
         sta zp_filt_cut
-        // Also jump the intro's lead pattern to phrase 2 (= mu_step
-        // start of "active 8ths, rising energy") so the SPARKED
-        // drop arrives with a punchy 8th-note line instead of the
-        // natural phrase 4 / phrase 1 sparseness that interlude's
-        // mu_step happens to be in by this point. mu_step lives in
-        // intro's resident music tables at $1148; resetting mu_frame
-        // to 0 too so the next step boundary fires cleanly.
-        lda #32
-        sta $1148                  // mu_step (intro.sym)
-        lda #0
-        sta $1149                  // mu_frame
+        // (Lead jump to phrase 2 moved to interlude setup so the
+        // pad phase also plays active 8ths under the typewriter.)
         jmp !no_beat+
 !ramp:  lda zp_filt_cut
         clc

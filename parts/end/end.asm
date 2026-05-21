@@ -45,7 +45,7 @@
 .const zp_fade     = $fb         // fade-in counter, 0..FADE_DONE, ticks each frame; drives SID volume + text reveal
 .const zp_wrap_pending = $fc     // set non-zero in irq_top when yscroll wraps; consumed later to fire scroll_rows_up
 
-.const N_CREDIT_ROWS = 68        // KEEP IN SYNC with the .text blocks below
+.const N_CREDIT_ROWS = 69        // KEEP IN SYNC with the .text blocks below
 .const FADE_DONE     = 99        // fade-in completes after 99 frames (~2 sec @50Hz)
 .const TEXT_REVEAL   = FADE_DONE // colour RAM flips from black to the gradient at this fade tick
 .const SCROLL_TICK_MASK = $03    // tick yscroll every (mask+1) frames — $03 = every 4 frames
@@ -1197,13 +1197,13 @@ is_header:
         .byte 0,0,0,0       // 41..44 codebase / spindle manual / every demo / before this
         .byte 0             // 45     blank
         .byte 1             // 46     thanks (merged: people + dutch)
-        .byte 0,0,0,0,0,0   // 47..52 Linus / Mads / everyone / breadbin / kloot voor / dutch
-        .byte 0             // 53     blank
-        .byte 1             // 54     and one last thought
-        .byte 0,0,0,0,0     // 55..59 the breadbin / has been waiting / for forty years / kloot finally / got me here
-        .byte 0             // 60     blank
-        .byte 0,0,0         // 61..63 thank you / from anus / see you at evoke
-        .byte 0,0,0,0       // 64..67 blank tail
+        .byte 0,0,0,0,0,0,0 // 47..53 Linus / Mads / Tero / everyone / breadbin / kloot voor / dutch
+        .byte 0             // 54     blank
+        .byte 1             // 55     and one last thought
+        .byte 0,0,0,0,0     // 56..60 the breadbin / has been waiting / for forty years / kloot finally / got me here
+        .byte 0             // 61     blank
+        .byte 0,0,0         // 62..64 thank you / from anus / see you at evoke
+        .byte 0,0,0,0       // 65..68 blank tail
 
 
 //==================================================================
@@ -1273,6 +1273,7 @@ credit_text:
         .byte $5b
         .text "kesson             "
         row("              Mads Nielsen              ")
+        row("              Tero Heikkinen            ")
         row("              everyone keeping the      ")
         row("              breadbin singing          ")
         row("              kloot voor de fouten      ")
