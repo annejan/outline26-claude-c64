@@ -5,7 +5,7 @@ This is a snapshot, not a contract — update when the situation shifts.*
 
 ## Where we are
 
-Main is at `0bfe634`. All seven parts play end-to-end, ~3:30 of
+Main is at `20aa2ca`. All seven parts play end-to-end, ~3:30 of
 runtime. Demo cycle:
 
 ```
@@ -17,13 +17,9 @@ screenfill → intro (logo + K-S-K-S kit)
            → end (dark-phaser credit roll, loops)
 ```
 
-Open PRs as of writing:
-
-- **#34** — greets: trim DYCP wobble amplitude for readability
-- **#35** — chore: AGENTS.md gotchas + memory-layout refresh +
-  `where-am-i.sh` + `record_demo --part`
-
-No outstanding crash bugs known.
+All PRs merged. Post-audit fix commit `20aa2ca` resolves the ZP-slot
+collisions that were silently corrupting music volume + 16-bit scroll
+offset (see [#38](https://github.com/annejan/outline26-claude-c64/issues/38)).
 
 ## What works
 
@@ -48,8 +44,8 @@ No outstanding crash bugs known.
 | Item | Why it matters | Effort |
 |---|---|---|
 | **Real-hardware verification — NEVER DONE** | Two weeks out. VICE is generous; real PAL C64 can break on IRQ timing, $D012 race conditions, DMA stretching. If something fails on metal, we need debug time. | 30 min to test, then ?? to fix |
-| **Sinus is still "weird"** | Original punch-list item from 2026-05-20 that we never circled back to. The filter routing was fixed but the visual/audio still didn't land. | Couple of hours |
-| **End-credits dark-phaser modulation** | Documented as future polish in `sound-arc.md` under "End-credits darkening". The slow-sine clean↔dark breathe. | 1-2 hours |
+| **Sinus** | Reworked as the breath (`9d9f851`) — repeating DEFEEST field, woven grid + colour banding, LP fade. | ✅ done |
+| **End-credits dark-phaser modulation** | Slow LFO modulates filter cutoff clean↔dark (`4d37d23`, `ba22f08`). ~20.5 s cycle, never starts dark. | ✅ done |
 | **Submission format compliance** | X2026 likely wants: specific filename, specific runtime cap, possibly a thumbnail. Unchecked. | 30 min to read rules + fix |
 | **PAL CRT preview** | Demoparties show on big CRTs / projectors. Colours read very differently from a flat-panel. Never seen on anything but VICE on a flat-panel. | 1 evening if a CRT is in reach |
 
@@ -66,9 +62,7 @@ No outstanding crash bugs known.
 
 ### Days 4-7: close the punch list
 
-- Sinus: actually figure out what's "weird" and fix it. Don't ship
-  with a known-bad part.
-- End-credits slow-sine modulation, if real-HW came back clean.
+Both done. Focus on HW test and submission prep.
 
 ### Days 8-14: polish + submission
 

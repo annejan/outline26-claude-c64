@@ -9,7 +9,7 @@
 #   4. mkpef bundles part.efo into part.pef.
 #
 # Then pefchain links the .pef files per pefchain_script into the .d64.
-set -e
+set -eo pipefail
 
 ROOT="$(dirname "$(readlink -f "$0")")"
 KICKASS="$ROOT/kickass/KickAss.jar"
@@ -34,20 +34,20 @@ build_part() {
         cd "$ROOT/$dir"
         rm -f "$name.prg" "${name}_efo_header.bin" "$name.efo" "$name.pef"
 
-        # Code
-        java -jar "$KICKASS" "$name.asm" >/dev/null
-        [[ -f "$name.prg" ]] || { echo "  $name.asm build failed"; exit 1; }
+        # Code — capture stderr; show it if build fails
+        local ka_err; ka_err=$(java -jar "$KICKASS" "$name.asm" 2>&1 >/dev/null)
+        [[ -s "$name.prg" ]] || { echo "  $name.asm build failed:"; echo "$ka_err"; exit 1; }
 
         # EFO header (relies on $name.sym from the previous step)
-        java -jar "$KICKASS" -binfile "${name}_efo_header.asm" >/dev/null
-        [[ -f "${name}_efo_header.bin" ]] || { echo "  header build failed"; exit 1; }
+        ka_err=$(java -jar "$KICKASS" -binfile "${name}_efo_header.asm" 2>&1 >/dev/null)
+        [[ -s "${name}_efo_header.bin" ]] || { echo "  header build failed:"; echo "$ka_err"; exit 1; }
 
         # Concatenate header + prg → .efo
         cat "${name}_efo_header.bin" "$name.prg" > "$name.efo"
 
         # mkpef → .pef (plus any extra binaries at fixed load addresses)
-        "$MKPEF" -o "$name.pef" "$name.efo" "${extras[@]}" >/dev/null
-        [[ -f "$name.pef" ]] || { echo "  mkpef failed"; exit 1; }
+        local mkp_err; mkp_err=$("$MKPEF" -o "$name.pef" "$name.efo" "${extras[@]}" 2>&1 >/dev/null)
+        [[ -s "$name.pef" ]] || { echo "  mkpef failed:"; echo "$mkp_err"; exit 1; }
     )
 }
 

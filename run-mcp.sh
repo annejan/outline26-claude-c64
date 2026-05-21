@@ -19,7 +19,14 @@ fi
 pkill -9 -f x64sc 2>/dev/null || true
 sleep 1
 
-/home/annejan/Projects/vice-mcp/vice/build-test-with-mcp/src/x64sc \
+# Prefer the vice-mcp build; fall back to stock x64sc (no MCP).
+VICE_BIN="${VICE_MCP_BIN:-/home/annejan/Projects/vice-mcp/vice/build-test-with-mcp/src/x64sc}"
+if [[ ! -x "$VICE_BIN" ]]; then
+    VICE_BIN="$(command -v x64sc 2>/dev/null || echo /usr/bin/x64sc)"
+    echo "Warning: vice-mcp build not found at \$VICE_MCP_BIN. Using $VICE_BIN (no MCP)." >&2
+fi
+
+"$VICE_BIN" \
     -mcpserver \
     > /tmp/vice.log 2>&1 &
 disown

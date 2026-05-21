@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-tools/vicemon.py — VICE binary monitor client for Umbra (C64 Platformer).
+tools/vicemon.py — VICE binary monitor client for outline-64 (C64 demo).
 Stdlib-only, no external dependencies.
 
 Protocol: https://vice-emu.sourceforge.io/vice_13.html#SEC338

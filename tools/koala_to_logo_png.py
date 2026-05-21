@@ -4,7 +4,7 @@ Export character rows 8-16 (the DEFEEST logo) from a Koala .kla file
 as a paletted 320x72 PNG for pixel editing.
 
 Usage:
-  python3 tools/koala_to_logo_png.py parts/screenfill/defeest.kla /tmp/logo.png
+  python3 tools/koala_to_logo_png.py parts/intro/defeest.kla /tmp/logo.png
 
 The PNG uses the Pepto C64 palette so colours appear correct in any
 indexed-PNG viewer (Aseprite, GrafX2, GIMP, etc.).

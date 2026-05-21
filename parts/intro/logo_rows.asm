@@ -1,4 +1,4 @@
-// Auto-generated from /home/annejan/Projects/x2026/parts/intro/logo.png
+// Auto-generated from parts/intro/logo.png
 // background = $00
 // 2880 bytes of bitmap data (rows 8-16)
 logo_rows:

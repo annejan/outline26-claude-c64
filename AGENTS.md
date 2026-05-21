@@ -598,7 +598,7 @@ event timeline.
 
 This demo's brand humor is **crude Dutch + improper grammar** (group
 handle is "deFEEST", scene names "kloot/deFEEST", "Anus/deFEEST",
-"Ranzbak/deFEEST", "Kleuter/deFEEST"). The Dutch lines in credits
+"Ranzbak/deFEEST", "Cinder/deFEEST"). The Dutch lines in credits
 (`kloot voor de fouten / en meer slechte ideeen`) are intentional;
 don't "fix" their grammar.
 

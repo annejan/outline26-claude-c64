@@ -127,7 +127,7 @@ so we never touch CIA2 `$DD00` after the initial Spindle setup.
 | `$0200-$03FF`  | Spindle    | Spindle    | Spindle   | Spindle   | Spindle   | Spindle   | Spindle   |
 | `$0400-$07FF`  | screen RAM | bitmap colour info | screen + plasma | screen (DEFEEST) | screen + chars | title screen | screen + credits |
 | `$0800-$0BFF`  | —          | code + IRQs + sprite shapes | code + tables | code + tables | —     | code + state + tier tables | — |
-| `$0C00-$0CFF`  | —          | (free)     | code+     | bg_tab    | —         | code (cont.) + ping-pong state + starfield init data | — |
+| `$0C00-$0CFF`  | —          | (free)     | code+     | code (tail) | —       | code (cont.) + ping-pong state + starfield init data | — |
 | `$0D00-$0DFF`  | —          | —          | code+     | —         | —         | code (cont.) + title text | — |
 | `$0E00-$0EFF`  | —          | —          | code (interlude) | — | —         | col_tab   | —         |
 | `$0F00-$0FFF`  | —          | —          | —         | —         | —         | sin_tab   | —         |
@@ -153,7 +153,7 @@ EFO `'P'` claims as of today:
 | screenfill | `$C0-$CA`             |
 | intro      | `$04-$5B`, `$10-$12`  |
 | interlude  | `$08-$0E`             |
-| sinus      | `$08-$0C`             |
+| sinus      | `$08-$0D`             |
 | greets     | `$80-$8F`, `$20-$27`  |
 | coda       | `$08-$0F`, `$20-$37`  |
 | end        | `$30-$44`             |
@@ -193,8 +193,10 @@ grow coda's code, watch `parts/coda/coda.sym` for `sin_tab=$1000+`
 | `$F5` | filter cutoff / scratch | interlude, sinus |
 | **`$F6`** | **inter-part transition condition byte** — every part either reaches a specific value here to trigger the next part, or its setup resets it to start counting | always |
 | **`$F9`, `$FA`** | **clobbered by intro's `my_music_play` on every JSR** — zp_tmp / zp_msb in intro's namespace. Any part that calls `$119E` (interlude, sinus, greets) MUST NOT park persistent state here. | every JSR `$119E` |
-| `$F7`, `$F8` | beat counter / scroll pos / kick state | varies per part |
-| `$FB-$FE` | sinus frame counter ($FC), intro text pointers / smooth scroll / frame counter | sinus, intro, end |
+| `$F7` | zp_tmp (sinus), echo / scroll counter (intro) | sinus, intro |
+| `$F8` | beat counter / scroll tick / kick state | varies per part (NOT used by sinus) |
+| `$FB`, `$FC` | sinus zp_line ($FB), zp_frame ($FC) | sinus |
+| `$FB-$FE` | intro text pointers / smooth scroll / frame counter | intro, end |
 
 ### Why bytes are placed where they are (concrete examples)
 

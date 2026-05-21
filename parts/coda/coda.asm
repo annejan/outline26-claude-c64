@@ -1180,6 +1180,7 @@ sin_tab:
 .for (var i = 0; i < 256; i++) {
         .byte floor(ORBIT_RADIUS * sin(i * 2 * PI / 256))
 }
+.errorif (sin_tab + 256) > $1000, "sin_tab overflows into intro music tables at $1000"
 
 //==================================================================
 // Kloot star sprite shapes live at $2800-$2BFF (sprite pointer values
