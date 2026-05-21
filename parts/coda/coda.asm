@@ -561,8 +561,15 @@ setup:
         lda #$1f
         sta SID_VOL
 
-        // Raster IRQ at top of visible area.
-        lda #$32                        // line 50
+        // Raster IRQ in the top border — fires early enough that the
+        // orbital math + sprite-position writes at the top of `interrupt`
+        // complete BEFORE VIC re-reads sprite Y registers at the lowest
+        // possible top-quad Y (= 52). From raster 20 → 52 we have
+        // ~32 rasters ≈ 2000 cy of headroom for orbit + position writes
+        // (the actual work is ~300-400 cy, so plenty of buffer).
+        lda #$14                        // line 20 (was $32 = 50; moved up to
+                                        //   front-load position writes before
+                                        //   VIC's per-raster sprite-Y check)
         sta VIC_RASTER
         lda #$01
         sta VIC_IRQEN
@@ -595,6 +602,175 @@ fadeout:
 // no per-IRQ X/Y math here. The "growth" lives in the sprite shapes.
 //==================================================================
 interrupt:
+        // ---- Orbital motion + sprite-cluster positions FIRST ----
+        // VIC re-checks every sprite's Y register at every raster
+        // line, so the position writes MUST finish before VIC reads
+        // the lowest possible top-quad Y (= KLOOT_Y_CENTRE - ORBIT_RADIUS
+        // - KLOOT_DY = 73-21 = 52). The IRQ fires at raster $14
+        // (= 20), so we have ~32 rasters of headroom before raster 52
+        // — plenty of time to compute orbits, swap colours, and
+        // write 16 sprite-position registers.
+        //
+        // Without this reorder, the previous structure had position
+        // writes near the END of the IRQ (after music_play / star_field
+        // / coda_kick / half-rate logic), which put them around raster
+        // 80-100. Top quad Y values < 80 then RACED VIC's sprite-Y
+        // check — the top quad displayed at LAST frame's Y while the
+        // bottom quad (Y ≥ 94) saw the new Y. When stars moved
+        // downward, the result was a one-raster gap between top and
+        // bottom halves at "20 % from top" of the screen — visible
+        // as a thin black horizontal line through the dance.
+
+        // Star 1: advance phase, read X/Y offsets from sin_tab.
+        lda star1_orbit_phase
+        clc
+        adc #ORBIT_SPEED_1
+        sta star1_orbit_phase
+        tax
+        lda sin_tab,x
+        clc
+        adc #KLOOT_X_CENTRE
+        sta star1_cx
+        txa
+        clc
+        adc #64
+        tax
+        lda sin_tab,x
+        clc
+        adc #KLOOT_Y_CENTRE
+        sta star1_cy
+
+        // Star 2: independent speed/phase
+        lda star2_orbit_phase
+        clc
+        adc #ORBIT_SPEED_2
+        sta star2_orbit_phase
+        tax
+        lda sin_tab,x
+        clc
+        adc #KLOOT_X_CENTRE
+        sta star2_cx
+        txa
+        clc
+        adc #64
+        tax
+        lda sin_tab,x
+        clc
+        adc #KLOOT_Y_CENTRE
+        sta star2_cy
+
+        // ---- Priority-swap detection — phase-difference bit 6 ----
+        // Triggers when bit 6 of (star2_phase - star1_phase) transitions,
+        // which happens at ~max separation given the +1/frame phase
+        // diff (speeds 2 and 3, diff = 1). See orbit-speed comment block
+        // up top for why the diff MUST stay at +1/frame for this to fire
+        // at safe (well-separated) moments rather than overlap moments.
+        lda star2_orbit_phase
+        sec
+        sbc star1_orbit_phase
+        and #$40                       // isolate bit 6
+        sta $f9                        // stash current bit ($f9 safe here — music_play hasn't run yet)
+        eor last_safe_bit
+        beq !safe_same+
+        lda $f9
+        sta last_safe_bit
+        lda swap_flag
+        eor #1
+        sta swap_flag
+        bne !cyan_front+
+        // Star 1 (brown) → sprites 0-3, star 2 (cyan) → sprites 4-7
+        lda #$09
+        sta $d027
+        sta $d028
+        sta $d029
+        sta $d02a
+        lda #$0e
+        sta $d02b
+        sta $d02c
+        sta $d02d
+        sta $d02e
+        lda #$ff
+        sta $d01b
+        jmp !safe_done+
+!cyan_front:
+        // Star 2 (cyan) → sprites 0-3, star 1 (brown) → sprites 4-7
+        lda #$0e
+        sta $d027
+        sta $d028
+        sta $d029
+        sta $d02a
+        lda #$09
+        sta $d02b
+        sta $d02c
+        sta $d02d
+        sta $d02e
+        lda #$00
+        sta $d01b
+        jmp !safe_done+
+!safe_same:
+        lda $f9
+        sta last_safe_bit
+!safe_done:
+
+        // ---- Exchange orbital centres if swap_flag active ----
+        lda swap_flag
+        beq !no_exchange+
+        lda star1_cx
+        ldx star2_cx
+        sta star2_cx
+        stx star1_cx
+        lda star1_cy
+        ldx star2_cy
+        sta star2_cy
+        stx star1_cy
+!no_exchange:
+
+        // ---- Write star 1 sprite positions ----
+        // X = star1_cx ± KLOOT_DX, Y = star1_cy ± KLOOT_DY
+        lda star1_cx
+        clc
+        adc #KLOOT_DX
+        sta $d000                       // spr 0 TR X
+        sta $d006                       // spr 3 BR X
+        lda star1_cx
+        sec
+        sbc #KLOOT_DX
+        sta $d002                       // spr 1 TL X
+        sta $d004                       // spr 2 BL X
+        lda star1_cy
+        sec
+        sbc #KLOOT_DY
+        sta $d001                       // spr 0 TR Y
+        sta $d003                       // spr 1 TL Y
+        lda star1_cy
+        clc
+        adc #KLOOT_DY
+        sta $d005                       // spr 2 BL Y
+        sta $d007                       // spr 3 BR Y
+
+        // ---- Write star 2 sprite positions ----
+        lda star2_cx
+        clc
+        adc #KLOOT_DX
+        sta $d008                       // spr 4 TR X
+        sta $d00e                       // spr 7 BR X
+        lda star2_cx
+        sec
+        sbc #KLOOT_DX
+        sta $d00a                       // spr 5 TL X
+        sta $d00c                       // spr 6 BL X
+        lda star2_cy
+        sec
+        sbc #KLOOT_DY
+        sta $d009                       // spr 4 TR Y
+        sta $d00b                       // spr 5 TL Y
+        lda star2_cy
+        clc
+        adc #KLOOT_DY
+        sta $d00d                       // spr 6 BL Y
+        sta $d00f                       // spr 7 BR Y
+
+        // ---- NOW the rest of the per-frame work ----
         jsr INTRO_MUSIC_PLAY
         // Re-assert master vol: my_music_play computes $D418 from
         // $F8 (zp_intro) every frame, which would only matter if
@@ -684,170 +860,10 @@ interrupt:
         bpl !sp_no-
 !done_ptr:
 
-        // ---- Orbital motion (50 Hz) — both stars drift on sine paths ----
-        // Star 1: advance phase, read X/Y offsets from sine table.
-        // Cosine by offset +64 into the table (quarter cycle).
-        lda star1_orbit_phase
-        clc
-        adc #ORBIT_SPEED_1
-        sta star1_orbit_phase
-        tax
-        lda sin_tab,x
-        clc
-        adc #KLOOT_X_CENTRE
-        sta star1_cx
-        txa
-        clc
-        adc #64
-        tax
-        lda sin_tab,x
-        clc
-        adc #KLOOT_Y_CENTRE
-        sta star1_cy
-
-        // Star 2: independent speed/phase
-        lda star2_orbit_phase
-        clc
-        adc #ORBIT_SPEED_2
-        sta star2_orbit_phase
-        tax
-        lda sin_tab,x
-        clc
-        adc #KLOOT_X_CENTRE
-        sta star2_cx
-        txa
-        clc
-        adc #64
-        tax
-        lda sin_tab,x
-        clc
-        adc #KLOOT_Y_CENTRE
-        sta star2_cy
-
-        // ---- Priority-swap detection — phase-difference bit 6 ----
-        // Star 1 advances at speed 1, star 2 at speed 2, so the
-        // difference grows by 1 each frame. Bit 6 of the difference
-        // toggles every 64 frames, at which point the stars are ~90°
-        // apart on their orbits (= max separation). That's the safe
-        // window to swap sprite-slot assignments — no blink at crossing.
-        lda star2_orbit_phase
-        sec
-        sbc star1_orbit_phase
-        and #$40                       // isolate bit 6
-        sta $f9                        // stash current bit ($f9 safe after my_music_play)
-        eor last_safe_bit
-        beq !safe_same+
-        // Bit 6 transitioned — toggle swap_flag and swap sprite colours.
-        lda $f9
-        sta last_safe_bit
-        lda swap_flag
-        eor #1
-        sta swap_flag
-        // Swap colour registers between sprite groups so the brown/cyan
-        // identity follows the star, not the hardware sprite slot.
-        // Also toggle $D01B so the star group in front of the text
-        // alternates — treats the title text like a physical plane
-        // that stars orbit in front of or behind.
-        bne !cyan_front+
-        // Star 1 (brown) → sprites 0-3, star 2 (cyan) → sprites 4-7
-        // All sprites behind text ($D01B = $FF) — slow pass behind.
-        lda #$09
-        sta $d027
-        sta $d028
-        sta $d029
-        sta $d02a
-        lda #$0e
-        sta $d02b
-        sta $d02c
-        sta $d02d
-        sta $d02e
-        lda #$ff
-        sta $d01b
-        jmp !safe_done+
-!cyan_front:
-        // Star 2 (cyan) → sprites 0-3, star 1 (brown) → sprites 4-7
-        // All sprites in front of text ($D01B = $00) — emerge forward.
-        lda #$0e
-        sta $d027
-        sta $d028
-        sta $d029
-        sta $d02a
-        lda #$09
-        sta $d02b
-        sta $d02c
-        sta $d02d
-        sta $d02e
-        lda #$00
-        sta $d01b
-        jmp !safe_done+
-!safe_same:
-        // No transition — just store current bit for next frame.
-        lda $f9
-        sta last_safe_bit
-!safe_done:
-
-        // ---- Exchange orbital centres if swap_flag active ----
-        // When swapped, star 1's computed centre gets written to the
-        // sprites-4-7 registers and vice versa — the VIC priority rule
-        // (higher number = in front) now shows the other star on top.
-        lda swap_flag
-        beq !no_exchange+
-        lda star1_cx
-        ldx star2_cx
-        sta star2_cx
-        stx star1_cx
-        lda star1_cy
-        ldx star2_cy
-        sta star2_cy
-        stx star1_cy
-!no_exchange:
-
-        // ---- Write star 1 sprite positions (50 Hz) ----
-        // X = star1_cx ± KLOOT_DX, Y = star1_cy ± KLOOT_DY
-        lda star1_cx
-        clc
-        adc #KLOOT_DX
-        sta $d000                       // spr 0 TR X
-        sta $d006                       // spr 3 BR X
-        lda star1_cx
-        sec
-        sbc #KLOOT_DX
-        sta $d002                       // spr 1 TL X
-        sta $d004                       // spr 2 BL X
-
-        lda star1_cy
-        sec
-        sbc #KLOOT_DY
-        sta $d001                       // spr 0 TR Y
-        sta $d003                       // spr 1 TL Y
-        lda star1_cy
-        clc
-        adc #KLOOT_DY
-        sta $d005                       // spr 2 BL Y
-        sta $d007                       // spr 3 BR Y
-
-        // ---- Write star 2 sprite positions (50 Hz) ----
-        lda star2_cx
-        clc
-        adc #KLOOT_DX
-        sta $d008                       // spr 4 TR X
-        sta $d00e                       // spr 7 BR X
-        lda star2_cx
-        sec
-        sbc #KLOOT_DX
-        sta $d00a                       // spr 5 TL X
-        sta $d00c                       // spr 6 BL X
-
-        lda star2_cy
-        sec
-        sbc #KLOOT_DY
-        sta $d009                       // spr 4 TR Y
-        sta $d00b                       // spr 5 TL Y
-        lda star2_cy
-        clc
-        adc #KLOOT_DY
-        sta $d00d                       // spr 6 BL Y
-        sta $d00f                       // spr 7 BR Y
+        // (Orbital math + sprite-position writes are now at the TOP of
+        // the IRQ, before music_play, so they finish before VIC's
+        // sprite-Y check at the lowest possible top-quad Y. See the
+        // comment block at the start of `interrupt:`. Race fixed.)
 
         // transition check: 16-bit compare frame_hi:zp_frame vs N_FRAMES.
         // Fire when (frame_hi:zp_frame) >= N_FRAMES.
