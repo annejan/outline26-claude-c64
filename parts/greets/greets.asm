@@ -562,8 +562,9 @@ copy_font:
 
 ptr_lookup:
 .for (var i = 0; i < 256; i++) {
-        .if (i >= $41 && i <= $5A) { .byte $80 + i - $41 }
-        .if (i < $41 || i > $5A) { .byte $9A }
+        .if (i >= $41 && i <= $5A) { .byte $80 + i - $41 }    // A-Z   → $80..$99
+        .if (i == $2D)             { .byte $9B }              // '-'   → hyphen
+        .if (i != $2D && (i < $41 || i > $5A)) { .byte $9A }  // other → blank
 }
 
 sprite_x_table:
@@ -632,22 +633,27 @@ sine_table_x:
 // folks whose tools / inspiration got us here.
 * = $8600
 message:
-.text "    XENON   SILICON LTD   SCS TRC         "
-.text "    FOCUS   FAIRLIGHT   REFLEX            "
-.text "    BONZAI   GENESIS PROJECT   EXTEND     "
-.text "    TRSI   OXYRON   BYTERAPERS            "
-.text "    CENSOR DESIGN   CHANNEL FOUR          "
-.text "    PADUA   ATLANTIS   ELYSIUM            "
-.text "    EXCESS   TRIAD   NEOPLASIA            "
-.text "    THE DREAMS   RADWAR   PERFORMERS      "
-.text "    VANDALISM NEWS   NAH KOLOR   LOTEK    "
-.text "    CHOCOTROPHY   PHOBOS TEAM             "
-.text "    SIDMASTERS   THE WEEKENDERS           "
-.text "    LETHARGY   ONSLAUGHT   LEVEL          "
-.text "    SUCCESS   ARTLINE   RESOURCE          "
-.text "    PLUSH   FINNISH GOLD  NURDS           "
-.text "    OFFENCE   POO BRAIN   RABENAUGE       "
-.text "    HOKUTO FORCE ABYSS CONNECTION         "
+// 8-space intro pad so the screen starts blank before the first
+// name slides in. Names are separated by three spaces — one inside
+// multi-word names ("SILICON LTD"), three between groups reads as
+// a clear gap to the eye.
+.text "        "
+.text "XENON   SILICON LTD   SCS TRC   "
+.text "FOCUS   FAIRLIGHT   REFLEX   "
+.text "BONZAI   GENESIS PROJECT   EXTEND   "
+.text "TRSI   OXYRON   BYTERAPERS   "
+.text "CENSOR DESIGN   CHANNEL FOUR   "
+.text "PADUA   ATLANTIS   ELYSIUM   "
+.text "EXCESS   TRIAD   NEOPLASIA   "
+.text "THE DREAMS   RADWAR   PERFORMERS   "
+.text "VANDALISM NEWS   NAH-KOLOR   LOTEK   "
+.text "CHOCOTROPHY   PHOBOS TEAM   "
+.text "SIDMASTERS   THE WEEKENDERS   "
+.text "LETHARGY   ONSLAUGHT   LEVEL   "
+.text "SUCCESS   ARTLINE   RESOURCE   "
+.text "PLUSH   FINNISH GOLD   NURDS   "
+.text "OFFENCE   POO-BRAIN   RABENAUGE   "
+.text "HOKUTO FORCE   ABYSS CONNECTION   "
 // label fill the on-screen 8-sprite window once settle kicks in;
 // pad with trailing spaces so even if the scroller drifts past it
 // for any reason, the visible window stays clean.
@@ -715,6 +721,14 @@ font_data:
 // render as random pixels, which made the new message look glitched
 // as soon as it picked up chars like 'BROODJEKAAS.EXE' or 'X2026'.
 .fill 64, 0
+
+// Hyphen glyph for ptr_lookup's $9B slot — chargen ROM `-` at code
+// $2D, scaled to 24×21 the same way A-Z are. Lets NAH-KOLOR and
+// POO-BRAIN render correctly instead of becoming NAH KOLOR / POO BRAIN.
+.var g_hyphen = glyph_data_21x24($2D)
+.for (var i = 0; i < g_hyphen.size(); i++) {
+        .byte g_hyphen.get(i)
+}
 // space (blank)
 .for (var i = 0; i < 64; i++) {
         .byte 0
