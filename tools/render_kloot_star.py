@@ -111,14 +111,25 @@ def render_frame(angle_deg: float, r_outer: float, r_inner: float,
     if quadrant < 0:
         cx = (SPRITE_W - 1) / 2.0
         cy = (SPRITE_H - 1) / 2.0
-    elif quadrant == 0:    # top-right of star → centre at left-bottom of sprite
-        cx, cy = -0.5, SPRITE_H - 0.5
-    elif quadrant == 1:    # top-left of star → centre at right-bottom of sprite
-        cx, cy = SPRITE_W - 0.5, SPRITE_H - 0.5
-    elif quadrant == 2:    # bottom-left of star → centre at right-top of sprite
-        cx, cy = SPRITE_W - 0.5, -0.5
-    elif quadrant == 3:    # bottom-right of star → centre at left-top of sprite
-        cx, cy = -0.5, -0.5
+    # Quadrant centres place the star's logical centre on an INTEGER
+    # pixel boundary (was a half-pixel offset). This makes the dy=0 /
+    # dx=0 row+column get sampled in BOTH adjacent quadrants — without
+    # it, the boundary fell on dy=±0.5 (and dx=±0.5), so the exact
+    # centre line was never rendered. At rotation angles where the
+    # nearest lobes lie between dy=±0.5, that produced a thin blank
+    # horizontal stripe through the animated star clusters — visible
+    # as a "black line at ~25 % of cluster height" once the orbit
+    # widened in coda Stage F. Rendering the dy=0 row in TR/TL and
+    # BL/BR fixes the boundary because the centre is the most-filled
+    # part of the star.
+    elif quadrant == 0:    # top-right of star → centre at left-bottom corner of sprite
+        cx, cy = 0, SPRITE_H - 1
+    elif quadrant == 1:    # top-left  of star → centre at right-bottom corner
+        cx, cy = SPRITE_W - 1, SPRITE_H - 1
+    elif quadrant == 2:    # bottom-left of star → centre at right-top corner
+        cx, cy = SPRITE_W - 1, 0
+    elif quadrant == 3:    # bottom-right of star → centre at left-top corner
+        cx, cy = 0, 0
     else:
         raise ValueError(f"quadrant must be -1..3, got {quadrant}")
     rot = math.radians(angle_deg)

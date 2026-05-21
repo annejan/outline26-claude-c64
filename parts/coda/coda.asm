@@ -51,12 +51,14 @@
 .const SID_V3_AD = $d413
 .const SID_V3_SR = $d414
 
-.const N_FRAMES   = 600               // ~24 s at the half-rate divider
-                                      // (600 ticks @ 25 Hz). Was 250
-                                      // (~10 s, then 400 / 16 s). Now
-                                      // long enough to read as a held
-                                      // title with the dance breathing
-                                      // through several full crossings.
+.const N_FRAMES   = 800               // ~32 s at the half-rate divider
+                                      // (800 ticks @ 25 Hz). Iteration
+                                      // history: 250 (~10 s) → 400
+                                      // (~16 s) → 600 (~24 s) → 800.
+                                      // At 1:1.5 chase ratio + 256-frame
+                                      // relative cycle, this fits a
+                                      // generous ~3 full chases per
+                                      // part.
 
 // Kloot star — Stage B: 4-sprite 2×2 quad, each X+Y-expanded, forming a
 // 96×84 12-lobe Claude-style burst behind the title text.
