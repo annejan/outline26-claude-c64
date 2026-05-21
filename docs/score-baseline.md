@@ -29,7 +29,7 @@ re-init SID for a slow 4× tempo pad reprise, no drums, lunch is over.
 | 2 | intro | ~30 s | `$f6 == $F0` (zp_outro saturated) | full mix builds: arp → +lead → +bass → +drums |
 | 3 | interlude | ~7.7 s | `$f6 == $10` (16 beats × 24 frames) | pad-only ~2.9 s, buildup ~4.8 s with LP sweep |
 | 4 | sinus | ~5 s | `$f6 == $30` (frame counter stall) | LP cutoff closes, drums silent, vol fades |
-| 5 | greets | ~77 s | `$f6 == $a0` (160 beats) | climax: full mix + V2-filtered "wah" on lead |
+| 5 | greets | ~50 s | `$f6 == $82` (scroll-driven KLOTEN snap) | climax: full mix + V2-filtered "wah" on lead, koala backdrop |
 | 6 | coda | ~32 s | `$f6 == $30` (32-s timer) | triumphant: full mix held, twin stars dance |
 | 7 | end | forever | (none — `stay`) | own player, 4× slower pad reprise + LP mood LFO |
 
@@ -212,7 +212,7 @@ END_STEP_FRAMES = 24 (4× slower than intro)
    but with 3 SID voices and one already gated to drums, there's no
    room without sacrificing the arp.
 
-6. **No section dynamics within parts.** Within greets' 77 s, the
+6. **No section dynamics within parts.** Within greets' ~50 s, the
    only intra-part variation is the lead cycling phrases — chord and
    rhythm are constant. A "drop-and-build" within greets (e.g. drums
    stop for 4 beats halfway through the scroller) would add narrative.

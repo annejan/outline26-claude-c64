@@ -42,7 +42,15 @@
 .const BEAT_PERIOD   = 24         // frames per beat — was 20, loosened for breathing room
 .const BUILDUP_BEAT  = 6          // pad ends, bass+filter+bars in — was 4
 .const TRANSITION_BEAT = 16       // pefchain advances at zp_beat_count == this — was 10
-.const FILT_CUT_LO   = $40
+.const FILT_CUT_LO   = $70        // bumped from $40 to $70 so V1 bass
+                                   // isn't rolled off as hard at the
+                                   // SPARKED drop — the user heard the
+                                   // dark cutoff as "music slowing
+                                   // down". Starting brighter lets the
+                                   // sweep feel like opening up an
+                                   // already-energetic mix rather than
+                                   // dragging an underwater bass into
+                                   // existence.
 .const FILT_CUT_STEP = $16        // softer sweep over more beats
 
 // Sprite-letter line B — "SPARKED " drops in on the buildup, bounces
@@ -54,6 +62,11 @@
 .const PHASE_FLY_IN    = 1
 .const PHASE_BOUNCE    = 2
 .const PHASE_FLY_OUT   = 3
+.const PHASE_DONE      = 4        // terminal — sprites stay off, no
+                                   // further animation. Set by sp_out
+                                   // after FLY_OUT completes so sp_off's
+                                   // "BUILDUP_BEAT reached?" check
+                                   // doesn't re-arm a second drop.
 .const FLY_IN_LEN      = 32       // frames between first letter dropping and last letter settling
 .const FLY_OUT_LEN     = 20
 
@@ -309,6 +322,17 @@ interrupt:
         bne !ramp+
         lda #FILT_CUT_LO
         sta zp_filt_cut
+        // Also jump the intro's lead pattern to phrase 2 (= mu_step
+        // start of "active 8ths, rising energy") so the SPARKED
+        // drop arrives with a punchy 8th-note line instead of the
+        // natural phrase 4 / phrase 1 sparseness that interlude's
+        // mu_step happens to be in by this point. mu_step lives in
+        // intro's resident music tables at $1148; resetting mu_frame
+        // to 0 too so the next step boundary fires cleanly.
+        lda #32
+        sta $1148                  // mu_step (intro.sym)
+        lda #0
+        sta $1149                  // mu_frame
         jmp !no_beat+
 !ramp:  lda zp_filt_cut
         clc
@@ -453,11 +477,20 @@ update_sprites:
         lda sp_phase
         beq sp_off
         cmp #PHASE_FLY_IN
-        beq sp_in
+        bne !skip_in+
+        jmp sp_in
+!skip_in:
         cmp #PHASE_BOUNCE
-        beq sp_bounce
-        // else PHASE_FLY_OUT
+        bne !skip_bounce+
+        jmp sp_bounce
+!skip_bounce:
+        cmp #PHASE_FLY_OUT
+        bne !skip_out+
         jmp sp_out
+!skip_out:
+        // PHASE_DONE (or any other value) → no-op so SPARKED doesn't
+        // re-fly after the FLY_OUT completes near the transition.
+        rts
 
 sp_off:
         // Wait for buildup to arm the drop.
@@ -596,8 +629,12 @@ sp_out:
         lda sp_frame
         cmp #FLY_OUT_LEN
         bcc !rts+
-        // done — disable sprites, back to OFF
-        lda #PHASE_OFF
+        // done — disable sprites, sit in PHASE_DONE so update_sprites
+        // becomes a no-op until the part ends. Used to fall back to
+        // PHASE_OFF, but at that point zp_beat_count is way past
+        // BUILDUP_BEAT, so sp_off would immediately re-arm a SECOND
+        // fly-in — letters dropped twice before the transition.
+        lda #PHASE_DONE
         sta sp_phase
         lda #$00
         sta SPR_EN

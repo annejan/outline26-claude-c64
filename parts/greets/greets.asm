@@ -12,10 +12,12 @@
 //                copied from inline data at setup.
 //   $07F8-$07FF  sprite pointers (screen at $0400)
 //
-// Transition out: pefchain script triggers on f6 = $A0 (~77 s).
-// Settle phase kicks in at f6 = $90 (~69 s) and holds the screen
-// on "  KLOOT " for the last ~7 s — sprites stop bobbing, scroll
-// freezes, colour cycle keeps shimmering as the calm landing.
+// Transition out: pefchain script triggers on f6 = $82, but normally
+// reached via the scroll-driven path (IRQ forces f6 = SETTLE_BEAT
+// the moment scroll_pos hits the punchline). Settle phase holds the
+// screen on " KLOTEN " for ~1.9 s — sprites stop bobbing, scroll
+// freezes, colour cycle keeps shimmering as the calm landing into
+// the coda's "KLOTEN MET DE BROODTROMMEL" title.
 //==================================================================
 
 .const VIC_CTRL1   = $d011
@@ -58,10 +60,23 @@
 //   settle      SETTLE_BEAT..TRANSITION_BEAT   scroll snaps to punchline,
 //                                              sprites perfectly flat,
 //                                              colour cycle still cycles
-.const FADE_BEAT_START = $78   // 120 beats × 24 = 57.6 s
-.const SETTLE_BEAT     = $90   // 144 beats × 24 = 69.1 s
-.const TRANSITION_BEAT = $a0   // 160 beats × 24 = 76.8 s — must match
-                               //   pefchain_script's `f6 = a0`
+// Scroll-DRIVEN transition (2026-05-21): the IRQ forces beat_count to
+// SETTLE_BEAT the moment scroll_pos crosses into the settle_text region
+// (= the last 8 chars of the visible window are about to show "  KLOOT").
+// That couples the part length to message length — add or remove names
+// in the .text below and the part shortens/lengthens automatically.
+//
+// These three constants are therefore SAFETY FALLBACKS for the case
+// where scroll never reaches the end (data corruption, infinite scroll
+// speed = 0, etc.) — picked high enough that they don't fire during a
+// normal play but bounded so the part can't hang forever:
+.const FADE_BEAT_START = $70   // 112 beats × 24 ≈ 53.8 s (safety)
+.const SETTLE_BEAT     = $7E   // 126 beats × 24 ≈ 60.5 s
+.const TRANSITION_BEAT = $82   // 130 beats × 24 ≈ 62.4 s — must match
+                               //   pefchain_script's `f6 = 82`. After
+                               //   scroll-driven settle fires, this is
+                               //   reached 4 beats later = ~1.9 s of
+                               //   static "KLOOT" before the transition.
 
 .const zp_beat_phase     = $f4
 .const zp_wobble_pos     = $f5
@@ -274,6 +289,36 @@ interrupt:
         inc zp_beat_count
 !no_beat:
 
+        // ----- Scroll-driven transition -----
+        // When scroll_pos reaches the start of settle_text (the
+        // " KLOTEN " punchline at the tail of the message), force
+        // beat_count to SETTLE_BEAT so the scroll snaps to centred
+        // KLOTEN. Triggering at exactly settle_text-message (vs
+        // earlier with `-8`) lets the last name (currently "ABYSS
+        // CONNECTION") fully scroll through the visible window
+        // before the snap — at trigger time KLOTEN is naturally
+        // about to scroll into view, so the snap is a tiny align
+        // rather than a jarring jump.
+        //
+        // This couples the part length to message length: add or
+        // remove names and the part shortens/lengthens automatically.
+        // Use bcs/bcc to also handle the case where beat_count was
+        // ALREADY past SETTLE_BEAT (= safety timing got there first).
+        lda scroll_pos_hi
+        cmp #>(settle_text - message)
+        bcc !scroll_continuing+
+        bne !scroll_at_end+
+        lda zp_scroll_pos
+        cmp #<(settle_text - message)
+        bcc !scroll_continuing+
+!scroll_at_end:
+        lda zp_beat_count
+        cmp #SETTLE_BEAT
+        bcs !scroll_continuing+
+        lda #SETTLE_BEAT
+        sta zp_beat_count
+!scroll_continuing:
+
         // ----- Fade-phase damp_shift -----
         // From FADE_BEAT_START up to SETTLE_BEAT, ramp `damp_shift`
         // from 0 → 5 in steps of 1 every 4 beats. The DYCP/DXCP code
@@ -485,19 +530,13 @@ interrupt:
         // entering buffer on the RIGHT: it shows chars[scroll_pos+8]
         // (which the ptr override in update_sprite_ptrs has already put
         // into $07FF) and sits at screen X = 332..293 (= sprite 0's
-        // position + 40, sliding LEFT in lockstep).
-        //
-        // Net effect: every character in the message slides smoothly
-        // from off-right to on-screen to off-left as scroll_x_offset
-        // walks 0..40, with no visible gap on either side. At the
-        // wrap, sprite 7 instantly teleports from the right end (where
-        // it was the entering buffer) to the left end (where it's the
-        // new leftmost exiting char) — invisible because each char's
-        // ON-screen position is continuous across the swap.
+        // position + 40, sliding LEFT in lockstep). Without this,
+        // chars would pop into existence at sprite 0's X=292 on each
+        // char-wrap instead of sliding smoothly in from off-right.
         lda scroll_x_offset
         cmp #13
         bcc !no_s7_carousel+
-        lda #76                    // = 332 - 256 → register byte for screen X=332
+        lda #76                    // = 332 - 256 → reg byte for screen X=332
         sec
         sbc scroll_x_offset
         sta $d00e                  // sprite 7 X register
@@ -631,8 +670,7 @@ update_sprite_ptrs:
         lda #<message
         adc zp_scroll_pos
         sta msg_lookup + 1
-        sta msg_lookup_s7 + 1      // sprite-7 carousel override reads from
-                                    // the same base + Y=8
+        sta msg_lookup_s7 + 1      // carousel reads from same base + Y=8
         lda #>message
         adc scroll_pos_hi
         sta msg_lookup + 2
@@ -656,11 +694,11 @@ msg_lookup:
         bne !lp-
 
         // ----- Sprite-7 carousel ptr override -----
-        // When scroll_x_offset >= 13, sprite 7 acts as the entering buffer
-        // on the RIGHT side of the screen, so it should show the NEXT
-        // character (chars[scroll_pos+8]) instead of chars[scroll_pos+0].
-        // SPR_PTR_BASE+7 is sprite 7's pointer slot (since sprite 0 owns
-        // SPR_PTR_BASE+0). See the DXCP override block in the IRQ.
+        // When scroll_x_offset >= 13, sprite 7 acts as the entering
+        // buffer on the right side, showing chars[scroll_pos+8] instead
+        // of the leftmost-exit char. Pairs with the X-register override
+        // in the IRQ that puts sprite 7 at screen X=332..293 in that
+        // offset range.
         lda scroll_x_offset
         cmp #13
         bcc !no_s7_ptr+
@@ -807,9 +845,12 @@ message:
 .text "HOKUTO FORCE   ABYSS CONNECTION   "
 // label fill the on-screen 8-sprite window once settle kicks in;
 // pad with trailing spaces so even if the scroller drifts past it
-// for any reason, the visible window stays clean.
+// for any reason, the visible window stays clean. " KLOTEN " is
+// centred symmetrically in the 8-sprite row (1 leading + 6-char
+// name + 1 trailing) and ties this punchline to the demo's coda
+// title "KLOTEN MET DE BROODTROMMEL".
 settle_text:
-.text "  KLOOT                                   "
+.text " KLOTEN                                    "
 .byte $00
 
 

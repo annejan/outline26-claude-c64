@@ -14,7 +14,7 @@ effects and music evolve.
 ## Part chain
 
 ```
-screenfill ──5.6s──→ intro ──73s──→ interlude ──7.7s──→ sinus ──5s──→ greets ──77s──→ coda ──10s──→ end (loops)
+screenfill ──5.6s──→ intro ──73s──→ interlude ──7.7s──→ sinus ──5s──→ greets ──~50s──→ coda ──32s──→ end (loops)
 ```
 
 | Part | Duration | Cumulative | Transition ZP | Trigger |
@@ -23,12 +23,15 @@ screenfill ──5.6s──→ intro ──73s──→ interlude ──7.7s─�
 | intro | 73.3 s | 78.9 s | `$F6` (zp_outro) | `F6 = F0` |
 | interlude | 7.7 s | 86.6 s | `$F6` (zp_beat_count) | `F6 = 10` |
 | sinus | 5.0 s | 91.6 s | `$F6` (zp_timer) | `F6 = 30` |
-| greets | 76.8 s | 168.4 s | `$F6` (zp_beat_count) | `F6 = a0` |
-| coda | 10.0 s | 178.4 s | `$F6` (zp_timer) | `F6 = 30` |
+| greets | ~50 s | ~141.6 s | `$F6` (zp_beat_count) | `F6 = 82` (scroll-driven) |
+| coda | 32.0 s | ~173.6 s | `$F6` (zp_timer) | `F6 = 30` |
 | end | loops | — | (none) | `stay` |
 
-**One-pass runtime: ~3 min** from boot to looping credits (post
-greets-extended PR #32).
+**One-pass runtime: ~2:53** from boot to looping credits. Greets is
+now scroll-DRIVEN (not pure-time) — when `scroll_pos` reaches the
+"KLOTEN" punchline, the IRQ forces `$F6 = SETTLE_BEAT`, the row snaps
+to centred KLOTEN for ~1.9 s, then pefchain advances. Add/remove
+names in the message and the part length tracks automatically.
 
 ---
 
@@ -132,20 +135,29 @@ see `docs/pefchain-notes.md`.
 
 ## Part 5 — greets (`parts/greets/`)
 
-160 beats × 24 frames = **76.8 s** (post PR #32 epic-extended rework
-— was 32 beats / 15.4 s). Three phases:
+**Scroll-driven** ≈ 50 s (~514 chars at 9 px/frame ≈ 11.3 chars/sec
+through the message, then a 4-beat KLOTEN landing = +1.9 s).
 
-| Beat | Time | Event |
-|------|------|-------|
-| 0 | 0 s | 8 X-expanded sprites show 8-char window of greetings text. DYCP wobble ±2 px Y / ±1 px X (PR #34). |
-| Each beat | every 0.48 s | Kick on V3 (driven from intro's `my_music_play`). Music V1+V2 play naturally. |
-| 0–119 | 0–57.6 s | **Phase 1 — full scroll.** Text advances 1 char per 8 frames (was 12). 16-bit `scroll_pos` reaches the full ~640-byte message. |
-| 120–143 | 57.6–69.1 s | **Phase 2 — fade.** `zp_damp_shift` ramps 0→5 in quarter-beat steps. DYCP/DXCP apply sign-preserving ASRs to each sine sample → wobble shrinks 2→1→0 px. Scroll delay reads from `SCROLL_DELAY_TABLE` (8 → 12 → 18 → 28 → 50 → 128) so the scroller decelerates with the wobble. |
-| 144–159 | 69.1–76.8 s | **Phase 3 — settle.** Scroll snaps to `settle_text` ("  KLOOT  "), sprites lock flat at `SPR_Y_BASE`, colour cycle keeps shimmering. Beat counter still ticks so pefchain sees the trigger. |
-| **160 (= $A0)** | **76.8 s** | pefchain loads coda. `fadeout` zeros `$D015` for a clean handoff. |
+Background: multi-colour koala bitmap (peephole / vignette around
+the sprite row) loaded from `parts/greets/backdrop.kla`. Sprite font
+relocated to `$0800-$0FFF` so `$2000-$3FFF` is free for the bitmap.
 
-The full greets list now reads through and lands a deliberate "KLOOT"
-endpoint instead of just stopping mid-scroll.
+| Phase | Event |
+|-------|-------|
+| 0 s | 8 X-expanded sprites show 8-char window of greetings text over the koala. DYCP wobble ±3 px Y / ±2 px X. Sprite-7 carousel: sprite 7 doubles as the rightmost entering buffer while it's off-screen-left, so chars slide smoothly in from the right edge. |
+| Each beat (every 0.48 s) | Beat counter ticks. Bar IRQ chain runs colour bars. V2 lead "wah" via cutoff modulation. |
+| Scroll | Smooth 9 px/frame motion (`SCROLL_SPEED_TABLE[0]`). The whole row shifts left every frame; at each 40-px wrap, `scroll_pos` advances one char and the sprite ptr table shifts. |
+| When `scroll_pos` reaches `settle_text - message` (= the position of " KLOTEN " in the message): | IRQ forces `zp_beat_count = SETTLE_BEAT` (=$7E). Settle path snaps the row to centred " KLOTEN ", flat X / Y. |
+| +4 beats (~1.9 s) | `zp_beat_count` ticks naturally to `TRANSITION_BEAT` (= $82). |
+| **$F6 == $82** | pefchain loads coda. `fadeout` zeros `$D015`. |
+
+Safety fallback if scroll never reaches the end (data corruption /
+speed=0): the time-based FADE_BEAT_START ($70 = 53.8 s) / SETTLE_BEAT
+($7E = 60.5 s) / TRANSITION_BEAT ($82 = 62.4 s) constants fire on
+schedule and the part exits at ~62 s.
+
+Part length is now coupled to message length: add or remove names in
+`.text` lines and the part shortens/lengthens automatically.
 
 ---
 
