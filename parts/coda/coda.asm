@@ -51,8 +51,12 @@
 .const SID_V3_AD = $d413
 .const SID_V3_SR = $d414
 
-.const N_FRAMES   = 250               // ~10 s at the half-rate divider
-                                      // (250 ticks @ 25 Hz)
+.const N_FRAMES   = 400               // ~16 s at the half-rate divider
+                                      // (400 ticks @ 25 Hz). Was 250
+                                      // (~10 s); extended so the brown
+                                      // + cyan star dance gets the
+                                      // room to read as more than two
+                                      // passes.
 
 // Kloot star — Stage B: 4-sprite 2×2 quad, each X+Y-expanded, forming a
 // 96×84 12-lobe Claude-style burst behind the title text.
@@ -197,9 +201,20 @@
 .const INTRO_MUSIC_PLAY = $119e
 
 // Twin-star orbital motion parameters.
-.const ORBIT_RADIUS  = 40               // pixel radius (±40 px)
+.const ORBIT_RADIUS  = 56               // pixel radius (±56 px) — was 40,
+                                        //   wider swing reads more as
+                                        //   "dance" than "tight circle".
+                                        //   Geometry checked: max Y
+                                        //   excursion 185 + Y-expanded
+                                        //   bottom quad (42 px) = 248,
+                                        //   still inside visible raster.
 .const ORBIT_SPEED_1 = 1                // star 1: ~5 s per cycle at 50 Hz
-.const ORBIT_SPEED_2 = 2                // star 2: ~2.5 s per cycle
+.const ORBIT_SPEED_2 = 3                // star 2: ~1.7 s per cycle —
+                                        //   1:3 ratio (was 1:2) makes the
+                                        //   chase pattern more obviously
+                                        //   uneven. The cyan star laps
+                                        //   the brown one three times per
+                                        //   one of the brown's circuits.
 
 // Shape advance dividers — each star's shape counter advances every
 // N half-rate ticks so they rotate at fundamentally different speeds.
