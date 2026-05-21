@@ -29,7 +29,7 @@ overlays** on top of that continuous music.
 | interlude   | Pad-only first ~2.9 s (V1 muted, line A "FOR YEARS…" typewriter reveals over 2.8 s). Last ~4.8 s buildup: V1 returns, LP cutoff ramps up with **V1 + V2 both routed through the filter** (res $2) so the bass AND lead open up together, sprite-letter "SPARKED" drops with border flash, drums continue from intro. |
 | sinus       | **Breakdown.** LP filter closes — and now actually closes audibly because V1 + V2 are routed through it ($D417 = $23, res $2). Cutoff ramps $70 → $08 over the duration; vol fades over the last 50 frames. Drums silent (sinus zeros `$F6 = zp_outro` — the gating byte). The eye of the storm before the drop. |
 | greets      | **Climax / drop.** Drums return (greets' setup re-arms `$F6`), full mix + lead + arp. V2 (lead) routed through LP filter ($D417 = $42, res $4) with a slow cutoff "wah" — `zp_wobble_pos` OR'd with $40 ramps $40..$FF over 5 s breathing the melody. DYCP scroller tells the personal arc on top of the loudest moment. |
-| coda        | **The trophy.** Intro's drums silenced again (coda's setup zeros `$F6`), but coda *owns* V3 for the whole part — overrides the arp every IRQ with its own hard-restart kick on a ~60 BPM cadence. Chord pad + lead drift on V1/V2 under a sparser, slower thump than greets. Twin Kloot stars orbit on sine paths behind the title; brown + cyan; star-field asterisks twinkle around them. Music breathes out. |
+| coda        | **The trophy — triumphant.** Setup sets `$F6 = $01` so the K-S-K-S drum kit from intro's `my_music_play` keeps firing through the whole part (kick + snare alternating on V3, V1 bass-bleed sub-thump on every hit). Chord pad + lead drift on V1/V2 keep cycling Am-Em-F-G underneath. This is the LOUDEST moment of the demo — full mix held aloft for ~32 s while the twin Kloot stars dance behind the title. (Earlier coda had a dedicated sparse V3 thump at ~60 BPM, but the K-S-K-S kick already IS a triangle pitch-slam thump and the bass-bleed already IS the sub body, so the dedicated layer was redundant — pulled.) |
 | end         | `end_music_init` re-inits SID for slow chord/lead reprise. PWM + filter sweep, now reading audibly darker / more flanger-y after PR #31's coda EFO claim widened (see "End-credits darkening" below). No drums. The credit-roll outro. |
 
 ## Why my_music_play is special
@@ -266,11 +266,13 @@ The "feeling of transition" is carried by:
   follows `zp_wobble_pos | $40` so the melody breathes 5 s/cycle in
   step with the visual DYCP motion, on top of the loudest moment of
   the demo.
-- **Coda's sparse hard-restart kick under "KLOTEN MET DE BROODTROMMEL"**
-  — drums from intro's gated player drop out again; coda owns V3 and
-  fires its own slow ~60 BPM thump (the trophy beat) under the held
-  chord. Visually: twin Kloot stars orbiting + star-field twinkle
-  + title text. About 10 s — the audience reads, breathes, *gets it*.
+- **Coda's full K-S-K-S kit under "KLOTEN MET DE BROODTROMMEL"**
+  — the triumphant moment. Drums from intro's resident kit
+  CONTINUE into coda (setup sets `$F6 = $01`); the kick + snare
+  + V1 bass-bleed all carry through the held title for ~32 s.
+  Visually: twin Kloot stars dancing on wide orbits + parallax
+  PETSCII starfield + title held steady. Loudest moment of the
+  demo, by design — the audience hears, sees, *gets it*.
 - **end's own `music_init` re-init** with PWM + filter sweep for the
   credit roll reprise — quiet, no drums, settles to the title card.
   Lunch is over.

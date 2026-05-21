@@ -16,12 +16,17 @@
 //   tier with its own char + colour, drifting left (col 0 wraps to 39).
 //   Reads as depth via differential motion alone — no priority swap.
 //
-// Music: jsr INTRO_MUSIC_PLAY each frame. Drums silent because
-// setup zeros $F6 (the gating byte for percussion in my_music_play)
-// — the title sits quiet, then the credit roll music takes over.
+// Music: TRIUMPHANT. setup sets $F6 = $01 so the K-S-K-S drum kit
+// from intro's resident my_music_play fires through the whole part
+// (kick + snare alternating on V3, V1 bass-bleed sub-thump on every
+// hit). Chord pad + lead drift on V1/V2 keep cycling Am-Em-F-G
+// underneath. The trophy moment is full mix; end credits then
+// strip everything back to chord/lead for the closing minor flow.
 //
-// Transition: after N_FRAMES ticks (~10 s) the IRQ writes $F6 = $30
-// and pefchain advances to end.
+// Transition: after N_FRAMES ticks (~32 s) the IRQ writes $F6 = $30
+// and pefchain advances to end. ($30 is also recognized by intro's
+// drum gate as "drums still on" — both values keep drums going,
+// the transition just happens to use a higher one.)
 //
 // Memory:
 //   $0800-$0Dxx  code + parallax starfield state + tier tables
@@ -255,33 +260,27 @@
 //==================================================================
 setup:
         lda #0
-        sta zp_timer
         sta zp_subtick
         sta zp_frame
         sta frame_hi                  // high byte of 16-bit frame counter
-        sta kick_state                // idle until first beat
 
-        // Coda owns V3 — pre-load the kick ADSR shape so each beat
-        // gets a real attack→decay envelope. The arp (V3) would
-        // normally fight with this, but in coda we never let it run:
-        // the IRQ overrides $D40E/$D40F/$D412 every frame.
-        lda #$08                        // A=0, D=8 → fast attack, ~150 ms decay
-        sta SID_V3_AD
-        lda #$40                        // S=4 (held body), R=0 (silence at end)
-        sta SID_V3_SR                   // Was $00 (S=0) — kick was decaying to
-                                        //   silence within ~150 ms, audibly very
-                                        //   soft. S=4 lets the body hold across
-                                        //   the full 12-frame window.
-        // Triangle waveform, gate off — V3 is silent until first beat.
-        lda #$10
-        sta SID_V3_CTRL
-        // Float kick_freq sentinel so the first body frame paints it.
-        sta kick_freq
-        // First kick fires after the animate-in reveal completes
-        // (KLOOT_REVEAL_FRAMES × 2 raw frames ≈ 2 s) so the slow
-        // zoom-in lands fully before the first thump.
-        lda #110                        // ~2.2 s lead-in
-        sta zp_kick_count
+        // ---- CODA IS THE TRIUMPHANT MOMENT ----
+        // Triumph = the full K-S-K-S kit from intro's resident music_play
+        // comes back for the held title. We INHERIT intro's V3 arp +
+        // drum-trigger machinery instead of running coda's own V3 kick.
+        // Drum gate (zp_outro / zp_timer = $F6) must be non-zero for
+        // music_play to fire percussion; setting it to 1 here keeps
+        // drums on for the whole part. The IRQ later overwrites $F6
+        // with $30 to trigger pefchain when the part ends.
+        // (End credits then take us back into the sparse minor flow —
+        // that contrast is the design intent.)
+        lda #1
+        sta zp_timer                  // drum gate ON (non-$30, won't trigger pefchain yet)
+
+        // V3 ADSR + ctrl are left to intro's my_music_init defaults
+        // (AD=$00, SR=$F0 — sustain pinned at peak, what the K-S-K-S
+        // kit + arp both rely on). Earlier coda overrode them for its
+        // own kick state machine; we no longer use that.
 
         // ---- Kloot star quad — 96×84 12-lobe Claude burst (Stage E) ----
         // Sprites 0-3 form a 2×2 grid at fixed positions for the whole
@@ -785,7 +784,16 @@ interrupt:
         sta SID_VOL
 
         jsr star_field
-        jsr coda_kick
+        // coda_kick used to fire here as a dedicated sparse V3 thump.
+        // Removed for the TRIUMPHANT coda revision — intro's resident
+        // K-S-K-S kit (kick + snare alternating) + V1 bass-bleed
+        // sub-thump now play through the whole part because we set
+        // zp_timer = $01 in setup (= drum gate ON). The kit's kick
+        // already IS a triangle pitch-slam thump on V3, the
+        // bass-bleed IS the sub body on V1. Both layers carry the
+        // "trophy" weight without needing a separate machine. The
+        // coda_kick subroutine remains in the source as dead code
+        // in case we want it back; just `jsr coda_kick` to re-enable.
 
         // half-rate divider — drives shape advance
         lda zp_subtick
@@ -974,6 +982,14 @@ coda_kick:
         sta SID_V3_FREQHI
         stx SID_V3_CTRL                 // waveform from X
         dec kick_state
+        bne !done+
+        // ---- body just ended: gate V3 OFF so it doesn't drone ----
+        // With S=4 the envelope would otherwise hold at sustain
+        // level forever (a held triangle note between kicks =
+        // "solid boring note" per the user). R=0 releases to silence
+        // instantly when gate flips low.
+        lda #$10                        // triangle + gate OFF (release)
+        sta SID_V3_CTRL
 !done:
         rts
 

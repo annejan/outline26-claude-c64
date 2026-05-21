@@ -83,9 +83,11 @@ of demogroup names — the loudest moment, everyone gets a shoutout.
 
 No story text here. The story already happened in interlude.
 
-### 6. The trophy (coda — story closing)
+### 6. The trophy (coda — triumphant ending)
 
-Cut to quiet. Three title lines, centred:
+The triumphant moment before the credits land. Three title lines,
+centred, holding still for ~32 seconds while everything else
+moves:
 
 ```
        KLOTEN MET DE BROODTROMMEL
@@ -94,11 +96,23 @@ Cut to quiet. Three title lines, centred:
 ```
 
 Behind them, two 12-lobe Claude-style stars (one brown, one cyan)
-orbit each other on sine paths, alternating which is in front of
-the text every ~1.3 seconds. Parallax PETSCII starfield sparkles
-around the title. A sparse 60-BPM sub-bass kick lands under the
-held chord — the *thump* of *this is real, it shipped*. About 10
-seconds.
+dance — wide sine orbits, ±56 px, 1:1.5 chase ratio, each
+ping-ponging through its own zoom-breath (in → rotate → out) at
+different speeds. They alternate priority through the title plane
+every ~1.3 s so they appear to weave through it in 3D. Parallax
+PETSCII starfield sparkles around the title at four speed tiers.
+
+Sound matches: **full K-S-K-S drum kit** (kick + snare alternating
+quarter-notes) returns from greets and continues here, V1 bass-
+bleed sub-thump on every hit, V2 lead drifting over the held
+chord progression. **This is the loudest moment of the demo** —
+the trophy lifted high, all instruments going, the title held
+steady while the stars dance and the drums hammer.
+
+Then end credits cut everything back to chord+lead for the
+minor reprise. The contrast is the design intent: coda = major-
+feeling triumph (despite still being in A minor), end = minor
+flow closing.
 
 The title is the trophy. Row 15 is the party tag.
 *This happened. You watched it. Lunch is served.*
@@ -106,7 +120,13 @@ The title is the trophy. Row 15 is the party tag.
 (Earlier drafts had row 15 say "ESPECIALLY KLOOT". Pulled because
 the AI-character nod was already in the greets settle on `KLOOT`
 and in the disk dirart — three on-screen mentions read as
-ego-stroking. One is enough.)
+ego-stroking. One is enough.
+
+Earlier coda also had a dedicated sparse V3 thump at ~60 BPM —
+pulled in favour of the full K-S-K-S kit. The kit's kick IS a
+triangle pitch-slam thump on V3, and the V1 bass-bleed gives the
+sub body. No separate "trophy beat" needed — the trophy is the
+whole arrangement playing at once.)
 
 ### 7. The bow (end)
 

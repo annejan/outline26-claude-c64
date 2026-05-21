@@ -235,8 +235,10 @@ end:       vol ramps $00→$0F over 2 s, LP filter on throughout
 
 The filter arc is the long-form emotional contour: dry (intro) →
 opens up with bass + lead (interlude build) → closes both (sinus
-breakdown) → wah on the lead (greets climax) → slightly closed for
-the breather (coda) → fading (end).
+breakdown) → wah on the lead (greets climax) → **back to dry, full
+mix held aloft (coda — the triumphant trophy)** → fading PWM+LP
+reprise (end — back into the minor flow). Coda is the loudest
+moment by design; end is the closing breath.
 
 **Target SID chip: 8580** — picked over 6581 because the 8580's
 digital filter has no per-unit cutoff drift, so the cutoff values

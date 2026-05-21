@@ -43,7 +43,7 @@ Seven parts loaded by Spindle's pefchain framework:
 | 3 | `parts/interlude/`   | Plasma + bars-on-buildup, typewriter "FOR YEARS…" + sprite-letter "SPARKED" drop with white-border flash, LP V1+V2 filter sweep | `$F6 = $10` (~16 beats ≈ 7.7 s) |
 | 4 | `parts/sinus/`       | Comedown: sine-wobble DEFEEST + colour cycling + LP filter close on V1+V2; drums silent | `$F6 = $30` (frame counter hits 250) |
 | 5 | `parts/greets/`      | Climax: 16-bit DYCP sprite-font scroller (~77 s, lunchbox greets), fade-then-settle landing on "KLOOT", drums returning, V2 LP "wah" | `$F6 = $A0` (160 beats ≈ 77 s) |
-| 6 | `parts/coda/`        | "KLOTEN MET DE BROODTROMMEL / A DIGITAL LUNCH EXPERIENCE", twin brown+cyan Kloot stars (Stage F ping-pong zoom breath) orbiting on sine paths, alternating priority + in/out of title plane, 32-star 4-tier parallax PETSCII starfield, sparse 60-BPM kick on V3 | `$F6 = $30` |
+| 6 | `parts/coda/`        | "KLOTEN MET DE BROODTROMMEL / A DIGITAL LUNCH EXPERIENCE / RELEASED AT X2026", twin brown+cyan Kloot stars (Stage F ping-pong zoom breath) on wide sine orbits, alternating priority + in/out of title plane, 32-star 4-tier parallax PETSCII starfield, **triumphant full K-S-K-S kit + V1 bass-bleed sub-thump** (setup sets `$F6 = $01` so intro's drums fire through the held title) | `$F6 = $30` |
 | 7 | `parts/end/`         | Credit roll, side bars, slow chord/lead reprise (PWM + LP filter sweep, "dark phaser" mood since PR #31) | `stay` (loops) |
 
 Read `README.md` for full per-part descriptions. The
