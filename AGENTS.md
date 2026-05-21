@@ -545,9 +545,8 @@ See `parts/greets/greets_test.asm` for a working example.
   clobbers `$07F8-$07FF`), sine wobble reduced to ±1 px, sprite priority
   reversed (sprite 7 leftmost, sprite 0 rightmost). Still needs colour /
   font-shape tuning.
-- **Sinus** — boring. Dual-axis wobble (`$D016`+`$D011` 90° phase offset)
-  + colour cycling + LP fade added, but single repeating "DEFEEST" text
-  still thin.
+- ~~**Sinus** — boring. Story text replaced with hypnotic DEFEEST field
+  (the breath). Done.~~
 - **Coda** — title card with 4-sprite Kloot star (Stage B+D: 96×84 quad
   with asymmetric petals, sound-bound bob, animate-in reveal) + colour
   RAM star-field + V3 kick. Still needs more content.
@@ -568,7 +567,8 @@ See `parts/greets/greets_test.asm` for a working example.
 - **Interlude halved**: `BUILDUP_BEAT` 24→8, pefchain `f6=20`→`f6=10` (PR #8)
 - **Greets sprite pointer fix**: `jsr update_sprite_ptrs` every frame (PR #7)
 - **Greets wobble reduced**: sine amplitude 4→1; priority reversed (PR #7)
-- **Sinus**: space fill + dual-axis wobble + LP fade (PR #9)
+- **Sinus**: story text fragments removed; hypnotic repeating DEFEEST
+  field — "the breath" — woven grid + colour banding (commit 9d9f851)
 - **Coda Stage B — 4-sprite Kloot star**: 96×84 quad, 12-lobe Claude burst,
   pre-rendered by `render_kloot_star.py --quadrant 0..3` (PR #11)
 - **Coda Stage C — breath modulation**: collective scale + position bob (PR #12)
