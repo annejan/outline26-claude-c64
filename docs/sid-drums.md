@@ -300,53 +300,30 @@ Prince-of-Persia SFX routine — "the kick lives across voices".
 "head punch" (high frequency content); triangle's odd-harmonics-only
 + 1/n² rolloff keeps the kick in the belly band.
 
-### Coda's V3 kick — the clean version (no arp to fight)
+### Coda — triumphant K-S-K-S kit + V1 sub-bleed (no dedicated kick)
 
-Coda is the one part where we can do a **textbook hard-restart kick
-with its own ADSR**, because coda overrides V3 every IRQ for its
-entire duration. The arp is never allowed to sound, so we can pre-
-load V3's ADSR with a true kick shape (`A=0, D=8, S=0, R=0`) once
-in setup and let the envelope decay naturally between hits.
+Coda used to run its own textbook hard-restart V3 kick at ~60 BPM
+(the "Coda's V3 kick" section in earlier revisions of this doc;
+recover from git history if you want the state machine writeup
+back). That was pulled because the K-S-K-S kit's V3 kick row already
+IS a triangle pitch-slam thump, and V1's `N_C1` bass-bleed already
+IS the sub body — a dedicated layer was redundant.
 
-The state machine in `parts/coda/coda.asm`:
+The triumphant coda config (since 2026-05-21):
 
-```
-zp_kick_state == 0       : idle. Decrement zp_kick_count; when
-                           it reaches 0, arm a new beat by writing
-                           CTRL = $10 (triangle, gate OFF) — release
-                           with R=0 → envelope to zero instantly.
-zp_kick_state == KICK_LEN: body frame 0 — first audible tick. Set
-                           fresh freq, write CTRL = $11 (triangle +
-                           gate ON). Rising-edge gate triggers a
-                           fresh attack from zero.
-zp_kick_state in 1..N-1  : body frames. Sweep freq hi down (KICK_SWEEP
-                           per frame, floor at KICK_FLOOR), keep
-                           CTRL = $11. Envelope decays per AD.
-```
-
-Triangle wave + low frequency (`$D40F` swept from `$18` to `$03` over
-12 frames) produces the 808-style sub-bass thump. No noise transient
-because the title card is meant to feel *quiet*, not punchy.
-
-This is a simplified take on lft's "stabiliseRC3" / "new hard-restart"
-pattern — the full multi-frame dance is overkill for one slow kick at
-60 BPM, and coda owns V3 so there's no envelope state to recover.
-
-Coda's coexistence with intro's resident music engine:
-
-1. `jsr INTRO_MUSIC_PLAY` runs first — engine writes V1 / V2 / V3
-   for the chord step. V3 gets the arp pulse waveform + gate, but
-   since coda overrides V3 on the very next instruction, the arp
-   never reaches the speaker.
-2. `jsr coda_kick` overwrites `$D40E` / `$D40F` / `$D412` with the
-   kick state. Body frames write CTRL = `$11` (triangle + gate ON);
-   idle frames leave whatever the engine last wrote, which is the
-   arp's CTRL = `$41` — but the envelope from the previous kick has
-   already released to zero (R=0), so nothing is audible until the
-   next gate-on.
-3. Intro's drum gate inside `my_music_play` stays closed because
-   coda's setup zeros `$F6` (= `zp_outro` in intro's namespace).
-   No noise transient from the resident drum code interferes.
+- Setup sets `$F6 = $01` → enables intro's `my_music_play` drum
+  gate, so the K-S-K-S kit fires through the whole 32-s held title.
+- Setup sets `$F8 = $80` (= between `T_BARS` 120 and `T_SCROLLER`
+  240) → V1 bass + V2 lead freq writes fire every step boundary,
+  but V3's ctrl is NOT re-gated to pulse every frame, so V3 stays
+  as triangle (= whatever the drum_tick last wrote = mellow arp
+  between drum hits). Triangle arp pairs with the LP-filtered V2
+  lead for the cohesive "trophy" mix.
+- `$D417 = $47` (all 3 voices routed through LP, res 4) → the
+  bass-bleed sub + triangle arp + filtered lead all sit in the same
+  filtered space.
+- `$D416` cutoff sweeps via `sin_tab[zp_frame] + $60` over ~10 s
+  for a slow breathing motion under the held title.
 
 ## Engine considerations
 

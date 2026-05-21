@@ -165,10 +165,12 @@ on LP mode being asserted every frame.
 ## Drums in `my_music_play`
 
 Percussion lives inside intro's `my_music_play` and propagates to
-every later part that calls it (interlude / greets — sinus and coda
-also call it, but their setups zero `$F6` so the resident drum gate
-stays closed there. Coda then layers its OWN V3 kick on top, owning
-the voice for the entire part).
+every later part that calls it (interlude / greets / coda — sinus
+also calls it, but its setup zeros `$F6` so the resident drum gate
+stays closed there for the breakdown breather. Coda explicitly OPENS
+the gate by setting `$F6 = $01` in setup, so the K-S-K-S kit fires
+through the whole held title — see the "Coda" entry in the arc
+table above).
 
 ### K-S-K-S kit (since 2026-05-20)
 
@@ -274,9 +276,9 @@ Drums fire only when `zp_outro` is non-zero. This means:
   always > 0 once setup runs → drums continue
 - Sinus: setup zeros `$F6` (which is `zp_timer` there), kept at 0
   until the very last frame → **resident drums silent** = the comedown
-- Coda: setup zeros `$F6` (also `zp_timer`) → **resident drums silent**,
-  but coda runs its own V3 kick state machine that overrides the arp
-  every frame
+- Coda: setup sets `$F6 = $01` → **resident drums FIRE** through the
+  whole 32-s held title. The K-S-K-S kit + V1 bass-bleed carry the
+  trophy weight; no dedicated coda V3 kick needed.
 - End: doesn't call `my_music_play` (uses its own routine) → no drums
 
 ### Why this gating works for "cohesive music"
@@ -318,14 +320,16 @@ The "feeling of transition" is carried by:
   outro cascade visually mirrors the audio escalation)
 - **Visual cascade in intro's outro** (sprites despawn one by one,
   bars off, logo un-wipes)
-- **V1 mute + typewriter "FOR YEARS NO TIME FOR BREADBIN CODE" on
-  interlude's plasma** — sudden bass drop + the human's confession,
-  char by char during the pad phase. The story's line 1 lands here.
-- **V1 return + LP cutoff sweep (V1 + V2 both filtered) + sprite-letter
-  "SPARKED" drop on the buildup beat** — story line 2 (the AI's
-  answer, drops as 8 hires sprites from above, white border flash
-  on landing) lands exactly when the filter opens and the bass
-  returns. The two-line joke is complete *as* the music opens up.
+- **V1 mute + V3-off + typewriter "FOR YEARS NO TIME FOR BREADBIN
+  CODE" on interlude's plasma** — sudden silence except for the V2
+  lead with PWM phaser, the human's confession types out char by
+  char during the music-box pad. The story's line 1 lands here.
+- **V3-off bit clears + V1 returns + LP cutoff sweeps from $70 + the
+  K-S-K-S kit + arp slam back in + sprite-letter "SPARKED" drop on
+  the buildup beat** — story line 2 (the AI's answer, drops as 8
+  hires sprites from above, white border flash on landing) lands
+  exactly when the full mix slams back in. The two-line joke is
+  complete *as* the music explodes back into life.
 - **Drums STOP + LP filter close + vol fade in sinus** — the
   breakdown / breather, the calm before the drop. Visual is a
   hypnotic sine wobble of repeating DEFEEST text. The LP close is
