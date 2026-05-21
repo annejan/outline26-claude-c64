@@ -206,6 +206,12 @@
 .const KICK_SWEEP   = $02             // hi-byte decrement per frame
 
 .const INTRO_MUSIC_PLAY = $119e
+// Intro music tables (resident at $1000-$125D, see intro.sym). Coda
+// inherits these via 'I',$10,$12 in the EFO header.
+.const MAIN_SID_FREQ_LO = $1000
+.const MAIN_SID_FREQ_HI = $103c
+.const MAIN_BASS_PATTERN = $10a8
+.const MAIN_MU_STEP = $1148
 
 // Twin-star orbital motion parameters.
 .const ORBIT_RADIUS  = 56               // pixel radius (±56 px) — was 40,
@@ -259,6 +265,29 @@
 // setup
 //==================================================================
 setup:
+        // ---- Set zp_intro ($F8) for triumphant-coda music behaviour ----
+        // Intro's resident my_music_play gates voices on three thresholds:
+        //   zp_intro >= T_BALLS (40)     → V2 lead writes
+        //   zp_intro >= T_BARS (120)     → V1 bass writes
+        //   zp_intro >= T_SCROLLER (240) → V3 ctrl re-written to pulse+gate
+        //                                  every frame
+        //
+        // Interlude reuses $F8 as zp_plasma_tgl (zeroes it on setup),
+        // so by the time we reach coda $F8 holds a low value. Without
+        // restoration, V1 + V2 freq writes are skipped → "stuck note".
+        //
+        // Setting $F8 to $80 (= 128, between T_BARS and T_SCROLLER):
+        //   - V1 and V2 freq writes fire (bass + lead walk the patterns)
+        //   - V3 gate write SKIPS, so V3 stays at whatever waveform the
+        //     drum_tick last wrote (= $11 triangle). Triangle arp is
+        //     mellow and matches greets' V3 timbre — that's what makes
+        //     the user describe greets as "flowing nicely". Slamming
+        //     $FF instead made V3 re-gate to pulse every frame, giving
+        //     the arp a sharp pulse timbre the user heard as "different
+        //     notes / different key" against the lead.
+        lda #$80
+        sta $f8
+
         lda #0
         sta zp_subtick
         sta zp_frame
@@ -281,6 +310,13 @@ setup:
         // (AD=$00, SR=$F0 — sustain pinned at peak, what the K-S-K-S
         // kit + arp both rely on). Earlier coda overrode them for its
         // own kick state machine; we no longer use that.
+
+        // V1 + V2 ADSRs left at intro's defaults ($04/$61 punchy bass,
+        // $02/$81 sharp lead) — coda IS the triumphant full intro mix
+        // held under the title, not a separate pad timbre. Earlier
+        // attempts to pad-ify V2 collided with V1's punchy attacks
+        // and read as "different key" to the listener. Matching intro's
+        // exact ADSRs keeps the whole demo on the same musical voice.
 
         // ---- Kloot star quad — 96×84 12-lobe Claude burst (Stage E) ----
         // Sprites 0-3 form a 2×2 grid at fixed positions for the whole
@@ -783,6 +819,21 @@ interrupt:
         lda #$1f
         sta SID_VOL
 
+        // ---- $D417 filter routing inherits from greets ($42) ----
+        // greets ends with $D417 = $42 (V2 routed through LP, res 4)
+        // for its slow "wah" on the lead. We INTENTIONALLY do NOT clear
+        // that here — the V2-through-LP timbre is what gives greets
+        // its "flowing musical" feel, and coda continuing it keeps the
+        // sonic identity intact across the transition. The cutoff is
+        // frozen at greets' last value (no wobble modulation in coda)
+        // which is fine because V2 freq still walks through lead_pattern
+        // and the static cutoff just shapes the timbre, not the motion.
+        //
+        // V1's drum-bleed N_C1 sub-thump is INHERITED from intro's
+        // my_music_play unchanged. greets has the same sub-thump on
+        // every drum hit and the user reports greets as flowing nicely,
+        // so coda continuing it is consistent.
+
         jsr star_field
         // coda_kick used to fire here as a dedicated sparse V3 thump.
         // Removed for the TRIUMPHANT coda revision — intro's resident
@@ -904,107 +955,15 @@ interrupt:
         rti
 
 
-//==================================================================
-// coda_kick — V3 percussion state machine.
-//
-// Runs every IRQ AFTER intro's my_music_play has written its arp
-// freq into V3. We overwrite V3 freq + ctrl, so the arp doesn't
-// sound. Envelope state is owned by us via V3's ADSR (set in setup).
-//
-// State machine:
-//   kick_state == 0       : idle. Decrement zp_kick_count; when
-//                              it reaches 0, arm a new beat by
-//                              writing CTRL = $10 (triangle, gate
-//                              OFF) — this starts the envelope's
-//                              release (R=0 → instant to zero) so
-//                              the next frame's gate=1 gives a
-//                              clean fresh attack.
-//   kick_state == KICK_LEN: body frame 0 — the FIRST tick after
-//                              hard restart. Set fresh freq, write
-//                              CTRL = $11 (triangle + gate ON). The
-//                              envelope sees a 0→1 transition and
-//                              starts a fresh attack from zero.
-//   kick_state in 1..KL-1 : body frames. Sweep freq down, keep
-//                              CTRL = $11 (no waveform retrigger,
-//                              envelope decays naturally per AD).
-//   kick_state == 0 again : body done. Reset zp_kick_count for
-//                              next beat. V3 envelope sits at S=0.
-//==================================================================
-coda_kick:
-        lda kick_state
-        bne !body+
-        // ---- idle phase: count down to next beat ----
-        dec zp_kick_count
-        bne !done+
-
-        // ---- ARM: hard restart this frame, body starts next frame ----
-        // (A V1 bass-bleed sub-thump used to live here for body weight,
-        // but it pushed sin_tab into chargen-ROM page $10 and the
-        // .errorif guard caught it. The noise-transient body below
-        // gives enough punch for the trophy beat without it.)
-        lda #KICK_LEN
-        sta kick_state
-        lda #KICK_FREQ_HI
-        sta kick_freq
-        lda #$10                        // triangle + gate OFF (envelope releases)
-        sta SID_V3_CTRL
-        lda #KICK_PERIOD
-        sta zp_kick_count
-        rts
-
-!body:
-        // ---- body phase: drive V3 freq + waveform ----
-        // Frame 0 (= first audible tick) uses NOISE — Hubbard-style
-        // click attack. Subsequent frames use TRIANGLE for the
-        // pitch-swept sub-thump body. Waveform byte rides in X and
-        // is written via STX at the end so both paths share one
-        // freq+ctrl write block (~11 B saved vs duplicating).
-        cmp #KICK_LEN
-        beq !first+
-        // body frame 1..KICK_LEN-1 — sweep freq down on triangle
-        lda kick_freq
-        sec
-        sbc #KICK_SWEEP
-        cmp #KICK_FLOOR
-        bcs !sweep_ok+
-        lda #KICK_FLOOR
-!sweep_ok:
-        sta kick_freq
-        ldx #$11                        // triangle + gate ON
-        bne !write+                     // always taken ($11 ≠ 0)
-!first:
-        // body frame 0 — noise transient (1-frame pop)
-        ldx #$81                        // noise + gate ON
-!write:
-        lda #$00
-        sta SID_V3_FREQLO
-        lda kick_freq
-        sta SID_V3_FREQHI
-        stx SID_V3_CTRL                 // waveform from X
-        dec kick_state
-        bne !done+
-        // ---- body just ended: gate V3 OFF so it doesn't drone ----
-        // With S=4 the envelope would otherwise hold at sustain
-        // level forever (a held triangle note between kicks =
-        // "solid boring note" per the user). R=0 releases to silence
-        // instantly when gate flips low.
-        lda #$10                        // triangle + gate OFF (release)
-        sta SID_V3_CTRL
-!done:
-        rts
-
-
-// Kick freq shadow — lives in code RAM rather than zp because the
-// zp_f6..f8 window is already crowded.
-kick_freq:
-        .byte 0
-
-// kick state-machine counter (0..KICK_LEN). Lives in code RAM
-// because $F8 — its natural home — is `zp_intro` to intro's resident
-// my_music_play, which reads $F8 every frame as the master-volume
-// source. Parking state there pinned coda's chord pad to silence.
-kick_state:
-        .byte 0
+// (coda_kick subroutine + kick_freq / kick_state byte vars used to
+// live here — a dedicated V3 pitch-slam thump at ~60 BPM, run after
+// my_music_play. Pulled when coda switched to the K-S-K-S kit because
+// the kit's kick already IS a V3 triangle pitch-slam and the V1
+// bass-bleed already IS the sub body — separate machine became
+// redundant. Removed entirely on 2026-05-21 to recover ~80 bytes so
+// the coda V1/V2 pad ADSR overrides + cutoff LFO fit before sin_tab
+// hits the .errorif guard at $1000. Re-add from git history if you
+// ever want the dedicated thump back.)
 
 // High byte of the 16-bit half-rate frame counter. Low byte lives at
 // zp_frame ($fc) so it also indexes the 256-byte col_tab; this byte

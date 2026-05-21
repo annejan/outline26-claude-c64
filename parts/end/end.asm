@@ -1016,7 +1016,10 @@ end_music_play:
 
         // cutoff = wave * amp + offset
         //   amp    = 4 + (depth >> 1)   → 4 (clean) .. 7 (dark)
-        //   offset = $30 - depth        → $30 (clean) .. $29 (dark)
+        //   offset = $60 - depth        → $60 (clean) .. $59 (dark)
+        // Raised from $30 → $60 for a brighter, more ethereal credit
+        // roll — V2 lead and V3 arp shine through the filter instead
+        // of getting rolled off into a low drone.
         // Multiply is repeat-add: amp ∈ 4..7, max 7×7=49, no overflow.
         txa
         clc
@@ -1039,7 +1042,7 @@ end_music_play:
         bne !mul_loop-
 
         clc
-        adc #$30
+        adc #$60
         sec
         sbc mood_depth
         sta $d416
