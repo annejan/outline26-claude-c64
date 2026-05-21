@@ -51,12 +51,12 @@
 .const SID_V3_AD = $d413
 .const SID_V3_SR = $d414
 
-.const N_FRAMES   = 400               // ~16 s at the half-rate divider
-                                      // (400 ticks @ 25 Hz). Was 250
-                                      // (~10 s); extended so the brown
-                                      // + cyan star dance gets the
-                                      // room to read as more than two
-                                      // passes.
+.const N_FRAMES   = 600               // ~24 s at the half-rate divider
+                                      // (600 ticks @ 25 Hz). Was 250
+                                      // (~10 s, then 400 / 16 s). Now
+                                      // long enough to read as a held
+                                      // title with the dance breathing
+                                      // through several full crossings.
 
 // Kloot star — Stage B: 4-sprite 2×2 quad, each X+Y-expanded, forming a
 // 96×84 12-lobe Claude-style burst behind the title text.
