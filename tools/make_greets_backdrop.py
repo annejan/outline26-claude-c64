@@ -1,28 +1,33 @@
 #!/usr/bin/env python3
 """
-Generate parts/greets/backdrop.png — a 320x200 placeholder backdrop
-for the greets DYCP scroller. Layout:
+Generate parts/greets/backdrop.png — the greets DYCP scroller backdrop.
 
-  black bg
-  dark blue centre band (rows 9-16, behind where the sprites scroll)
-  white "GREETINGS TO" at the top
-  white "THE LEGENDS" at the bottom
+Design: peephole / rabbithole look.
+  - Blue field at edges, black ellipse in the centre (= the "hole" the
+    sprite scroller emerges from).
+  - Ellipse boundary is dithered (checkerboard black/blue band) so the
+    transition feels soft + organic instead of a clinical curve.
+  - "GREETINGS TO" centred at the top, "THE LEGENDS" centred at the
+    bottom — both rendered 2x-scaled chargen letters with a yellow-to-
+    white vertical gradient (top half yellow, bottom half white) for
+    that demoscene "warm sunset" sexy feel.
 
-Re-run this any time the layout / text needs to change. After running,
-convert to .kla with:
+Re-run any time the layout / text needs to change. Convert to .kla:
 
   python3 tools/png_to_koala.py parts/greets/backdrop.png \\
       parts/greets/backdrop.kla
 
-Then point greets.asm's LoadBinary at backdrop.kla.
+then rebuild. Both PNG and .kla are tracked in the repo so a fresh
+clone builds without needing this script.
 
 Pixel font comes from parts/greets/chargen.bin (the C64 uppercase ROM)
-scaled 2x horizontally so each chargen pixel survives png_to_koala's
-160-wide resize without aliasing.
+scaled 2x in both dimensions: each chargen pixel becomes a 2x2 hw
+block. After png_to_koala halves the width (320 hw → 160 logical), a
+chargen pixel ends up 1 logical wide × 2 logical tall — chunky-but-
+readable letters at ~16 hw px tall.
 """
 from PIL import Image
 from pathlib import Path
-import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 CHARGEN = (ROOT / "parts/greets/chargen.bin").read_bytes()
@@ -36,57 +41,106 @@ PEPTO = [
     (120, 120, 120), (148, 224, 137), (120, 105, 196), (159, 159, 159),
 ]
 
+# Palette indices used in this backdrop. png_to_koala.py maps PNG
+# pixels by RGB distance to its fixed 4-slot set { $00 black, $06 blue,
+# $07 yellow, $01 white }, so any indices NOT in those 4 will map to
+# whichever of the 4 is nearest in RGB. Using the right four indices
+# here makes the mapping unambiguous.
+BLACK, WHITE, BLUE, YELLOW = 0, 1, 6, 7
 
-def render_letter(img, ch, x, y, color):
-    """Draw a single letter at (x, y) using chargen bytes scaled 2x wide."""
+
+def render_letter_gradient(img, ch, x, y):
+    """Draw a chargen letter at (x, y) scaled 2x in both dimensions.
+    Top half (chargen rows 0..3) → yellow, bottom half (rows 4..7) →
+    white. Each chargen pixel becomes a 2x2 hw block.
+    """
     if ch == ' ':
         return
-    # Charset 1 (uppercase + graphics) screencode for A-Z is $01-$1A.
     sc = ord(ch.upper()) - 0x40
     if sc < 1 or sc > 26:
         return
     off = sc * 8
     for row in range(8):
         byte = CHARGEN[off + row]
+        colour = YELLOW if row < 4 else WHITE
         for bit in range(8):
             if byte & (0x80 >> bit):
                 px = x + bit * 2
-                img.putpixel((px, y + row), color)
-                img.putpixel((px + 1, y + row), color)
+                py = y + row * 2
+                # 2×2 hw block per chargen pixel
+                img.putpixel((px,     py    ), colour)
+                img.putpixel((px + 1, py    ), colour)
+                img.putpixel((px,     py + 1), colour)
+                img.putpixel((px + 1, py + 1), colour)
 
 
-def render_text(img, text, centre_x, y, color):
-    """Draw a string of letters centred horizontally at centre_x."""
+def render_text(img, text, centre_x, y):
+    """Draw a string of letters centred horizontally at centre_x,
+    with the gradient fill from render_letter_gradient."""
     width = len(text) * 16
     x = centre_x - width // 2
     for i, ch in enumerate(text):
-        render_letter(img, ch, x + i * 16, y, color)
+        render_letter_gradient(img, ch, x + i * 16, y)
+
+
+def fill_ellipse_dithered(img, cx, cy, a, b):
+    """Paint a black ellipse on a blue field with a dithered band at
+    the boundary. ((x-cx)/a)² + ((y-cy)/b)² < 1 - margin = pure black,
+    > 1 + margin = pure blue, in between = checkerboard dither so the
+    edge fades organically.
+
+    Important: the koala converter halves WIDTH (each logical pixel =
+    2 hw px wide), so all hw-px positions must come in pairs of two
+    that share the same colour. The "checker" therefore alternates in
+    pairs of 2 hw px horizontally — single-pixel dithers would average
+    out after the halve and produce uniform colour instead of texture.
+    """
+    BAND = 0.10   # ± fraction of normalised radius for the dither band
+    for y in range(200):
+        for x in range(0, 320, 2):
+            # Normalised "radius" — 0 at centre, 1 on ellipse boundary
+            dx = (x + 0.5 - cx) / a
+            dy = (y + 0.5 - cy) / b
+            r2 = dx * dx + dy * dy
+            if r2 <= (1.0 - BAND) ** 2:
+                colour = BLACK
+            elif r2 >= (1.0 + BAND) ** 2:
+                colour = BLUE
+            else:
+                # Dither band — checkerboard with 2-hw-px pair grain
+                # so it survives the koala width-halving.
+                cell = ((x // 2) + (y // 1)) & 1
+                colour = BLACK if cell == 0 else BLUE
+            img.putpixel((x,     y), colour)
+            img.putpixel((x + 1, y), colour)
 
 
 def main():
-    img = Image.new('P', (320, 200), color=0)
+    img = Image.new('P', (320, 200), color=BLUE)
     palette = []
     for r, g, b in PEPTO:
         palette.extend([r, g, b])
     palette.extend([0] * (768 - len(palette)))
     img.putpalette(palette)
 
-    # ---- Dark blue centre band ----
-    # Rows 9-16 (y = 72..136) covers where the DYCP sprites scroll at
-    # raster Y=130 ± wobble. The band frames the scroller in blue.
-    for y in range(72, 136):
-        for x in range(0, 320):
-            img.putpixel((x, y), 6)  # blue ($06)
+    # ---- Peephole: black ellipse on the blue field ----
+    # Centre slightly low so the visual focal point lines up with the
+    # DYCP sprites at raster Y=130 (not the geometric centre Y=100).
+    # Wide enough horizontally that sprite chars near the left/right
+    # edges still land on the dark interior, tall enough that the
+    # text above/below doesn't crowd the ellipse boundary.
+    fill_ellipse_dithered(img, cx=160, cy=120, a=180, b=80)
 
-    # ---- White text top: "GREETINGS TO" ----
-    # Row 3 (y = 24) — well above the blue band, in the black top
-    # strip. Centred horizontally.
-    render_text(img, "GREETINGS TO", 160, 24, 1)
+    # ---- White-and-yellow text top: "GREETINGS TO" ----
+    # Y=8 → rows 1..3 inside the upper blue band, well above the
+    # ellipse top (which only kisses Y≈40 at its peak).
+    render_text(img, "GREETINGS TO", 160, 8)
 
-    # ---- White text bottom: "THE LEGENDS" ----
-    # Row 22 (y = 176) — well below the blue band, in the black
-    # bottom strip. Centred horizontally.
-    render_text(img, "THE LEGENDS", 160, 176, 1)
+    # ---- White-and-yellow text bottom: "THE LEGENDS" ----
+    # Y=176 → rows 22..24 inside the lower blue band, well below the
+    # ellipse bottom (which reaches its lowest point around Y≈200).
+    # 16 hw px tall letters fit between Y=176 and the screen bottom.
+    render_text(img, "THE LEGENDS", 160, 176)
 
     img.save(OUT_PNG)
     print(f'wrote {OUT_PNG}')
