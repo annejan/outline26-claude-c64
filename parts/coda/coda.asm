@@ -208,13 +208,21 @@
                                         //   excursion 185 + Y-expanded
                                         //   bottom quad (42 px) = 248,
                                         //   still inside visible raster.
-.const ORBIT_SPEED_1 = 1                // star 1: ~5 s per cycle at 50 Hz
-.const ORBIT_SPEED_2 = 3                // star 2: ~1.7 s per cycle —
-                                        //   1:3 ratio (was 1:2) makes the
-                                        //   chase pattern more obviously
-                                        //   uneven. The cyan star laps
-                                        //   the brown one three times per
-                                        //   one of the brown's circuits.
+// Speeds tuned so (SPEED_2 - SPEED_1) stays at +1/frame, which is
+// what the priority-swap logic at the bottom of the IRQ assumes —
+// it triggers on bit-6 transitions of (star2_phase - star1_phase)
+// and the assumption that those transitions happen at MAX
+// SEPARATION (not overlap) only holds when the diff increments by
+// exactly 1 per frame. Bumping diff to +2/frame caused a one-frame
+// flicker because the swap then fired AT the moment of overlap
+// instead of 180°-apart.
+.const ORBIT_SPEED_1 = 2                // star 1: ~2.5 s per cycle (was 1 / 5 s)
+.const ORBIT_SPEED_2 = 3                // star 2: ~1.7 s per cycle (was 2 / 2.5 s)
+                                        //   Both stars move faster than the
+                                        //   original; relative chase ratio
+                                        //   is 1.5× (slightly less than the
+                                        //   broken 1:3 attempt at 3×, but
+                                        //   without the flicker).
 
 // Shape advance dividers — each star's shape counter advances every
 // N half-rate ticks so they rotate at fundamentally different speeds.
