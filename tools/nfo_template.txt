@@ -1,0 +1,97 @@
++==============================================================================+
+|                                                                              |
+|                         KLOTEN MET DE BROODTROMMEL                           |
+|                          A DIGITAL LUNCH EXPERIENCE                          |
+|                                                                              |
+|                          released by deFEEST                                 |
+|                          at X 2026, Someren NL                               |
+|                                                                              |
++==============================================================================+
+
+
+   [ system ]    Stock Commodore 64 + 1541-compatible drive, PAL.
+                 Tested against 1541-Ultimate (the X2026 compo hardware).
+                 No BASIC stub. Spindle 3.1 boots us straight in.
+
+   [ sid    ]    6581 preferred.
+                 The filter sweeps in interlude / sinus / greets / end
+                 were tuned against VICE's 6581 emulation. 8580 plays
+                 cleaner but loses the dark-flanger character on the
+                 end credits and the LP wah breath on greets' lead.
+
+   [ runtime ]   One-pass ~3:00 (~180 s boot to credits-roll-loops).
+                 End credits then loop forever; the demo is over.
+
+   [ build  ]    {{SHA}} ({{DATE}})
+
+
+   [ ------- credits ------- ]
+
+
+       direction          Anus/deFEEST
+       code               Kloot/deFEEST     (Anthropic Claude Opus 4.7)
+                          Augurk/deFEEST    (OpenCode — Big Pickle)
+                          TL-Buis/deFEEST   (OpenAI ChatGPT)
+       music              Anus + Kloot      (shared 3-voice SID engine
+                                             pair-programmed in VICE)
+       graphics           Anus + Kloot      (logo pixel-edited via
+                                             tools/koala_to_logo_png)
+       direction help     Ranzbak/deFEEST
+                          Cinder/deFEEST
+       greetz             see the demo's greets part for the scene
+                          salute — ~30 groups, settles on KLOOT
+
+
+   [ ------- honest note on AI authorship ------- ]
+
+
+   This release was written in three weeks by a human
+   (Anus/deFEEST) collaborating with three large-language-model
+   AI agents in a tight feedback loop:
+
+     * Kloot   = Anthropic Claude (Opus 4.7), via Claude Code
+     * Augurk  = OpenCode, the agent-coding tool
+     * TL-Buis = OpenAI ChatGPT
+
+   The C64 source is genuine 6502 in KickAssembler syntax. The
+   AIs wrote most of the actual KickAssembler code — IRQ
+   chains, FLD bounce, DYCP scroller, SID drum kit, parallax
+   starfield, Stage F ping-pong zoom on the Kloot stars, the
+   end-credits clean<->dark LFO modulation. The humans drove the
+   process — picking effects, listening, reading what landed
+   on screen, correcting bugs ("nope this is broken because
+   <X>"), making aesthetic calls.
+
+   The development loop was: edit -> ./build.sh -> autostart in
+   a custom VICE-MCP build -> AI inspects the running emulator
+   via JSON-RPC (screenshots, register reads, memory dumps,
+   raster-line checkpoints) -> AI proposes a fix or a new
+   effect -> commit -> repeat. ~180 commits over three weeks.
+
+   We think this is novel in 2026 and worth being open about.
+   The repo is public; every decision is in the commit log.
+
+   The C64 itself doesn't know or care. The bytes are the
+   bytes; PAL is PAL; the SID still hums. We hope it lands.
+
+
+   [ ------- tools ------- ]
+
+
+       KickAssembler 5.25         the assembler
+       Spindle 3.1                pefchain multi-part loader
+       VICE x64sc + VICE-MCP      emulator + MCP driver
+       codebase.c64.org           reference for every routine
+       Claude Code / OpenCode     the AI agent harnesses
+
+
+   [ ------- source ------- ]
+
+
+       https://github.com/annejan/outline26-claude-c64
+       (this release: commit {{SHA}})
+
+
++==============================================================================+
+|                       Now go eat your lunch.                                 |
++==============================================================================+

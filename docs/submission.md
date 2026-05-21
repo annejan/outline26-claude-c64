@@ -116,6 +116,37 @@ Three files:
 Source snapshot via `git archive HEAD` — clean, reproducible,
 exactly what's at the commit named in the NFO.
 
+## Status — implemented (2026-05-21)
+
+All three scripts + the NFO template + the long-form "how it was
+made" doc landed in `tools/`. Run via:
+
+```bash
+./tools/bundle_submission.sh
+```
+
+…produces both `submission/defeest-kloten_met_de_broodtrommel.d64`
+(upload via votox) and `submission/defeest-kloten_met_de_broodtrommel-x2026.zip`
+(release archive). Takes ~3.5 min wall-clock because the
+screenshot pass plays the demo through to each part in real time.
+
+### Known brittleness (KEEP UPDATING)
+
+The script trusts these inputs to stay in sync with the demo:
+
+| Input | What drifts | Where to update |
+|---|---|---|
+| Per-part screenshot timestamps | If a part's duration changes (greets/interlude/sinus most likely) | `tools/capture_part_screenshots.sh` `snapshot ... NN` lines |
+| `DURATION` in NFO + bundle README | Same — total runtime | `tools/bundle_submission.sh` config block |
+| Credits, story note, tools list, AI authorship note | Anytime team / tools / collaboration model shifts | `tools/nfo_template.txt` + `tools/how_it_was_made.md` |
+| SID preference (6581) | If we ever re-tune for 8580 | `tools/bundle_submission.sh` + NFO + how-it-was-made |
+| `GROUP / DEMO_TITLE / PARTY` | If we release elsewhere later (Evoke, etc.) | `tools/bundle_submission.sh` config block |
+
+The script SHOULD WARN you about an dirty working tree (it does),
+but doesn't yet assert that screenshots actually landed in the right
+part. If the demo's part-transition timings drift before a release,
+**verify each PNG by eye** before submitting.
+
 ## What's deferred
 
 - **Preview MP4** — `tools/record_demo.py` already does this; bundle
