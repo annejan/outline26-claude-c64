@@ -66,23 +66,39 @@
 .const zp_scroll_pos     = $f7  // 16-bit lo (was 8-bit only)
 .const zp_beat_kick      = $f3  // beat-sync Y kick (decays 0→0)
 
-// scroll_tick / scroll_pos_hi / damp_shift used to live at $F8/$F9/$FA
-// — exactly the slots intro's resident my_music_play reads ($F8 =
-// zp_intro for vol) and writes ($F9 = zp_tmp, $FA = zp_msb as scratch
-// during music_play). Parking state there meant scroll_pos_hi was
-// overwritten every frame and the message scrolled into random pages
-// past offset 255. Now in code RAM (1 extra cycle/access — fine).
-scroll_tick:    .byte 0
-scroll_pos_hi:  .byte 0    // hi byte of 16-bit scroll position
-damp_shift:     .byte 0    // 0..5 — ASR count for fade-phase damp
-
-// (Dead greets kick code removed — drums now ride on intro's
-// resident `my_music_play` via the K-S-K-S kit + V1 bass-bleed.
-// update_sprite_ptrs uses $fb/$fc which sit outside the EFO Z claim
-// — fine during IRQ since the CPU is ours.)
+// (State bytes scroll_x_offset / scroll_pos_hi / damp_shift live
+// AFTER the `* = $8000` directive below — declared before it, they
+// land at KickAssembler's default segment-start address of $2000
+// which is EXACTLY where the first sprite-shape glyph (letter A)
+// lives. Writing to scroll_x_offset every frame then animates stray
+// pixels at the top of every 'A' on screen. See block right after
+// `* = $8000` for the actual declarations.)
 
 
 * = $8000 "Greets"
+
+// State bytes — MUST sit inside the $8000 code segment so they don't
+// trample the sprite shape area at $2000-$27FF. Placed at the very
+// top of the segment so the rest of the code can reference them via
+// short absolute addresses (and so the .sym names cluster nicely).
+//
+// scroll_x_offset (0..39) is the SMOOTH-SCROLL pixel offset: every
+// frame the whole sprite row shifts left by SCROLL_SPEED_TABLE[damp]
+// pixels via this byte. When it crosses 40 (= one sprite-stride), we
+// subtract 40, advance zp_scroll_pos by one char, and refresh sprite
+// pointers — the visual "pop" is invisible because each character
+// ends up at the same screen pixel (sprite jumps right by 40 while
+// content shifts left by one slot). Replaces the older `scroll_tick`
+// byte-counter which gave a chunky 40-px-every-8-frames step.
+//
+// scroll_pos_hi is the hi byte of the 16-bit scroll position so the
+// full ~700 B message is reachable past the 8-bit-Y indexing limit.
+//
+// damp_shift (0..5) ramps during the fade-to-settle phase, ASR'ing
+// the DYCP/DXCP sine samples toward 0 and slowing the scroll.
+scroll_x_offset: .byte 0
+scroll_pos_hi:   .byte 0
+damp_shift:      .byte 0
 
 //==================================================================
 // setup
@@ -171,7 +187,7 @@ setup:
         lda #0
         sta zp_beat_phase
         sta zp_beat_count
-        sta scroll_tick
+        sta scroll_x_offset
         sta zp_beat_kick
         sta damp_shift
 
@@ -260,11 +276,36 @@ interrupt:
         jmp !settled+
 !no_settle:
 
+        // ----- Smooth pixel-scroll tick (BEFORE update_sprite_ptrs) -----
+        // Advance scroll_x_offset by SCROLL_SPEED_TABLE[damp_shift]
+        // pixels each frame. When it crosses 40 (one sprite stride),
+        // subtract 40 and advance zp_scroll_pos by one char so the
+        // sprite ptrs shift one slot. Must happen BEFORE the ptr
+        // refresh so the X-pop and the content-pop land on the same
+        // frame — otherwise sprites snap right 40 px while still
+        // showing the OLD chars for one frame (visible glitch).
+        ldy damp_shift
+        lda SCROLL_SPEED_TABLE,y
+        clc
+        adc scroll_x_offset
+        cmp #40
+        bcc !no_char_step+
+        sec
+        sbc #40
+        pha
+        inc zp_scroll_pos
+        bne !no_step_carry+
+        inc scroll_pos_hi
+!no_step_carry:
+        pla
+!no_char_step:
+        sta scroll_x_offset
+
         // Always re-write sprite pointers every frame. The Spindle NMI
         // loader can clobber $07F8-$07FF during background loads, and
-        // we only advance scroll_pos every N frames, so we'd lose the
-        // pointers between scroll ticks. Wasting 8 stores beats having
-        // space invaders on screen.
+        // we only advance scroll_pos when scroll_x_offset wraps past 40,
+        // so we'd lose the pointers between char-steps. Wasting 8 stores
+        // beats having space invaders on screen.
         jsr update_sprite_ptrs
 
         // colour cycle — rotate sprite colours each frame
@@ -389,7 +430,9 @@ interrupt:
         bne !x_damp-
 !x_no_damp:
         clc
-        adc sprite_x_table,x
+        adc sprite_x_table,x      // base X + ±1 bob
+        sec
+        sbc scroll_x_offset        // smooth-scroll: subtract pixel offset
         pha
         // X reg offset = N*2 (preserves carry but we don't need it)
         txa
@@ -399,27 +442,58 @@ interrupt:
         sta $d000,y                // → $D000 / $D002 / ... / $D00E
         dex
         bpl !dxcp-
-        // $d010 stays $01 (only sprite 0 needs hi-bit for X=292)
 
-        // scroll tick — advance char every N frames where N is
-        // SCROLL_DELAY_TABLE[damp_shift]. Normal phase uses 8 frames;
-        // the fade ramps up to 64 so the scroll smoothly slows toward
-        // a stop alongside the wobble damp. 16-bit scroll_pos carries
-        // lo → hi on overflow so the full ~700 B message is reachable.
-        ldy damp_shift
-        lda SCROLL_DELAY_TABLE,y
-        sta $fc                    // scratch (outside EFO claim, IRQ-owned)
-        ldx scroll_tick
-        inx
-        cpx $fc
-        bcc !no_scroll+
-        ldx #0
-        inc zp_scroll_pos
-        bne !no_scroll_carry+
-        inc scroll_pos_hi
-!no_scroll_carry:
-!no_scroll:
-        stx scroll_tick
+        // ----- Sprite-7 carousel override -----
+        // For offsets 0..12 the DXCP loop above already placed sprite 7
+        // correctly at screen X = 12..0 (exiting LEFT, sprite 7 hi-bit
+        // clear). For offsets 13..39 we re-purpose sprite 7 as the
+        // entering buffer on the RIGHT: it shows chars[scroll_pos+8]
+        // (which the ptr override in update_sprite_ptrs has already put
+        // into $07FF) and sits at screen X = 332..293 (= sprite 0's
+        // position + 40, sliding LEFT in lockstep).
+        //
+        // Net effect: every character in the message slides smoothly
+        // from off-right to on-screen to off-left as scroll_x_offset
+        // walks 0..40, with no visible gap on either side. At the
+        // wrap, sprite 7 instantly teleports from the right end (where
+        // it was the entering buffer) to the left end (where it's the
+        // new leftmost exiting char) — invisible because each char's
+        // ON-screen position is continuous across the swap.
+        lda scroll_x_offset
+        cmp #13
+        bcc !no_s7_carousel+
+        lda #76                    // = 332 - 256 → register byte for screen X=332
+        sec
+        sbc scroll_x_offset
+        sta $d00e                  // sprite 7 X register
+!no_s7_carousel:
+
+        // ----- $D010 (sprite X hi-bits) for sprite 0 + sprite 7 -----
+        // Smooth-scroll math: sprite_x_table[N] is the byte-low part of
+        // sprite N's screen X. As scroll_x_offset grows from 0 to 40, the
+        // 8-bit subtraction wraps for sprite 0 (logical X crosses 256→255
+        // at offset=37) and for sprite 7 (logical role flips at offset=13).
+        //
+        //   Sprite 0 (rightmost visible, screen X = 292..253):
+        //     offset 0..36  → screen X 292..256 → hi-bit SET, reg 36..0
+        //     offset 37..39 → screen X 255..253 → hi-bit CLEAR, reg 255..253
+        //
+        //   Sprite 7 (carousel: leftmost OR rightmost-entering):
+        //     offset 0..12  → screen X 12..0   → hi-bit CLEAR, reg 12..0
+        //     offset 13..39 → screen X 319..293→ hi-bit SET, reg 63..37
+        //                                          (entering buffer, ptr swapped
+        //                                           to chars[scroll_pos+8])
+        lda #0
+        ldx scroll_x_offset
+        cpx #37
+        bcs !d010_skip_s0+
+        ora #$01                   // sprite 0 hi-bit
+!d010_skip_s0:
+        cpx #13
+        bcc !d010_skip_s7+
+        ora #$80                   // sprite 7 hi-bit (carousel buffer at right)
+!d010_skip_s7:
+        sta $d010
 
         jmp !irq_exit+
 
@@ -431,6 +505,14 @@ interrupt:
         sta zp_scroll_pos
         lda #>(settle_text - message)
         sta scroll_pos_hi
+        // Reset smooth-scroll state so the flat-X writes below put each
+        // sprite exactly on its sprite_x_table[N] position. Without this,
+        // the per-IRQ subtraction would leave the row shifted left by the
+        // last non-settle scroll_x_offset value.
+        lda #0
+        sta scroll_x_offset
+        lda #$01                       // sprite 0 hi-bit set, sprite 7 hi-bit clear
+        sta $d010
         jsr update_sprite_ptrs
 
         // Colour cycle keeps shimmering so the held phrase doesn't
@@ -514,9 +596,12 @@ update_sprite_ptrs:
         lda #<message
         adc zp_scroll_pos
         sta msg_lookup + 1
+        sta msg_lookup_s7 + 1      // sprite-7 carousel override reads from
+                                    // the same base + Y=8
         lda #>message
         adc scroll_pos_hi
         sta msg_lookup + 2
+        sta msg_lookup_s7 + 2
 
         ldx #0
 !lp:    txa
@@ -534,6 +619,23 @@ msg_lookup:
         inx
         cpx #8
         bne !lp-
+
+        // ----- Sprite-7 carousel ptr override -----
+        // When scroll_x_offset >= 13, sprite 7 acts as the entering buffer
+        // on the RIGHT side of the screen, so it should show the NEXT
+        // character (chars[scroll_pos+8]) instead of chars[scroll_pos+0].
+        // SPR_PTR_BASE+7 is sprite 7's pointer slot (since sprite 0 owns
+        // SPR_PTR_BASE+0). See the DXCP override block in the IRQ.
+        lda scroll_x_offset
+        cmp #13
+        bcc !no_s7_ptr+
+        ldy #8
+msg_lookup_s7:
+        lda $0000,y                  // patched to (message+scroll_pos)+8
+        tay
+        lda ptr_lookup,y
+        sta SPR_PTR_BASE+7
+!no_s7_ptr:
         rts
 
 
@@ -586,11 +688,13 @@ sprite_x_table:
 sprite_cols:
 .byte $07, $08, $0a, $0c, $0e, $03, $05, $0d
 
-// Scroll delay per damp_shift step. Frame count between char advances:
-// damp 0 = normal 8 → ramps up so scroll smoothly decelerates into the
-// settle freeze. damp 5 = 128 frames = ~2.5 s/char (basically stopped).
-SCROLL_DELAY_TABLE:
-.byte 8, 12, 18, 28, 50, 128
+// Scroll SPEED per damp_shift step, in pixels per frame. At 40 px per
+// sprite-stride and 50 fps, 5 px/frame = 8 frames/char ≈ 6.25 chars/sec
+// (matches the previous chunky cadence at damp 0). Fade phase ramps
+// down so the smooth scroll decelerates into the settle freeze; damp
+// 5 = 0 px/frame = standing still (settle phase overrides anyway).
+SCROLL_SPEED_TABLE:
+.byte 5, 3, 2, 1, 1, 0
 
 // Warm colour cycle table — rotates through yellow/orange/red/magenta/cyan/green
 // for good readability on black background, with sprite-to-sprite phase offset.
