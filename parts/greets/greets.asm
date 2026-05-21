@@ -33,7 +33,10 @@
 .const SPR_COL     = $d027
 
 .const SPR_PTR_BASE = $07F8
-.const SPRITE_SHAPE = $2000
+// Sprite shape area moved from $2000 to $0800 (2 KB) to free up
+// $2000-$3FFF for the koala bitmap. With shapes at $0800, sprite
+// pointer values are $20-$3F (= $0800 / 64) instead of $80-$9F.
+.const SPRITE_SHAPE = $0800
 
 .const INTRO_MUSIC_PLAY = $119e
 
@@ -104,27 +107,59 @@ damp_shift:      .byte 0
 // setup
 //==================================================================
 setup:
+        // VIC bank 0 ($DD02 = $3C → $0000-$3FFF visible to VIC)
         lda #$3c
         sta $dd02
-        lda #%00010100
+        // VIC_MEM = $18 → screen RAM $0400 (bits 7-4 = 1), bitmap
+        // base $2000 (bits 3-1 = 4). Bitmap occupies 8 KB at
+        // $2000-$3F3F (only first 8000 bytes are visible).
+        lda #$18
         sta VIC_MEM
-        lda #$1b
+        // VIC_CTRL1 = $3B → DEN=1, BMM=1 (bitmap mode), RSEL=1,
+        // YSCROLL=3. Without BMM the koala bytes render as garbage.
+        lda #$3b
         sta VIC_CTRL1
-        lda #$08
+        // VIC_CTRL2 = $18 → CSEL=1 (40-col), MCM=1 (multi-colour).
+        // Koala uses multi-colour mode with 4 colours per cell.
+        lda #$18
         sta VIC_CTRL2
+
         lda #$00
         sta VIC_BORDER
+        // Background colour ($D021) comes from the koala (last byte
+        // of the .kla payload — see koala_bg below).
+        lda koala_bg
         sta VIC_BG
 
-        // clear screen RAM
+        // ---- Copy koala screen + colour RAM data into VIC ----
+        // pefchain loaded the bitmap directly into $2000-$3F3F. The
+        // per-cell screen attributes (c1/c2) and colour RAM (c3) live
+        // in code-segment buffers (koala_screen / koala_color) and
+        // get CPU-copied at boot:
+        //   - $0400-$07E7 = per-cell c1 hi nibble, c2 lo nibble
+        //   - $D800-$DBE7 = per-cell c3 lo nibble (VIC's colour RAM)
+        // pefchain can't write to $D800 directly (it's IO, not RAM),
+        // and we keep $04-$07 out of greets' EFO claim so blank-filler
+        // effects can paint $0400 during the background load.
         ldx #0
-        lda #$20
-!clr:   sta $0400,x
+!ks:    lda koala_screen+$000,x
+        sta $0400,x
+        lda koala_screen+$100,x
         sta $0500,x
+        lda koala_screen+$200,x
         sta $0600,x
-        sta $0700,x
+        lda koala_screen+$2e8,x       // last partial page → $06e8..$07e7
+        sta $06e8,x
+        lda koala_color+$000,x
+        sta $d800,x
+        lda koala_color+$100,x
+        sta $d900,x
+        lda koala_color+$200,x
+        sta $da00,x
+        lda koala_color+$2e8,x        // last partial page → $dae8..$dbe7
+        sta $dae8,x
         inx
-        bne !clr-
+        bne !ks-
 
         // SID — LP filter on V2 (lead) with moderate resonance. Cutoff
         // is modulated per frame in the IRQ (4 bytes there) for a slow
@@ -670,10 +705,13 @@ copy_font:
 //==================================================================
 
 ptr_lookup:
+// Sprite pointer values for each input char. Font slots live at
+// $0800-$0FFF (32 slots × 64 B), so ptr = $20 + slot. A-Z → slots
+// 0..25, blank → slot 26, hyphen → slot 27.
 .for (var i = 0; i < 256; i++) {
-        .if (i >= $41 && i <= $5A) { .byte $80 + i - $41 }    // A-Z   → $80..$99
-        .if (i == $2D)             { .byte $9B }              // '-'   → hyphen
-        .if (i != $2D && (i < $41 || i > $5A)) { .byte $9A }  // other → blank
+        .if (i >= $41 && i <= $5A) { .byte $20 + i - $41 }    // A-Z   → $20..$39
+        .if (i == $2D)             { .byte $3B }              // '-'   → hyphen
+        .if (i != $2D && (i < $41 || i > $5A)) { .byte $3A }  // other → blank
 }
 
 sprite_x_table:
@@ -689,12 +727,14 @@ sprite_cols:
 .byte $07, $08, $0a, $0c, $0e, $03, $05, $0d
 
 // Scroll SPEED per damp_shift step, in pixels per frame. At 40 px per
-// sprite-stride and 50 fps, 5 px/frame = 8 frames/char ≈ 6.25 chars/sec
-// (matches the previous chunky cadence at damp 0). Fade phase ramps
-// down so the smooth scroll decelerates into the settle freeze; damp
-// 5 = 0 px/frame = standing still (settle phase overrides anyway).
+// sprite-stride and 50 fps, 9 px/frame ≈ 11.3 chars/sec — readable
+// pace where the names blur a little but the eye can still lock on.
+// Iteration: started at 5 (= 6.25 chars/sec, too slow), bumped to 12
+// (~15 chars/sec, too fast), settled at 9. Fade ramps down so the
+// smooth scroll decelerates into the settle freeze; damp 5 = 0 px/
+// frame (settle phase overrides anyway).
 SCROLL_SPEED_TABLE:
-.byte 5, 3, 2, 1, 1, 0
+.byte 9, 6, 4, 2, 1, 0
 
 // Warm colour cycle table — rotates through yellow/orange/red/magenta/cyan/green
 // for good readability on black background, with sprite-to-sprite phase offset.
@@ -709,21 +749,21 @@ colour_cycle:
 .byte $09, $0a, $0c, $0e, $01, $01, $01, $07
 
 sine_table:
-// Amplitude 2 for visible-but-readable wave (±2 px). Was ±3 px which
-// made the text noticeably swim during the main scroll — letters
-// were never standing still long enough for the eye to lock onto a
-// word. ±2 keeps the demoscene "DYCP is alive" feel without
-// sabotaging readability.
+// Amplitude 3 — bumped from 2 for more "wave alive" demoscene feel
+// (user request 2026-05-21). The trade-off is the row swims more
+// while you're trying to read names; with the faster scroll above,
+// each name is on screen for less time anyway so the eye reads
+// the silhouette rather than locking onto static letters.
 .for (var i = 0; i < 256; i++) {
-        .byte floor(2 * sin(i * 2 * PI / 256) + 0.5)
+        .byte floor(3 * sin(i * 2 * PI / 256) + 0.5)
 }
 
 sine_table_x:
-// Amplitude 1 for horizontal bob (±1 px), used with 90° phase offset.
-// Was ±2 px. Combined with the Y change above, the per-sprite bobble
-// is roughly half as wide as it used to be — much easier to read.
+// Amplitude 2 — bumped from 1 to match the Y wobble bump. With 90°
+// phase offset vs DYCP, each sprite traces a tiny ellipse instead
+// of a vertical sine, adding more wobble character to the row.
 .for (var i = 0; i < 256; i++) {
-        .byte floor(1 * sin(i * 2 * PI / 256) + 0.5)
+        .byte floor(2 * sin(i * 2 * PI / 256) + 0.5)
 }
 
 
@@ -742,7 +782,7 @@ sine_table_x:
 // The real story: never had time to code the breadbin, then AI made
 // it possible. Tongue in cheek, grateful, and shout-outs to the
 // folks whose tools / inspiration got us here.
-* = $8600
+* = $8700
 message:
 // 8-space intro pad so the screen starts blank before the first
 // name slides in. Names are separated by three spaces — one inside
@@ -850,3 +890,44 @@ font_data:
                 .byte 0
         }
 }
+
+
+//==================================================================
+// Koala backdrop — multicolour 320×200 bitmap loaded from a .kla file.
+//
+// Layout in memory (placed by pefchain at boot via the EFO P-claims):
+//   $0400-$07E7  per-cell screen attributes (1000 bytes; c1 hi nibble,
+//                c2 lo nibble). Sprite ptrs at $07F8-$07FF still work
+//                because they're past the visible 1000-cell area.
+//   $2000-$3F3F  raw bitmap (8000 bytes; 8 bytes per cell × 1000 cells).
+//   $D800-$DBE7  per-cell c3 colour (copied from koala_color at setup).
+//   $D021        global background colour c0 (loaded from koala_bg).
+//
+// To swap the backdrop: edit parts/greets/backdrop.png and re-run
+// tools/png_to_koala.py to regenerate the .kla, then point the path
+// below at the new file. Defaults to ../intro/defeest.kla so an
+// initial build works without you having to convert anything first.
+//==================================================================
+.var backdrop = LoadBinary("../intro/defeest.kla", BF_KOALA)
+
+.pc = $2000 "BackdropBitmap"
+.fill 8000, backdrop.getBitmap(i)
+
+// koala_screen, koala_color, koala_bg all live above font_data (which
+// ends ~$902c) inside the expanded $80-$9F EFO claim. setup CPU-copies
+// koala_screen to $0400 and koala_color to $D800 at boot.
+//
+// Why $0400 isn't loaded directly by pefchain: claiming $04-$07 in
+// the EFO blocks pefchain from using those pages for blank-filler
+// effects during background load — which it must do to mask greets'
+// large data load (~10 KB of bitmap + buffers). The blanks paint a
+// flat screen at $0400, so $04-$07 needs to be unowned.
+.pc = $9800 "BackdropScreenBuffer"
+koala_screen:
+.fill 1000, backdrop.getScreenRam(i)
+
+.pc = $9c00 "BackdropColorBuffer"
+koala_color:
+.fill 1000, backdrop.getColorRam(i)
+koala_bg:
+.byte backdrop.getBackgroundColor()

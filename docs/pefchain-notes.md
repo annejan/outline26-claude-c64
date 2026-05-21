@@ -221,6 +221,28 @@ like `0800-5BDC "intro:intro.efo+intro:(drv)": 21469 bytes crunched to
   Inserting blank filler because '...' and 'YOUR_PART' share pages
   X-Y` and eventually errors out with `pefchain: Increase MAXEFFECTS!`.
 
+### MAXEFFECTS bump (2026-05-21)
+
+Stock pefchain ships with `MAXEFFECTS = 96` in `spindle-3.1/src/
+pefchain.c`. The outline-64 build exceeds that because greets
+claims a lot of pages (`$08-$0F` sprite font + `$20-$3F` koala
+bitmap + `$80-$9F` code/buffers) and pefchain inserts a `blank`
+filler effect per page-gap during the background load — well past
+96 in our case.
+
+**To rebuild pefchain with a higher limit:**
+
+```bash
+cd spindle-3.1/src
+# Edit pefchain.c: change `#define MAXEFFECTS 96` to 512
+make pefchain                  # may need `./mkheader commonsetup.bin > commonsetup.h` first
+cp pefchain ../prebuilt-binaries/linux-x86_64/pefchain
+```
+
+This is a LOCAL build-tool patch; `spindle-3.1/` is gitignored so the
+rebuilt binary doesn't ride along in the repo. If a fresh checkout
+fails with `Increase MAXEFFECTS!`, apply this bump.
+
 ## VIC quirk to clear in every part's setup
 
 `$D011` bit 7 is the high bit of the raster-compare register (NOT
