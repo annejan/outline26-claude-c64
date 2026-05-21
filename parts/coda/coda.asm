@@ -258,6 +258,7 @@ setup:
         sta zp_timer
         sta zp_subtick
         sta zp_frame
+        sta frame_hi                  // high byte of 16-bit frame counter
         sta kick_state                // idle until first beat
 
         // Coda owns V3 — pre-load the kick ADSR shape so each beat
@@ -615,7 +616,16 @@ interrupt:
         jmp !half_rate+
 !over:  jmp !skip_inc+
 !half_rate:
+        // 16-bit frame counter: low byte (zp_frame) walks 0..255 so it
+        // can also index the 256-byte col_tab; high byte carries the
+        // overflow so the transition check can compare N_FRAMES values
+        // that exceed 255 (the original 8-bit-only zp_frame + plain
+        // `cmp #N_FRAMES` silently truncated, so 400 / 600 / 800
+        // transitioned at 144 / 88 / 32 ticks respectively).
         inc zp_frame
+        bne !no_frame_carry+
+        inc frame_hi
+!no_frame_carry:
         // Advance shape counters via independent dividers so each star
         // rotates at a fundamentally different speed (/3 vs /2). Each
         // counter ping-pongs 0 → 23 → 0 (see Stage F comment up top);
@@ -839,10 +849,16 @@ interrupt:
         sta $d00d                       // spr 6 BL Y
         sta $d00f                       // spr 7 BR Y
 
-        // transition check after all sprite maths
-        lda zp_frame
-        cmp #N_FRAMES
+        // transition check: 16-bit compare frame_hi:zp_frame vs N_FRAMES.
+        // Fire when (frame_hi:zp_frame) >= N_FRAMES.
+        lda frame_hi
+        cmp #>N_FRAMES
         bcc !run+
+        bne !trigger_transition+
+        lda zp_frame
+        cmp #<N_FRAMES
+        bcc !run+
+!trigger_transition:
         lda #$30
         sta zp_timer
         lda #$00
@@ -943,6 +959,13 @@ kick_freq:
 // my_music_play, which reads $F8 every frame as the master-volume
 // source. Parking state there pinned coda's chord pad to silence.
 kick_state:
+        .byte 0
+
+// High byte of the 16-bit half-rate frame counter. Low byte lives at
+// zp_frame ($fc) so it also indexes the 256-byte col_tab; this byte
+// carries the overflow so the transition check can compare against
+// N_FRAMES values > 255. Reset to 0 in setup.
+frame_hi:
         .byte 0
 
 
