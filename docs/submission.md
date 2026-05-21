@@ -182,6 +182,48 @@ hand-pick the 7 best frames via MCP screenshots taken
 interactively, and drop them into `submission/<bundle>/screenshots/`
 before re-zipping.
 
+### Disk metadata (post 2026-05-21)
+
+`build.sh` passes `--title DEFEEST/X2026 --disk-id KL --dirart
+dirart.txt --dir-entry 6` to `pefchain`, so the d64's directory
+listing reads as a styled release rather than the bare Spindle
+default. On a freshly-booted (graphics-mode) C64, `LOAD"$",8 /
+LIST` shows:
+
+```
+0 "DEFEEST/X2026   " KL 2A
+0    [u-c-c-i frame]   DEL
+0    "  DEFEEST AT  "  DEL
+0    "    X2026     "  DEL
+0    "  KLOTEN MET  "  DEL
+3    "  DE BROOD-   "  PRG   ← the actual demo file
+0    "   TROMMEL    "  DEL
+0    "   A DIGITAL  "  DEL
+0    " LUNCH EXPER- "  DEL
+0    "    IENCE     "  DEL
+0    [j-c-c-k frame]   DEL
+559 BLOCKS FREE.
+```
+
+Three things to remember when editing `dirart.txt`:
+
+- **Every line must be exactly 16 chars wide** or the box won't
+  render properly. Verify with `awk '{ print length($0) }' dirart.txt`.
+- **Use UPPERCASE for readable text** inside the box. Lowercase
+  ASCII = PETSCII codes that render as graphics blocks in the
+  C64's default graphics charset (the chargen mode you get
+  immediately after RESET, before any `Shift+C=` toggle).
+- **Use lowercase `u i j k c b`** for the BOX-DRAWING chars
+  (top-left / top-right / bottom-left / bottom-right corners,
+  horizontal lines, vertical bars). Those PETSCII codes ARE the
+  box glyphs in graphics mode — this is Spindle's convention.
+
+The `--dir-entry 6` flag picks the dirart row that's the real PRG
+(every other row is a 0-block `DEL` entry). Row 6 is `B  DE BROOD-
+B` — the demo loads via `LOAD"*",8,1` regardless of which row
+holds it, but the picked row is what shows non-zero blocks in
+the LIST output.
+
 ### Known brittleness (KEEP UPDATING)
 
 The script trusts these inputs to stay in sync with the demo:

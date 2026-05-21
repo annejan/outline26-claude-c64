@@ -325,6 +325,43 @@ leave headroom, or place the table explicitly via `* = $XX00` so it
 errors at assembly time when there's not enough room rather than
 silently spilling into the next page.
 
+### Disk title / dirart / disk ID — case-mode quirk
+
+The C64 boots into **graphics character set** by default (the
+"ALL CAPS + box graphics" mode). In that mode:
+
+- PETSCII bytes `$41-$5A` (= ASCII `A`-`Z`) render as readable
+  uppercase letters
+- PETSCII bytes `$61-$7A` (= ASCII `a`-`z`) render as **graphics
+  blocks**, not lowercase letters
+
+So if you set `--title "defeest/x2026"` in `pefchain`, the disk
+listing shows the title as a string of PETSCII graphics rather
+than the word `defeest`. Same for `--disk-id "kl"` — renders
+as `KL` only if uppercase.
+
+**Lesson for `--title`, `--disk-id`, and `dirart.txt`:**
+use **UPPERCASE** for any text that should READ as letters on a
+freshly-booted (graphics-mode) C64. Lowercase letters in your
+source map to PETSCII codes that the default character set
+renders as graphics blocks. Spindle's example `dirart.txt`
+uses lowercase `u c c i j k b` etc. for the BOX-DRAWING chars
+on purpose (those PETSCII codes ARE the box-corner glyphs in
+graphics mode), and uppercase `EXAMPLE DEMO` for the readable
+text.
+
+Concrete pattern that works (`dirart.txt`):
+
+```
+ucccccccccccccci      ← box top: lowercase = corners + lines
+b              b      ← box sides: lowercase = vertical bars
+b  HELLO WORLD b      ← interior text: UPPERCASE for readability
+jcccccccccccccck      ← box bottom
+```
+
+See `build.sh` for the `--title DEFEEST/X2026 --disk-id KL`
+invocation and `dirart.txt` for the actual release art.
+
 ---
 
 ## DYCP / sprite-font gotchas

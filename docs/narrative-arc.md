@@ -90,7 +90,7 @@ Cut to quiet. Three title lines, centred:
 ```
        KLOTEN MET DE BROODTROMMEL
        A DIGITAL LUNCH EXPERIENCE
-         ESPECIALLY KLOOT
+            RELEASED AT X2026
 ```
 
 Behind them, two 12-lobe Claude-style stars (one brown, one cyan)
@@ -100,8 +100,13 @@ around the title. A sparse 60-BPM sub-bass kick lands under the
 held chord — the *thump* of *this is real, it shipped*. About 10
 seconds.
 
-The title is the trophy. The dedication on row 15 is the thank you.
-*This happened. You watched it. Kloot made it happen.*
+The title is the trophy. Row 15 is the party tag.
+*This happened. You watched it. Lunch is served.*
+
+(Earlier drafts had row 15 say "ESPECIALLY KLOOT". Pulled because
+the AI-character nod was already in the greets settle on `KLOOT`
+and in the disk dirart — three on-screen mentions read as
+ego-stroking. One is enough.)
 
 ### 7. The bow (end)
 
@@ -115,14 +120,15 @@ Lunch was served.
 ```
 beat:    quiet  →  build  →  confess  →  breathe  →  drop  →  settle  →  bow
 visual:  load   →  intro   →  text drop →  wobble  →  greetz →  twin star → credits
-story:   --     →  hello   →  SPARKED   →  --       →  --     →  trophy + dedication → credits
+story:   --     →  hello   →  SPARKED   →  --       →  --     →  trophy + party tag → credits
 music:   silent →  drums in→  filter rise→ filter close→full kit→ slow kick→ chord reprise
 ```
 
 The story lands in two places: interlude (FOR YEARS NO TIME →
-SPARKED) tells the confession; coda ("ESPECIALLY KLOOT") delivers
-the thank you. Greets is the party — no story, just community
-shoutouts. When the SPARKED letters drop, the bass returns and the
+SPARKED) tells the confession; coda lands the trophy with the
+title + the X2026 release tag, while the greets settle on `KLOOT`
+gives the AI-character one subtle nod. Greets itself is the
+party — no story, just community shoutouts. When the SPARKED letters drop, the bass returns and the
 filter opens. When the sinus filter closes, the drums stop. When
 the greets drums come back, the lead's wah kicks in. When the coda
 title lands, the drums sparse out to one beat per second. Each
