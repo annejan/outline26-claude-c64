@@ -953,6 +953,11 @@ end_music_init:
         lda #0
         sta zp_mu_step
         sta zp_mu_frame
+        // Reset mood LFO so the credits always START in the clean
+        // (narrow-sweep) mood and drift outward — never start dark.
+        sta mood_tick
+        sta mood_phase
+        sta mood_depth
         rts
 
 
@@ -979,12 +984,35 @@ end_music_play:
 !vol_ok:ora #$10                  // bit 4 = LP filter on
         sta $d418
 
-        // --- V3 arp shimmer: PWM + gentle filter cutoff sweep ---
-        // PWM affects only V3 (V1/V2 are triangle wave). The pulse hi
-        // nibble walks 4..11 over a 5.12s sine cycle for a gentle phaser
-        // tone on the arp.  Filter cutoff cycles 90° out of phase across
-        // a narrow $20..$58 band so the pad "breathes" without losing
-        // its soft character.
+        // --- Slow mood LFO — clean ↔ dark filter sweep ---
+        // mood_phase advances 1 step every 4 frames → 256 × 4 frames =
+        // 1024 frames = ~20.5 s for a full cycle. The depth value comes
+        // from wave_xscroll[(mood_phase + 192) & $FF] which puts the
+        // sine's trough (= 0) at phase 0 → credits START fully clean,
+        // drift into dark mood, and back. See sound-arc.md "End-credits
+        // darkening" / "Future polish — modulate between clean and dark".
+        inc mood_tick
+        lda mood_tick
+        cmp #$04
+        bcc !mood_keep+
+        lda #$00
+        sta mood_tick
+        inc mood_phase
+!mood_keep:
+        lda mood_phase
+        clc
+        adc #192                  // shift: wave_xscroll[192] = 0
+        tax
+        lda wave_xscroll,x        // depth 0..7, starts at 0
+        sta mood_depth
+
+        // --- V3 arp shimmer: PWM (fixed) + LFO-modulated filter sweep ---
+        // PWM still cycles 4..11 over its 5.12 s sine — that's the
+        // intentional "gentle phaser tone" on the arp. The mood LFO
+        // only modulates the FILTER CUTOFF SWEEP AMPLITUDE, which is
+        // the audible "phaser depth": narrow sweep ($30..$4C) reads as
+        // calm, wide sweep ($29..$56) reads as the post-PR-#31 dark
+        // flanger.
         ldx zp_frame
         lda wave_xscroll,x        // 0..7
         clc
@@ -992,17 +1020,40 @@ end_music_play:
         and #$0f
         sta $d411                 // V3 pulse hi nibble
 
+        // Filter cutoff: cutoff = wave * amp + offset, where:
+        //   amp    = 4 + (depth >> 1)   → 4 (clean) .. 7 (dark)
+        //   offset = $30 - depth        → $30 (clean) .. $29 (dark)
+        // → at depth=0: wave*4 + $30 → $30..$4C   (clean, narrow sweep)
+        // → at depth=7: wave*7 + $29 → $29..$56   (dark,  wide sweep)
+        // Multiply implemented by `amp`-times add (max 7 iterations,
+        // ~42 cy worst case — fine at 50 Hz).
         txa
         clc
-        adc #$40                  // 90° phase offset
+        adc #$40                  // 90° phase offset on the filter wave
         tax
-        lda wave_xscroll,x        // 0..7
-        asl
-        asl
-        asl                       // *8 → 0..56
+        lda wave_xscroll,x        // 0..7 filter sine value
+        sta mood_wave_tmp
+
+        lda mood_depth
+        lsr                       // depth >> 1
         clc
-        adc #$20                  // baseline → $20..$58
-        sta $d416                 // filter cutoff hi
+        adc #$04                  // amp = 4 + (depth >> 1), range 4..7
+        tay                       // Y = amp = loop count
+
+        lda #$00
+!mul_loop:
+        clc
+        adc mood_wave_tmp
+        dey
+        bne !mul_loop-
+        sta mood_wave_tmp         // 0..49 (wave * amp)
+
+        sec
+        lda #$30
+        sbc mood_depth            // $30 - depth, range $30..$29
+        clc
+        adc mood_wave_tmp         // final cutoff
+        sta $d416
 
         // --- V3 arp: change freq every 4 frames within step ---
         lda zp_mu_frame
@@ -1098,6 +1149,17 @@ end_music_play:
 .align 256
 wave_xscroll:
         .fill 256, round(3.5 + 3.5 * sin(toRadians(i * 360 / 256)))
+
+
+//==================================================================
+// Mood LFO state — clean ↔ dark filter sweep modulation for the
+// credit roll. See end_music_play for the math; sound-arc.md for
+// the design intent.
+//==================================================================
+mood_tick:      .byte 0        // 0..3, increments every frame
+mood_phase:     .byte 0        // 0..255, increments every 4 frames (slow LFO)
+mood_depth:     .byte 0        // 0..7, current attenuation factor
+mood_wave_tmp:  .byte 0        // scratch for the per-frame multiply
 
 //==================================================================
 // row_colour — 25-entry cool gradient (light-blue → cyan → light-
