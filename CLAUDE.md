@@ -40,6 +40,10 @@ The deeper guides live under [`docs/`](./docs/):
   block, symmetric-FLD wiring + first-write fix + latch pad, music
   split (`my_music_critical` / `my_music_step` / `my_music_play`
   dispatcher at $119e), wishlist for the X2026 sprint.
+- [`docs/sinus-vision.md`](./docs/sinus-vision.md) — **open
+  question, 2026-05-22**: sinus is the only part still flat;
+  options doc for the bridge beat between SPARKED and greets.
+  Read this before touching parts/sinus/.
 - [`docs/mcp-debugging.md`](./docs/mcp-debugging.md) — VICE-MCP
   cookbook: 70-tool catalogue, JSON-RPC wrapper gotchas (the `name`
   kwarg collision!), recipes for cycle measurement, IRQ logging,
