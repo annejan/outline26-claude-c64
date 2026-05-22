@@ -801,12 +801,14 @@ musichook:
         lda #$1f
         sta SID_VOL
 
-        // ---- Filter routing: all 3 voices through LP, res 4 ----
-        // Greets ends with $D417 = $42 (V2 only). Coda opens it to all
-        // voices so the bass-bleed sub-thump and triangle arp sit in the
-        // same filtered space as the lead — no timbral disconnect.
-        // Cutoff breathes gently via sin_tab[zp_frame] over ~10 s.
-        lda #$47
+        // ---- Filter routing: V2+V3 through LP, V1 bass clean ----
+        // Greets ends with $D417 = $42 (V2 only). Coda adds V3 (triangle
+        // arp) into the filtered space but keeps V1's bass-bleed sub-thump
+        // clean — LP + resonance on the heavy low-end kick causes audible
+        // crunch / filter-clap per beat. Cutoff breathes via sin_tab.
+        // Resonance reduced to $2 (was $4) so the breath is gentle, not
+        // a zipper-effect tear.
+        lda #$26
         sta $d417
         ldy zp_frame
         lda sin_tab,y
