@@ -1220,7 +1220,7 @@ credit_text:
         row("                                        ")
         row("           music                        ")
         row("              arranged and sequenced    ")
-        row("              by Anus with lots of help ")
+        row("              by Anus with help         ")
         row("              from Kloot and Augurk     ")
         row("                                        ")
         row("           graphics                     ")
