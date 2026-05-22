@@ -145,8 +145,13 @@ setup:
 
         lda #$18
         sta VIC_CTRL1
-        lda #$1a
-        sta VIC_MEM
+        lda #$16                   // screen $0400 + chargen $1800
+        sta VIC_MEM                // = lowercase ROM (mixed-case set).
+                                   // Was $1A which pointed CB to RAM
+                                   // $2800 where intro's logo bitmap
+                                   // lives → text rendered as garbage.
+                                   // $16 = CB 011 = ROM $1800, glyphs
+                                   // $01-$1A=a-z, $41-$5A=A-Z, $20=sp.
         lda #$08
         sta VIC_CTRL2
         lda #$00
@@ -336,10 +341,13 @@ pal_phase2:
         .byte $06, $06, $06, $06, $06
         .byte $0E
 
+// Wallpaper row: "deFEEST" in mixed case — d/e lowercase ($04, $05),
+// FEEST uppercase ($46, $45, $45, $53, $54). Matches the group's
+// own brand spelling instead of all-lowercase "defeest".
 defeest_row:
-        .byte $04, $05, $06, $05, $05, $13, $14
-        .byte $04, $05, $06, $05, $05, $13, $14
-        .byte $04, $05, $06, $05, $05, $13, $14
-        .byte $04, $05, $06, $05, $05, $13, $14
-        .byte $04, $05, $06, $05, $05, $13, $14
-        .byte $04, $05, $06, $05, $05
+        .byte $04, $05, $46, $45, $45, $53, $54
+        .byte $04, $05, $46, $45, $45, $53, $54
+        .byte $04, $05, $46, $45, $45, $53, $54
+        .byte $04, $05, $46, $45, $45, $53, $54
+        .byte $04, $05, $46, $45, $45, $53, $54
+        .byte $04, $05, $46, $45, $45
