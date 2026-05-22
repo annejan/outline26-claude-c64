@@ -45,7 +45,7 @@
 .const zp_fade     = $fb         // fade-in counter, 0..FADE_DONE, ticks each frame; drives SID volume + text reveal
 .const zp_wrap_pending = $fc     // set non-zero in irq_top when yscroll wraps; consumed later to fire scroll_rows_up
 
-.const N_CREDIT_ROWS = 69        // KEEP IN SYNC with the .text blocks below
+.const N_CREDIT_ROWS = 71        // KEEP IN SYNC with the .text blocks below
 .const FADE_DONE     = 99        // fade-in completes after 99 frames (~2 sec @50Hz)
 .const TEXT_REVEAL   = FADE_DONE // colour RAM flips from black to the gradient at this fade tick
 .const SCROLL_TICK_MASK = $03    // tick yscroll every (mask+1) frames — $03 = every 4 frames
@@ -320,8 +320,20 @@
         .byte %11111110
         .byte %00000000
 
-// $1b..$1f — gap to space ($20)
-        .fill 8 * (5), 0
+// $1b 'ë' (e with diaeresis, custom glyph) — for Dutch "ideeën".
+// Body is identical to lowercase 'e' at $05; two 2-pixel dots
+// added at row 0 over the verticals of the e (cols 1-2 and 5-6).
+        .byte %01100110
+        .byte %00000000
+        .byte %01111100
+        .byte %11000110
+        .byte %11111110
+        .byte %11000000
+        .byte %01111110
+        .byte %00000000
+
+// $1c..$1f — gap to space ($20)
+        .fill 8 * 4, 0
 
 // $20 ' '
         .fill 8, 0
@@ -1144,29 +1156,29 @@ is_header:
         .byte 1             // 11     started at outline
         .byte 0,0           // 12..13 three weeks later / this happened
         .byte 0             // 14     blank
-        .byte 1             // 15     code
+        .byte 1             // 15     vibecode
         .byte 0,0,0,0,0,0   // 16..21 six code credits (Kloot/Anus/Augurk/TL-Buis/Ranzbak/Cinder)
         .byte 0             // 22     blank
         .byte 1             // 23     music
-        .byte 0,0,0         // 24..26 coded/by Anus/with help
+        .byte 0,0,0         // 24..26 arranged / by Anus / from Kloot+Augurk
         .byte 0             // 27     blank
         .byte 1             // 28     graphics
-        .byte 0,0           // 29..30 defeest.nl / pixeled with love
-        .byte 0             // 31     blank
-        .byte 1             // 32     tools
-        .byte 0,0,0,0,0,0   // 33..38 six tools (claude/opencode/kickass/spindle/vice/multipaint)
-        .byte 0             // 39     blank
-        .byte 1             // 40     documentation
-        .byte 0,0,0,0       // 41..44 codebase / spindle manual / every demo / before this
-        .byte 0             // 45     blank
-        .byte 1             // 46     thanks (merged: people + dutch)
-        .byte 0,0,0,0,0,0,0 // 47..53 Linus / Mads / Tero / everyone / breadbin / kloot voor / dutch
-        .byte 0             // 54     blank
-        .byte 1             // 55     and one last thought
-        .byte 0,0,0,0,0     // 56..60 the breadbin / has been waiting / for forty years / kloot finally / got me here
-        .byte 0             // 61     blank
-        .byte 0,0,0         // 62..64 thank you / from anus / see you at evoke
-        .byte 0,0,0,0       // 65..68 blank tail
+        .byte 0,0,0         // 29..31 logo images / hand pixeled / by Anus
+        .byte 0             // 32     blank
+        .byte 1             // 33     tools
+        .byte 0,0,0,0,0,0,0 // 34..40 seven tools (claude/opencode/kickass/spindle/vice/multipaint/spritemate)
+        .byte 0             // 41     blank
+        .byte 1             // 42     documentation
+        .byte 0,0,0,0       // 43..46 codebase / spindle manual / every demo / before this
+        .byte 0             // 47     blank
+        .byte 1             // 48     thanks
+        .byte 0,0,0,0,0,0,0 // 49..55 Linus / Mads / Tero / everyone / breadbin / kloot voor / ideeën
+        .byte 0             // 56     blank
+        .byte 1             // 57     and one last thought
+        .byte 0,0,0,0,0     // 58..62 the commodore 64 / had been waiting / forty years / kloot finally / got me here
+        .byte 0             // 63     blank
+        .byte 0,0,0         // 64..66 thank you / from Anus and Kloot / see you at Evoke
+        .byte 0,0,0,0       // 67..70 blank tail
 
 
 //==================================================================
@@ -1198,7 +1210,7 @@ credit_text:
         row("            three weeks later           ")
         row("              this happened             ")
         row("                                        ")
-        row("           code                         ")
+        row("           vibecode                     ")
         row("              Kloot/deFEEST             ")
         row("              Anus/deFEEST              ")
         row("              Augurk/deFEEST            ")
@@ -1207,13 +1219,14 @@ credit_text:
         row("              Cinder/deFEEST            ")
         row("                                        ")
         row("           music                        ")
-        row("              coded and sequenced       ")
-        row("              by Anus                   ")
-        row("              with help from Kloot AI   ")
+        row("              arranged and sequenced    ")
+        row("              by Anus with lots of help ")
+        row("              from Kloot and Augurk     ")
         row("                                        ")
         row("           graphics                     ")
-        row("              defeest.nl                ")
-        row("              pixeled with love         ")
+        row("              logo images and fonts     ")
+        row("              hand pixeled with love    ")
+        row("              by Anus                   ")
         row("                                        ")
         row("           tools                        ")
         row("              claude code               ")
@@ -1222,6 +1235,7 @@ credit_text:
         row("              spindle 3.1               ")
         row("              vice-mcp                  ")
         row("              multipaint                ")
+        row("              spritemate                ")
         row("                                        ")
         row("           documentation                ")
         row("              codebase.c64.org          ")
@@ -1240,18 +1254,22 @@ credit_text:
         row("              everyone keeping the      ")
         row("              breadbin singing          ")
         row("              kloot voor de fouten      ")
-        row("              en meer slechte ideeen    ")
+        // "ideeën" — manually assembled because screencode_mixed
+        // doesn't know ë. $1b is the custom ë glyph in the font.
+        .text "              en de slechte idee"
+        .byte $1b
+        .text "n      "
         row("                                        ")
         row("           and one last thought         ")
-        row("              the breadbin              ")
-        row("              has been waiting          ")
+        row("              the commodore 64          ")
+        row("              had been waiting          ")
         row("              for forty years           ")
         row("              kloot finally             ")
         row("              got me here               ")
         row("                                        ")
         row("              thank you for watching    ")
-        row("              from anus and kloot       ")
-        row("              see you at evoke")
+        row("              from Anus and Kloot       ")
+        row("              see you at Evoke")
         row("                                        ")
         row("                                        ")
         row("                                        ")
