@@ -578,7 +578,7 @@ See `parts/greets/greets_test.asm` for a working example.
 
 ---
 
-## Pending work (current as of 2026-05-21)
+## Pending work (current as of 2026-05-22)
 
 See [`docs/two-weeks-out.md`](./docs/two-weeks-out.md) for the full
 stocktake + recommended focus plan for the X2026 runup.
@@ -586,9 +586,7 @@ stocktake + recommended focus plan for the X2026 runup.
 - **Real-hardware verification — never done.** Two weeks out from
   X2026. VICE is generous; real PAL C64 can break on IRQ timing,
   `$D012` race conditions, DMA stretching. Highest-priority item.
-- ~~**Sinus** — *"weird"* per user feedback (2026-05-20), never
-  diagnosed in detail. Filter routing was fixed but the visual /
-  audio character still doesn't land. Most overdue named item.~~
+- ~~**Sinus** — dual-phase accusation→answer rewrite done (commit `cff79d1`).~~
 - **End-credits clean↔dark slow-sine modulation** — documented as
   future polish in [`docs/sound-arc.md`](./docs/sound-arc.md) under
   "End-credits darkening". Sketch implementation ready; not built.
@@ -597,8 +595,16 @@ stocktake + recommended focus plan for the X2026 runup.
 - **PAL CRT preview** — never seen the demo on anything but a
   flat-panel monitor.
 
-**What's DONE since the docs were last refreshed (2026-05-20 → 21):**
+**What's DONE since the docs were last refreshed (2026-05-20 → 22):**
 
+- **Sinus epic rewrite** (commit `cff79d1`) — dual-phase accusation→answer
+  text. Phase 1 (frames 0-119): accusation "they said ai destroys creativity /
+  killing joy and numbing our minds" in red tones (`$02`/`$0E` row palette),
+  full-amplitude wobble. Phase 2 (frames 120-249): answer "we found the
+  opposite / not a threat but a tool" in cyan (`$03`/`$0E`), halved wobble
+  amplitude, white border flash on swap. LP filter close $70→$08 across
+  duration. PRG fits within EFO `$08-$0D` claim ($0800-$0DC0). Lowercase
+  text via `VIC_MEM = $1A` + PETSCII `$41-$5A` codes.
 - **Coda parallax PETSCII starfield** (PR #31) — 32 stars across 4
   speed tiers, replacing the original static-asterisk twinkle.
 - **Coda Stage F ping-pong zoom breath** (PR #33) — both Kloot stars
@@ -612,23 +618,17 @@ stocktake + recommended focus plan for the X2026 runup.
 - **Greets epic-extended** (PR #32) — 15 s scroller stretched out with
   16-bit `scroll_pos`. (Post-PR-#32 the scroll is now smooth-pixel
   at 9 px/frame, scroll-driven settle on " KLOTEN ", and runs over
-  a multi-colour koala backdrop — see [the greets backdrop section
-  in greets.asm](parts/greets/greets.asm) for the bitmap-mode
-  config.)
-- **Greets DYCP wobble** — sine amplitudes ±3 (Y) and ±2 (X). Was
-  lower at one point for legibility but bumped back up alongside the
-  faster scroll where each name is on screen for less time anyway.
+  a multi-colour koala backdrop.)
+- **Greets DYCP wobble** — sine amplitudes ±3 (Y) and ±2 (X).
 - **Interlude breathing room + SPARKED border flash** (direct commit
   `8ed0777`) — `BEAT_PERIOD 20→24`, `BUILDUP_BEAT 4→6`,
   `TRANSITION_BEAT 10→16`, white-border flash on SPARKED landing.
 - **AGENTS.md gotcha additions + memory-layout refresh + tools
-  helpers** (PR #35) — `.align 256` page-claim collision, DYCP
-  blank-glyph trap, 8-bit `,Y` reach limit; `tools/where-am-i.sh`;
-  `tools/record_demo.py --part`.
+  helpers** (PR #35).
 - **`docs/two-weeks-out.md`** (PR #36) — stocktake + focus plan.
-- **Sinus rework as the breath** (commit 9d9f851) — story text fragments
-  replaced with hypnotic repeating DEFEEST field; woven grid + colour
-  banding; net −82 lines.
+- **Sinus vision doc** (commit `0926851`) — `docs/sinus-vision.md` naming
+  the gap with three effect directions (Option A/C recommended). Written by
+  Kloot/deFEEST; superseded by my accusation→answer rewrite.
 
 See [`docs/timing.md`](./docs/timing.md) for the current frame-by-frame
 event timeline.

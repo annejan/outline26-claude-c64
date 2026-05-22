@@ -341,13 +341,11 @@ pal_phase2:
         .byte $06, $06, $06, $06, $06
         .byte $0E
 
-// Wallpaper row: "deFEEST" in mixed case — d/e lowercase ($04, $05),
-// FEEST uppercase ($46, $45, $45, $53, $54). Matches the group's
-// own brand spelling instead of all-lowercase "defeest".
+// Wallpaper row: "deFEEST" — lowercase d/e, uppercase FEEST.
 defeest_row:
-        .byte $04, $05, $46, $45, $45, $53, $54
-        .byte $04, $05, $46, $45, $45, $53, $54
-        .byte $04, $05, $46, $45, $45, $53, $54
-        .byte $04, $05, $46, $45, $45, $53, $54
-        .byte $04, $05, $46, $45, $45, $53, $54
-        .byte $04, $05, $46, $45, $45
+        .byte $44, $45, $06, $05, $05, $13, $14
+        .byte $44, $45, $06, $05, $05, $13, $14
+        .byte $44, $45, $06, $05, $05, $13, $14
+        .byte $44, $45, $06, $05, $05, $13, $14
+        .byte $44, $45, $06, $05, $05, $13, $14
+        .byte $44, $45, $06, $05, $05
