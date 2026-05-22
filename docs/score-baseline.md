@@ -31,7 +31,7 @@ re-init SID for a slow 4× tempo pad reprise, no drums, lunch is over.
 | 4 | sinus | ~5 s | `$f6 == $30` (frame counter stall) | LP cutoff closes, drums silent, vol fades |
 | 5 | greets | ~50 s | `$f6 == $82` (scroll-driven KLOTEN snap) | climax: full mix + V2-filtered "wah" on lead, koala backdrop |
 | 6 | coda | ~32 s | `$f6 == $30` (32-s timer) | triumphant: full mix held, twin stars dance |
-| 7 | end | forever | (none — `stay`) | own player, 4× slower pad reprise + LP mood LFO |
+| 7 | end | forever | (none — `stay`) | own player, 4× slower pad reprise, all-voice LP w/ $20..$58 cutoff sweep |
 
 Total runtime: ~2:55 from boot to end-credits-loop. Music stays
 continuous through every part-to-part blank-filler load gap via
@@ -130,10 +130,9 @@ $F8 = $80 (gates V1/V2 freq writes on, V3 stays triangle)
 ```
 V1: pad ADSR $71/$fa (A=7 slow attack, S=15, R=10)
 V2: pad ADSR $51/$f9
-V3: ADSR $11/$f8 (fast attack arp), pulse 25% w/ PWM-hi walk $04..$0B
-$D417 = $06 (V2+V3 routed, V1 bass clean)   $D418 = $1F (LP on)
-cutoff sweep: amp × wave + offset = $60..$8A clean
-              $59..$83 dark (modulated by 20-s mood LFO)
+V3: ADSR $11/$98 (S=9 pulled down so arp sits under pad), pulse 25% w/ PWM-hi walk $04..$0B
+$D417 = $07 (V1+V2+V3 all routed through LP, no resonance)   $D418 = $1F (LP on)
+cutoff sweep: $20..$58 hi (90° phase, wave×8 + $20 offset, ~5.1s)
 END_STEP_FRAMES = 24 (4× slower than intro)
 ```
 
@@ -152,7 +151,7 @@ END_STEP_FRAMES = 24 (4× slower than intro)
 | Coda hold | 800 (half-rate) | 32 s | `N_FRAMES` in coda.asm |
 | End step | 24 | 480 ms | `END_STEP_FRAMES`, 4× slower |
 | End full progression | 768 | 15.36 s | once through Am-Em-F-G |
-| End mood LFO | ~5120 | ~20 s | clean ↔ dark breath |
+| End cutoff sweep | 256 | ~5.1 s | filter "breath" $20..$58 |
 
 ## Per-part audio config matrix
 
@@ -165,7 +164,7 @@ END_STEP_FRAMES = 24 (4× slower than intro)
 | sinus | $23 (V1+V2) | on | $70→$08 close | OFF | triangle | inherited |
 | greets | $42 (V2) | on | wobble_pos\|$40 (~$40..$FF wah) | on | triangle | ~$89 inherited |
 | coda | $26 (V2+V3, res 2) | on | sin_tab[zp_frame]+$60 (~$4b..$75, ~10 s LFO) | on (F6=$01) | triangle | $80 (deliberate) |
-| end | $06 (V2+V3, V1 clean) | on | mood-LFO $60..$8A baseline | OFF | pulse (PWM-hi $04..$0B) | own player |
+| end | $07 (V1+V2+V3 all routed) | on | $20..$58 sweep (90° from PWM) | OFF | pulse (PWM-hi $04..$0B) | own player |
 
 ## What's working well
 

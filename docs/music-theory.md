@@ -265,15 +265,15 @@ greets:    vol=$1F (LP mode), V2 filtered ($D417=$42, res $4),
 coda:      vol=$1F, LP mode on, $D417=$42 inherited (V2 still filtered),
            cutoff FROZEN at greets' last value (no wobble in coda)
 end:       vol ramps $00→$0F over 2 s, V1+V2+V3 all filtered ($D417=$07),
-           cutoff baseline $60 with mood-LFO breathing clean↔dark
+           cutoff sweeps $20..$58 hi over ~5.1 s
 ```
 
 The filter arc is the long-form emotional contour: dry (intro) →
 opens up with bass + lead (interlude build) → closes both (sinus
 breakdown) → wah on the lead (greets climax) → **frozen lead-wah +
 full drums + walking bass under the title (coda — the triumphant
-trophy)** → all-voice LP reprise with slow PWM and mood breath
-(end — back into the minor flow). Coda is the loudest moment by
+trophy)** → all-voice LP reprise with slow PWM and $20..$58 cutoff
+sweep (end — back into the minor flow). Coda is the loudest moment by
 design; end is the closing breath.
 
 **Target SID chip: 8580** — picked over 6581 because the 8580's

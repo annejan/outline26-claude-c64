@@ -30,7 +30,7 @@ overlays** on top of that continuous music.
 | sinus       | **Breakdown.** LP filter closes — and now actually closes audibly because V1 + V2 are routed through it ($D417 = $23, res $2). Cutoff ramps $70 → $08 over the duration; vol fades over the last 50 frames. Drums silent (sinus zeros `$F6 = zp_outro` — the gating byte). The eye of the storm before the drop. |
 | greets      | **Climax / drop.** Drums return (greets' setup re-arms `$F6`), full mix + lead + arp. V2 (lead) routed through LP filter ($D417 = $42, res $4) with a slow cutoff "wah" — `zp_wobble_pos` OR'd with $40 ramps $40..$FF over 5 s breathing the melody. DYCP scroller tells the personal arc on top of the loudest moment. |
 | coda        | **The trophy — triumphant.** Setup sets `$F6 = $01` so the K-S-K-S drum kit from intro's `my_music_play` keeps firing through the whole part (kick + snare alternating on V3, V1 bass-bleed sub-thump on every hit). Setup ALSO sets `$F8 = $80` to restore intro's `zp_intro` after interlude's `zp_plasma_tgl` clobber — high enough that V1 bass and V2 lead freq writes fire (T_BARS=120) but low enough that V3 ctrl is NOT re-gated to pulse every frame (T_SCROLLER=240), so V3 keeps the **mellow triangle arp timbre** that drum_tick left behind. `$D417 = $26` (V2+V3 routed through LP, res 2) — V1 bass-bleed kept clean because routing the sub-thump through LP + resonance caused audible filter-clap crunch per beat. `$D416` cutoff sweeps via `sin_tab[zp_frame] + $60` over ~10 s for a slow breathing motion under the held title. This is the LOUDEST moment of the demo — full mix held aloft for ~32 s while the twin Kloot stars dance behind the title. |
-| end         | `end_music_init` re-inits SID for slow chord/lead reprise: V2+V3 routed through LP filter ($D417=$06, V1 bass clean so it doesn't phase along with the mood LFO sweep), V1 walks bass_pattern at END_STEP_FRAMES=24 (4× slower than intro's 6), V2 plays lead_pattern at the same slow tempo, V3 arps within the current chord changing every 4 frames. Cutoff baseline $60 (raised from $30 for a brighter, more ethereal feel) with a slow mood LFO breathing between "clean" and "dark" filter sweeps. No drums. The credit-roll outro. |
+| end         | `end_music_init` re-inits SID for slow chord/lead reprise: all 3 voices routed through LP filter ($D417=$07, no resonance), V1 walks bass_pattern at END_STEP_FRAMES=24 (4× slower than intro's 6), V2 plays lead_pattern at the same slow tempo, V3 arps within the current chord changing every 4 frames. Cutoff sweeps $20..$58 hi via `wave_xscroll[zp_frame+$40]*8 + $20` (90° out of phase from V3 PWM) for a gentle ~5 s pad breath. V3 sustain pulled down to $9 (ADSR `$11/$98`) so the pulse arp sits under V1/V2's pad instead of on top. No drums. The credit-roll outro — sound matched bit-exact to revision b5f888c via live MCP capture (commits b0af3f0 + 87eb01f). |
 
 ## Why my_music_play is special
 
@@ -364,11 +364,15 @@ at 4× slower tempo (`END_STEP_FRAMES=24`). V1 walks `bass_pattern`
 with octave jumps every 3rd step, V2 plays `lead_pattern`, V3 arps
 through the current chord changing every 4 frames.
 
-Filter routing: `$D417 = $06` (V2+V3 through LP, V1 bass clean).
-Cutoff baseline $60 with a ~20 s mood LFO cycling the filter between
-clean (~$60) and dark (~$8A). V3 arp is pulse with PWM walking the
-high byte $04..$0B (25%..68% duty) per frame — a gentle phaser
-shimmer that gives the credit roll its nostalgic character. No drums.
+Filter routing: `$D417 = $07` (all 3 voices through LP, no resonance).
+Cutoff sweeps $20..$58 hi over ~5.1 s via
+`wave_xscroll[zp_frame+$40]*8 + $20` (90° out of phase from the V3 PWM
+walk). V3 arp is pulse with PWM walking the high byte $04..$0B
+(25%..68% duty) per frame — a gentle phaser shimmer that gives the
+credit roll its nostalgic character. V3 sustain pulled down ($D414 =
+`$98`, S=9) so the arp sits under V1/V2's triangle pad instead of on
+top — SID has no per-voice volume, so sustain is the only knob. No
+drums.
 
 ### V1 bass walks `bass_pattern`
 

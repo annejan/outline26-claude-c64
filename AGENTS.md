@@ -44,7 +44,7 @@ Seven parts loaded by Spindle's pefchain framework:
 | 4 | `parts/sinus/`       | Comedown: sine-wobble DEFEEST + colour cycling + LP filter close on V1+V2; drums silent | `$F6 = $30` (frame counter hits 250) |
 | 5 | `parts/greets/`      | Climax: smooth-pixel DYCP sprite-font scroller (~50 s, scroll-driven) over a multi-colour koala backdrop. Sprite-7 carousel for clean right-edge entry. Snap landing on " KLOTEN " (the demo title's first word). Drums returning, V2 LP "wah". | `$F6 = $82` (scroll-driven settle + 4 beats) |
 | 6 | `parts/coda/`        | "KLOTEN MET DE BROODTROMMEL / A DIGITAL LUNCH EXPERIENCE / RELEASED AT X2026", twin brown+cyan Kloot stars (Stage F ping-pong zoom breath) on wide sine orbits, alternating priority + in/out of title plane, 32-star 4-tier parallax PETSCII starfield, **triumphant full K-S-K-S kit + V1 bass-bleed sub-thump** (setup sets `$F6 = $01` so intro's drums fire through the held title) | `$F6 = $30` |
-| 7 | `parts/end/`         | Credit roll, side bars, slow chord/lead reprise (PWM + LP filter sweep, "dark phaser" mood since PR #31) | `stay` (loops) |
+| 7 | `parts/end/`         | Credit roll, side bars, slow chord/lead reprise (V1/V2 triangle pad, V3 pulse w/ PWM-hi shimmer pulled under via sustain $9, all-voice LP $20..$58 cutoff sweep) | `stay` (loops) |
 
 Read `README.md` for full per-part descriptions. The
 `pefchain_script` file at repo root is the master sequencer.
