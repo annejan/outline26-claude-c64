@@ -790,21 +790,64 @@ interrupt:
         // --- SID: slow chord/melody progression (volume + voices) ---
         jsr end_music_play
 
-        // --- Text wave: $D016 xscroll wobble ---
-        // CSEL=0 (38-col), xscroll 0..7 from a sine table.
-        lda zp_frame
-        lsr                     // slower wave (every 2 frames)
-        tax
-        lda wave_xscroll,x
-        and #$07                // only xscroll bits
-        sta VIC_CTRL2
-
         // --- Wrap action: shift screen up + pull next credit line ---
+        // Do this BEFORE the per-line $D016 loop so the credit-roll
+        // memmove finishes during the upper border (lines $00..~$33)
+        // rather than eating raster time in the visible area.
         lda zp_wrap_pending
         beq !skip_wrap+
         jsr scroll_rows_up
         jsr push_next_credit_row
+
+        // On wrap frames scroll_rows_up consumed the entire visible
+        // area (it finishes around line $D5). Skip the cycle-exact
+        // ripple loop — there's no raster budget left for it. Write
+        // a single $D016 value matching what the top of a non-wrap
+        // frame would show, so the wrap frame visually matches its
+        // neighbours instead of staying stuck at the previous frame's
+        // last per-line value.
+        ldy zp_frame
+        lda wave_xscroll,y
+        sta VIC_CTRL2
+        jmp !ripple_done+
 !skip_wrap:
+
+        // --- Cycle-exact per-scanline $D016 wave ---
+        // Demoscene-standard fixed-cycle raster loop: each iteration
+        // takes EXACTLY 63 cycles = 1 PAL scanline, so the loop
+        // self-syncs to the raster with no polling drift, no badline
+        // mis-counting, no yscroll-tick artifacts. Body: 16 cy work
+        // + 44 cy NOP pad + 3 cy jmp = 63 cy. The sta $D016 happens
+        // at cycle 4-7 of each line, before VIC's cycle-12 badline
+        // steal window, so the write always lands cleanly.
+        //
+        // Entry sync: wait for raster $32, then 1 line worth of NOPs
+        // to enter the loop near the start of line $33. There's some
+        // residual jitter (up to ~3 cy from the wait loop's polling
+        // granularity) which shows as up to 1 pixel of horizontal
+        // offset on the very first scanline — negligible.
+        lda #$32
+!w_top:
+        cmp $d012
+        bne !w_top-
+        // bne not taken: A == $D012 == $32. Raster just hit $32.
+        // Pad to end of line $32 (63 cy minus the 6 cy we spent in
+        // the last wait iter). 57 cy ≈ 28 NOPs + 1 cy slack.
+        ldx #0                    // 2 cy  (X will be the line counter)
+        ldy zp_frame              // 3 cy
+        // 50 cy of NOPs to absorb to ~end of line $32
+        .fill 25, $ea
+!ripple:
+        lda wave_xscroll, y       // 4 cy  (cycles 0-3)
+        sta VIC_CTRL2             // 4 cy  (cycles 4-7)
+        iny                       // 2 cy  (cycles 8-9)
+        inx                       // 2 cy  (cycles 10-11)
+        cpx #192                  // 2 cy  (cycles 12-13)
+        beq !ripple_done+         // 2 cy not taken (cycles 14-15)
+        // 16 cy used. Fill to 63 cy total — 44 cy of NOPs + 3 cy jmp.
+        .fill 22, $ea             // 22 NOPs = 44 cy
+        jmp !ripple-              // 3 cy
+!ripple_done:
 
         // Re-arm raster IRQ for line $00 of next frame (we are the only IRQ).
         lda #$00
@@ -950,9 +993,10 @@ end_music_init:
         sta $d411                 // pulse hi (~25%)
         lda #$11                  // attack=1, decay=1
         sta $d413
-        lda #$98                  // sustain=9, release=8 — pulled down
-        sta $d414                 // from $f8 so the arp sits under
-                                  // V1/V2 pad instead of on top.
+        lda #$68                  // sustain=6, release=8 — pulled down
+        sta $d414                 // further from $98 so the arp sits
+                                  // softly under V1/V2 instead of
+                                  // competing with the pad.
 
         // Filter: all 3 voices routed, low resonance — matches the
         // b5f888c "awesome" outro that MCP-measured live at $D417=$07.
