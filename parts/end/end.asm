@@ -44,6 +44,7 @@
 .const zp_tmp      = $fa
 .const zp_fade     = $fb         // fade-in counter, 0..FADE_DONE, ticks each frame; drives SID volume + text reveal
 .const zp_wrap_pending = $fc     // set non-zero in irq_top when yscroll wraps; consumed later to fire scroll_rows_up
+.const zp_ptr      = $fd         // 16-bit zero-page pointer ($FD/$FE) used by the flowing colour-RAM rotation
 
 .const N_CREDIT_ROWS = 71        // KEEP IN SYNC with the .text blocks below
 .const FADE_DONE     = 99        // fade-in completes after 99 frames (~2 sec @50Hz)
@@ -791,9 +792,6 @@ interrupt:
         jsr end_music_play
 
         // --- Text wave: $D016 xscroll wobble (single write per frame) ---
-        // Clean baseline: one $D016 per frame, no per-scanline loop.
-        // Each frame the whole text block shifts horizontally by 0..7
-        // pixels from a slow sine. CSEL=1 (40-col) preserved.
         ldy zp_frame
         lda wave_xscroll,y
         ora #$08
@@ -804,7 +802,38 @@ interrupt:
         beq !skip_wrap+
         jsr scroll_rows_up
         jsr push_next_credit_row
+        // Skip the colour-RAM rotation on wrap frames — no budget
+        // after scroll_rows_up.
+        jmp !rasterbars_done+
 !skip_wrap:
+
+        // --- Per-frame colour-RAM rotation: rasterbars on letters ---
+        // Repaint all 24 rows of colour RAM each frame with a colour
+        // from flowing_gradient indexed by (row + zp_frame). Each row
+        // gets a different colour and the whole pattern advances by
+        // 1 phase step per frame, so the text reads as a rainbow
+        // cascade flowing through the credits. ~10K cycles — fits on
+        // non-wrap frames.
+        lda zp_fade
+        cmp #TEXT_REVEAL
+        bcs !do_rasterbars+
+        jmp !rasterbars_done+
+!do_rasterbars:
+
+        ldx zp_frame              // phase
+        .for (var r = 0; r < 24; r++) {
+                txa
+                clc
+                adc #r
+                and #$1f
+                tay
+                lda flowing_gradient,y
+                ldy #39
+        !fl:    sta COLRAM + r*40, y
+                dey
+                bpl !fl-
+        }
+!rasterbars_done:
 
         // Re-arm raster IRQ for line $00 of next frame (we are the only IRQ).
         lda #$00
@@ -1138,6 +1167,31 @@ row_colour:
         .byte $0d, $0d, $0d        // rows 18-20: light green
         .byte $03, $03, $03        // rows 21-23: cyan
         .byte $0e                  // row  24:    light blue (header-flash falls back to this)
+
+// bar_palette — 256-entry colour table for the per-raster-line
+// $D021 background bars. Cycles through deep dark hues so the
+// text gradient stays the focal point and the bars read as
+// "current of colour behind the text". Each colour repeats 8x so
+// each band is ~8 scanlines tall (= one character row), giving
+// distinct horizontal stripes rather than per-pixel speckle.
+//
+// Palette path: black → very-dark-blue → blue → dark-grey →
+// blue → very-dark-blue → black (loop). 32 bands × 8 entries = 256.
+// flowing_gradient — 32-entry cool palette indexed by (row + zp_frame).
+// One full traversal = 32 phase steps. With 24 rows visible, at any
+// moment the screen shows 24/32 of the gradient, and the entire
+// rainbow advances 1 step per frame (= ~1.5 s per full sweep through
+// the visible rows). Adjacent rows differ by 1 colour step.
+.align 32
+flowing_gradient:
+        .byte $0e, $0e, $0e, $0e   // light blue
+        .byte $03, $03, $03, $03   // cyan
+        .byte $0d, $0d, $0d, $0d   // light green
+        .byte $07, $07, $07, $07   // yellow
+        .byte $01, $01, $01, $01   // white (peak)
+        .byte $0a, $0a, $0a, $0a   // light red
+        .byte $02, $02, $02, $02   // red
+        .byte $06, $06, $06, $06   // blue
 
 //==================================================================
 // is_header — flag per credit_text row: 1 if the row is a title or
