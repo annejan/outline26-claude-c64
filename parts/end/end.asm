@@ -797,16 +797,8 @@ interrupt:
         ora #$08
         sta VIC_CTRL2
 
-        // --- Border glow: cycles through a dim moody gradient so the
-        // side borders (38-col mode) pulse with the text instead of
-        // sitting dead black. Same phase as the text gradient but at
-        // half speed and darker hues so it never overpowers.
-        lda zp_frame
-        lsr                     // half speed
-        and #$0f
-        tay
-        lda border_glow,y
-        sta VIC_BORDER
+        // (Border stays dead-black — the end-credits should breathe
+        // quietly. The glow that lived here was relocated to coda.)
 
         // --- Wrap action: shift screen up + pull next credit line ---
         lda zp_wrap_pending
@@ -1204,16 +1196,6 @@ flowing_gradient:
         .byte $02, $02, $02, $02   // red
         .byte $06, $06, $06, $06   // blue
 
-// border_glow — 16-entry dim cycle for the side border ($D020).
-// Dark blues and purples so the text gradient stays centre stage.
-// Steps every 2 frames (lsr'd from zp_frame above), so a full
-// cycle takes 32 frames ≈ 0.6 s.
-.align 16
-border_glow:
-        .byte $00, $06, $0e, $06   // black → blue → l.blue → blue
-        .byte $0b, $00, $0b, $0c   // d.grey → black → d.grey → cyan
-        .byte $0c, $0b, $00, $0b   // cyan → d.grey → black → d.grey
-        .byte $06, $0e, $06, $00   // blue → l.blue → blue → black
 
 //==================================================================
 // is_header — flag per credit_text row: 1 if the row is a title or
@@ -1224,8 +1206,8 @@ is_header:
         .byte 0,0,0         //  0..2  blank
         .byte 1             //  3     you were watching
         .byte 0             //  4     blank
-        .byte 1             //  5     Kloten met de
-        .byte 0             //  6     Broodtrommel
+        .byte 1             //  5     Kloten met de Commodore
+        .byte 0             //  6     learn explore discover
         .byte 0             //  7     blank
         .byte 0             //  8     by deFEEST
         .byte 0             //  9     for X2026
@@ -1277,8 +1259,8 @@ credit_text:
         row("                                        ")
         row("              you were watching         ")
         row("                                        ")
-        row("           Kloten met de                ")
-        row("              Broodtrommel              ")
+        row("         Kloten met de Commodore        ")
+        row("          learn explore discover        ")
         row("                                        ")
         row("              by deFEEST                ")
         row("               for X2026                ")

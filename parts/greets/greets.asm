@@ -17,7 +17,8 @@
 // the moment scroll_pos hits the punchline). Settle phase holds the
 // screen on " KLOTEN " for ~1.9 s — sprites stop bobbing, scroll
 // freezes, colour cycle keeps shimmering as the calm landing into
-// the coda's "KLOTEN MET DE BROODTROMMEL" title.
+// the coda's "EXPLORING THE COMMODORE 64" title (where KLOTEN is the
+// AI character handle inside deFEEST, not the demo title anymore).
 //==================================================================
 
 .const VIC_CTRL1   = $d011
@@ -860,7 +861,9 @@ message:
 // for any reason, the visible window stays clean. " KLOTEN " is
 // centred symmetrically in the 8-sprite row (1 leading + 6-char
 // name + 1 trailing) and ties this punchline to the demo's coda
-// title "KLOTEN MET DE BROODTROMMEL".
+// title "KLOTEN MET DE COMMODORE" — the breadbin/lunch refs got
+// dropped; the demo is about learning, exploring, discovering the
+// machine instead of about lunch.
 settle_text:
 .text " KLOTEN                                    "
 .byte $00

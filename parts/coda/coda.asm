@@ -8,8 +8,8 @@
 // for ~10 seconds while the resident chord progression drifts on.
 //
 // Visuals:
-//   row 11  KLOTEN MET DE BROODTROMMEL      (chargen ROM uppercase)
-//   row 13  A DIGITAL LUNCH EXPERIENCE
+//   row 11   KLOTEN MET DE COMMODORE        (chargen ROM uppercase)
+//   row 13   LEARN EXPLORE DISCOVER
 //   border  slow sine colour cycle through col_tab
 //   bg      stays black
 //   parallax PETSCII starfield: 32 stars across 4 speed tiers, each
@@ -96,7 +96,7 @@
 // coda → end transition — acceptable for a 96×84 star.
 //
 // Composition: the quad is horizontally centred on screen (col 160) so
-// the title text "KLOTEN MET DE BROODTROMMEL" (which spans cols 56-264)
+// the title text "KLOTEN MET DE COMMODORE" (which spans cols 56-264)
 // runs through the middle of the star. $D01B alternates between $FF
 // (sprites behind title) and $00 (sprites in front) every ~1.3 s,
 // so the stars appear to orbit through the text plane in 3D.
@@ -513,8 +513,8 @@ setup:
 
         // ---- paint the title text ----
         // Row 11 starts at $0400 + 11*40 = $05B8.
-        // "KLOTEN MET DE BROODTROMMEL" = 26 chars, center at col 7.
-        // Row 13 ($0608): "A DIGITAL LUNCH EXPERIENCE" = 26 chars, col 7.
+        // " KLOTEN MET DE COMMODORE  " = 26 chars, center at col 7.
+        // Row 13 ($0608): "  LEARN EXPLORE DISCOVER  " = 26 chars, col 7.
         ldx #0
 !t1:    lda title_main,x
         sta $05B8 + 7,x
@@ -1151,29 +1151,36 @@ star_init_col:
 
 //==================================================================
 // title text — uppercase chargen at $1000, screencodes $01..$1A
-// for A..Z, $20 for space.
+// for A..Z, $20 for space, digits $30-$39.
 //
-// "KLOTEN MET DE BROODTROMMEL"  (26 chars)
+// " KLOTEN MET DE COMMODORE  "  (23 chars + lead/trail pad = 26)
+//   _=20
 //   K=0B L=0C O=0F T=14 E=05 N=0E _=20
 //   M=0D E=05 T=14 _=20
 //   D=04 E=05 _=20
-//   B=02 R=12 O=0F O=0F D=04 T=14 R=12 O=0F M=0D M=0D E=05 L=0C
+//   C=03 O=0F M=0D M=0D O=0F D=04 O=0F R=12 E=05
+//   _=20 _=20
 //==================================================================
 title_main:
-        .byte $0B, $0C, $0F, $14, $05, $0E, $20    // KLOTEN_
-        .byte $0D, $05, $14, $20                    // MET_
-        .byte $04, $05, $20                         // DE_
-        .byte $02, $12, $0F, $0F, $04, $14, $12, $0F, $0D, $0D, $05, $0C  // BROODTROMMEL
+        .byte $20                                                  // _
+        .byte $0B, $0C, $0F, $14, $05, $0E, $20                    // KLOTEN_
+        .byte $0D, $05, $14, $20                                    // MET_
+        .byte $04, $05, $20                                         // DE_
+        .byte $03, $0F, $0D, $0D, $0F, $04, $0F, $12, $05           // COMMODORE
+        .byte $20, $20                                              // __
 
-// "A DIGITAL LUNCH EXPERIENCE"  (26 chars)
-//   A=01 _=20  D=04 I=09 G=07 I=09 T=14 A=01 L=0C _=20
-//   L=0C U=15 N=0E C=03 H=08 _=20
-//   E=05 X=18 P=10 E=05 R=12 I=09 E=05 N=0E C=03 E=05
+// "  LEARN EXPLORE DISCOVER  "  (22 chars + lead/trail pad = 26)
+//   _=20 _=20
+//   L=0C E=05 A=01 R=12 N=0E _=20
+//   E=05 X=18 P=10 L=0C O=0F R=12 E=05 _=20
+//   D=04 I=09 S=13 C=03 O=0F V=16 E=05 R=12
+//   _=20 _=20
 title_sub:
-        .byte $01, $20                                          // A_
-        .byte $04, $09, $07, $09, $14, $01, $0C, $20            // DIGITAL_
-        .byte $0C, $15, $0E, $03, $08, $20                     // LUNCH_
-        .byte $05, $18, $10, $05, $12, $09, $05, $0E, $03, $05  // EXPERIENCE
+        .byte $20, $20                                              // __
+        .byte $0C, $05, $01, $12, $0E, $20                          // LEARN_
+        .byte $05, $18, $10, $0C, $0F, $12, $05, $20                // EXPLORE_
+        .byte $04, $09, $13, $03, $0F, $16, $05, $12                // DISCOVER
+        .byte $20, $20                                              // __
 
 // " RELEASED AT X2026  "  (20 chars; col 10..29 of row 15)
 //   _=20
