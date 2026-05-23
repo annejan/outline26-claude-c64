@@ -142,7 +142,7 @@ trigger. The end card is the only "stay" loop.
 - Inherits intro's music pages (`'I', $10, $12` in the EFO header) so
   pefchain doesn't overwrite the resident tables.
 
-### Part 4 — `parts/sinus/sinus.asm` (breather)
+### Part 4 — `parts/hush/hush.asm` (breather)
 
 - **Char-mode sine wobble** — per-scanline `$D016` fine-scroll write from a
   256-entry sine table (range 0–7 px, OR'd with `$08` to preserve CSEL).
@@ -323,7 +323,7 @@ at `setup` / `interrupt` / `fadeout` routines plus memory-page tags.
 parts/screenfill/screenfill.pef     06 = 00
 parts/intro/intro.pef               f6 = f0
 parts/interlude/interlude.pef       f6 = 10
-parts/sinus/sinus.pef               f6 = 30
+parts/hush/hush.pef                 f6 = 30
 parts/greets/greets.pef             f6 = 82
 parts/coda/coda.pef                 f6 = 30
 parts/end/end.pef                   stay

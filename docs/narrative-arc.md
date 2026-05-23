@@ -15,7 +15,7 @@ That's the whole thing. Seven parts carry it.
 [01] screenfill   the disk loads          — DEFEEST bloom
 [02] intro       the cracktro arrives    — deFEEST presents…
 [03] interlude   the confession           — FOR YEARS NO TIME / SPARKED
-[04] sinus       the manifesto             — accusation → answer, dual-phase
+[04] hush        the manifesto             — accusation → answer, dual-phase
 [05] greets      the party                  — lunchbased lifeforms, shoutouts
 [06] coda        the trophy                  — KLOTEN MET DE BROODTROMMEL
 [07] end         the bow                    — credits roll, lunch is over
