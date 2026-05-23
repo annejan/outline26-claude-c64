@@ -55,7 +55,7 @@ build_part parts/screenfill screenfill
 build_part parts/intro      intro
 build_part parts/interlude  interlude
 build_part parts/greets     greets
-build_part parts/sinus      sinus
+build_part parts/hush       hush
 # Coda's Kloot star quad — Stage B: 4 separate sprite-shape binaries pinned
 # at $0C00 / $1400 / $1800 / $1C00 so the KA PRG stays compact at $0800-$0AFF
 # and pefchain can stream each chunk into RAM independently.

@@ -1,5 +1,5 @@
 //==================================================================
-// outline-64 — Sinus: the breath.
+// outline-64 — Hush: the breath.
 //
 // Dual-phase emotional heart of the demo. Phase 1 (frames 0-119):
 // accusation text in red tones, harsh wobble. Phase 2 (frames

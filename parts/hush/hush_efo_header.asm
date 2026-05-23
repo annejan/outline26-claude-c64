@@ -1,8 +1,8 @@
 //==================================================================
-// EFO2 header for sinus.pef.
+// EFO2 header for hush.pef.
 //==================================================================
 
-.import source "sinus.sym"
+.import source "hush.sym"
 
 .pc = $0000 "EfoHeader"
         .text "EFO2"
