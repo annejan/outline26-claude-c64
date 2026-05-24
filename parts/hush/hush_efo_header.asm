@@ -14,15 +14,9 @@
         .word $0000              // cleanup
         .word musichook          // callmusic — see interlude EFO header
 
-        // Code + tables span $0800-$0DFF (6 pages):
-        //   code + setup    @ $0800-$09xx
-        //   sine_tab        @ $0A00 (.align 256)
-        //   col_tab         @ $0B00 (.align 256)
-        //   bg_tab          @ $0C00 (.align 256)
-        //   narrative text  @ $0Cxx (story fragments, ~100 bytes)
-        //   stripe palette  @ $0Dxx (col-RAM address tables + row colours)
-        //   driver          @ $0Dxx (Spindle-appended)
-        .byte 'P', $08, $0E
+        // Code + tables span $0800-$0Bxx (~4 pages). Hires text mode,
+        // no custom charset — VIC reads chargen ROM set B at $1800.
+        .byte 'P', $08, $0B
         // Inherit intro's music tables
         .byte 'I', $10, $12
         // Zero-page: $f6-timer/transition, $f7-tmp, $fb-line, $fc-frame.

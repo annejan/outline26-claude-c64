@@ -1,10 +1,20 @@
 //==================================================================
-// outline-64 — Hush: the breath.
+// outline-64 — Hush: color-RAM fire (sauhir / mikkoparviainen style).
 //
-// Dual-phase emotional heart of the demo. Phase 1 (frames 0-119):
-// accusation text in red tones, harsh wobble. Phase 2 (frames
-// 120-249): answer text in cyan, gentle wobble. LP filter close,
-// volume fade, then $f6 = $30 triggers greets.
+// Standard hires text mode. Every fire cell shows char $A0 (the
+// inverse-space solid block) and the cell's COLOUR is the heat
+// level — propagated by indexing through a fire palette chain via
+// sbctab. Result: full-cell solid colour blocks with a smooth
+// white→yellow→orange→red→brown→black gradient. No 4×4 multicolour
+// dither, no half-cell boundaries, no custom charset.
+//
+// Palette chain (decrement order, hottest → coldest):
+//   $01 white → $07 yellow → $08 orange → $0A lt red →
+//   $02 red   → $09 brown  → $0B dk grey → $00 black
+//
+// Manifesto text rides in standard chargen ROM glyphs at rows 10-11
+// (and the phase 2 swap still works) — multicolour mode is off, so
+// text just renders with whatever colour is in colour RAM.
 //==================================================================
 
 .const VIC_CTRL1  = $d011
@@ -26,114 +36,72 @@
 .const N_FRAMES   = 250
 .const FADE_START = 200
 .const SWAP_FRAME = 120
-.const MSG_TOP    = 10
-.const MSG_ROWS   = 2
+.const MSG_TOP    = 10            // 3-row banner spans rows 10-12
+.const MSG_ROWS   = 3             // top band + text + bottom band
+.const FIRE_TOP   = 0             // fire fills the whole screen
+.const FIRE_BOT   = 24
 .const INTRO_MUSIC_PLAY = $119e
+
 .const zp_timer  = $f6
+.const zp_frame  = $f7
 .const zp_line   = $f8
 .const zp_dst_lo = $f9
 .const zp_dst_hi = $fa
-.const zp_frame  = $fc
-.const zp_ptr    = $fd
-.const zp_col_lo = $fb
-.const zp_col_hi = $fc
+.const zp_ptr    = $fb            // 2-byte ptr at $fb/$fc
 
-* = $0800 "Sinus"
+* = $0800 "Hush"
 
 setup:
+        sei
+        lda #$01
+        sta zp_timer              // drum gate ON (non-$30, non-$00) →
+                                  // K-S-K-S kit keeps hammering through
+                                  // hush instead of the silent breakdown
         lda #0
-        sta zp_timer
         sta zp_frame
         sta swap_flag
         sta VIC_SPR_EN
 
-        // Screen fill: rows 0-24
-        lda #<SCREEN
-        sta zp_dst_lo
-        lda #>SCREEN
-        sta zp_dst_hi
+        // ---- Screen RAM: $A0 (solid block) everywhere, manifesto
+        // text overlaid on rows 10-11 ----
         ldx #0
-!row:
-        stx zp_line
-        cpx #MSG_TOP
-        bcc !src_def+
-        cpx #(MSG_TOP + MSG_ROWS)
-        bcs !src_def+
-        cpx #MSG_TOP
-        bne !msg1+
-        lda #<msg_phase1
-        sta zp_ptr
-        lda #>msg_phase1
-        sta zp_ptr + 1
-        jmp !fill+
-!msg1:
-        lda #<(msg_phase1 + 40)
-        sta zp_ptr
-        lda #>(msg_phase1 + 40)
-        sta zp_ptr + 1
-        jmp !fill+
-!src_def:
-        lda #<defeest_row
-        sta zp_ptr
-        lda #>defeest_row
-        sta zp_ptr + 1
-        cpx #(MSG_TOP + MSG_ROWS)
-        bne !fill+
-        lda #$20
-        ldy #0
-!bl:    sta (zp_dst_lo),y
-        iny
-        cpy #40
-        bne !bl-
-        jmp !next+
-!fill:
-        ldy #0
-!cp:    lda (zp_ptr),y
-        sta (zp_dst_lo),y
-        iny
-        cpy #40
-        bne !cp-
-!next:
-        lda zp_dst_lo
-        clc
-        adc #40
-        sta zp_dst_lo
-        bcc !+
-        inc zp_dst_hi
-!:
-        ldx zp_line
+        lda #$a0
+!fa:    sta SCREEN + $000,x
+        sta SCREEN + $100,x
+        sta SCREEN + $200,x
+        sta SCREEN + $300,x
         inx
-        cpx #25
-        bne !row-
+        bne !fa-
 
-        // Colour RAM fill
-        lda #<COL_RAM
-        sta zp_col_lo
-        lda #>COL_RAM
-        sta zp_col_hi
         ldx #0
-!crow:
-        stx zp_line
-        lda pal_phase1,x
-        ldy #39
-!cc:    sta (zp_col_lo),y
-        dey
-        bpl !cc-
-        lda zp_col_lo
-        clc
-        adc #40
-        sta zp_col_lo
-        bcc !+
-        inc zp_col_hi
-!:
-        ldx zp_line
+!fb:    lda msg_phase1,x
+        sta SCREEN + MSG_TOP * 40,x
         inx
-        cpx #25
-        bne !crow-
+        cpx #(MSG_ROWS * 40)
+        bne !fb-
 
-        lda #0
-        sta zp_frame
+        // ---- Colour RAM: all $00 (black = cold) initially ----
+        ldx #0
+        lda #$00
+!cf:    sta COL_RAM + $000,x
+        sta COL_RAM + $100,x
+        sta COL_RAM + $200,x
+        sta COL_RAM + $300,x
+        inx
+        bne !cf-
 
+        // Manifesto rows: cool blue against the warm fire palette.
+        // Phase 1 (accusation) = $06 dark blue. Inverted glyphs render
+        // as blue rectangles with the text cut out — readable from
+        // anywhere on the screen even through the flames.
+        ldx #0
+        lda #$06
+!ct:    sta COL_RAM + MSG_TOP * 40,x
+        inx
+        cpx #(MSG_ROWS * 40)
+        bne !ct-
+
+        // ---- SID + filter init ----
         lda #$1f
         sta SID_VOL
         lda #$23
@@ -143,41 +111,23 @@ setup:
         lda #$00
         sta SID_FILT_CUT_LO
 
-        lda #$18
+        // ---- VIC config ----
+        lda #$1b                  // DEN + 25 rows, yscroll 3 (standard text)
         sta VIC_CTRL1
-        lda #$16                   // screen $0400 + chargen $1800
-        sta VIC_MEM                // = lowercase ROM (mixed-case set).
-                                   // Was $1A which pointed CB to RAM
-                                   // $2800 where intro's logo bitmap
-                                   // lives → text rendered as garbage.
-                                   // $16 = CB 011 = ROM $1800, glyphs
-                                   // $01-$1A=a-z, $41-$5A=A-Z, $20=sp.
-        lda #$08
+        lda #$16                  // screen $0400 + chargen ROM set B
+        sta VIC_MEM
+        lda #$08                  // hires text mode, 40-col (no MC!)
         sta VIC_CTRL2
         lda #$00
-        sta VIC_BORDER
         sta VIC_BG
+        sta VIC_BORDER
 
-        // Map col_tab + bg_tab through fire_pal so the raster bar loop
-        // gets fire colours without paying a lookup cycle per scanline.
-        ldx #0
-!map_c:
-        lda col_tab,x
-        tay
-        lda fire_pal,y
-        sta col_tab,x
-        inx
-        cpx #200
-        bne !map_c-
-        ldx #0
-!map_b:
-        lda bg_tab,x
-        tay
-        lda fire_pal,y
-        sta bg_tab,x
-        inx
-        cpx #200
-        bne !map_b-
+        // Init SID noise generator for random seeding
+        lda #$ff
+        sta $d40e                 // V3 freq lo
+        sta $d40f                 // V3 freq hi
+        lda #$80
+        sta $d412                 // V3 noise waveform, gate off
 
         lda VIC_CTRL1
         and #%01111111
@@ -186,6 +136,8 @@ setup:
         sta VIC_RASTER
         lda #$01
         sta VIC_IRQEN
+
+        cli
         rts
 
 fadeout:
@@ -194,7 +146,7 @@ fadeout:
 
 interrupt:
 musichook:
-        .byte $2c, $00, $00
+        .byte $2c, $00, $00       // → JSR INTRO_MUSIC_PLAY (pefchain patch)
         lda #$1f
         sta SID_VOL
         inc zp_frame
@@ -204,14 +156,10 @@ musichook:
         bcc !run+
         lda #$30
         sta zp_timer
-        lda #$00
-        sta VIC_BORDER
-        sta VIC_BG
-        lda #$08
-        sta VIC_CTRL2
         jmp !ack+
 
 !run:
+        // ---- Phase 2 swap at frame 120 ----
         lda zp_frame
         cmp #SWAP_FRAME
         bne !no_swap+
@@ -219,59 +167,26 @@ musichook:
         bne !no_swap+
         inc swap_flag
         lda #$01
-        sta VIC_BORDER
+        sta VIC_BORDER            // 1-frame white border flash
         ldx #0
 !copy:  lda msg_phase2,x
         sta SCREEN + MSG_TOP * 40,x
         inx
         cpx #(MSG_ROWS * 40)
         bne !copy-
-        lda pal_phase2 + MSG_TOP + 0
-        ldy #39
-!:      sta COL_RAM + (MSG_TOP + 0) * 40,y
-        dey
-        bpl !-
-        lda pal_phase2 + MSG_TOP + 1
-        ldy #39
-!:      sta COL_RAM + (MSG_TOP + 1) * 40,y
-        dey
-        bpl !-
-        lda #$00
-        ldy #39
-!:      sta COL_RAM + (MSG_TOP + MSG_ROWS) * 40,y
-        dey
-        bpl !-
-        jmp !wobble_done+
+        // Phase 2 colour: $0E light blue (hope / opposite)
+        ldx #0
+        lda #$0e
+!c2:    sta COL_RAM + MSG_TOP * 40,x
+        inx
+        cpx #(MSG_ROWS * 40)
+        bne !c2-
 
 !no_swap:
-        ldy zp_frame
-        lda swap_flag
-        beq !full+
-        lda sine_tab,y
-        lsr
-        sta zp_ptr
-        lda sine_tab + 64,y
-        lsr
-        tax
-        lda zp_ptr
-        jmp !apply+
-!full:
-        lda sine_tab,y
-        ldx sine_tab + 64,y
-!apply:
-        ora #$08
-        sta VIC_CTRL2
-        txa
-        ora #$18
-        sta VIC_CTRL1
-
-        ldy zp_frame
-        lda col_tab,y
+        lda #$00
         sta VIC_BORDER
-        lda bg_tab,y
-        sta VIC_BG
 
-!wobble_done:
+        // ---- LP filter cutoff close: $70 → $08 over 250 frames ----
         lda zp_frame
         eor #$ff
         lsr
@@ -280,64 +195,122 @@ musichook:
         adc #$08
         sta SID_FILT_CUT_HI
 
+        // ---- Volume fade from frame 200 ----
         lda zp_frame
         cmp #FADE_START
-        bcc !raster_bars+
+        bcs !do_fade+
+        jmp !propagate+
+!do_fade:
         sec
         sbc #FADE_START
         lsr
-        sta zp_ptr
+        sta zp_dst_lo
         lda #$0f
         sec
-        sbc zp_ptr
+        sbc zp_dst_lo
         bpl !vol+
         lda #0
 !vol:   ora #$10
         sta SID_VOL
 
-!raster_bars:
-        // Skip bars on the swap frame so the 1-frame white border
-        // flash stays visible across the full frame (otherwise the
-        // bar loop overwrites $D020 immediately).
+!propagate:
+        // ---- Heat propagation: row alternation per frame ----
+        // Frame parity selects which rows update: even frames process
+        // rows 0,2,4..22; odd frames 1,3,5..23. Halves per-frame
+        // propagation cost to ~11000 cy so music_play ticks at a
+        // clean 50 Hz (no more drift during hush). Each row updates
+        // every 2 frames = 25 fps effective fire animation.
+        // The seed below STILL runs every frame so the wave drift
+        // and source flicker stay at 50 Hz.
+        // Msg rows (MSG_TOP, MSG_TOP+1) are SKIPPED so the locked
+        // text colour stays uncorrupted by the propagating fire.
         lda zp_frame
-        cmp #SWAP_FRAME
-        beq !ack+
+        and #$01
+        tax                        // X = starting row (0 even / 1 odd)
+!prow:
+        // Skip the 3 banner rows (MSG_TOP..MSG_TOP+MSG_ROWS-1 = 10-12).
+        // Row 9 (MSG_TOP-1) sources from row 13 (MSG_TOP+MSG_ROWS),
+        // skipping over the banner so fire keeps climbing past it.
+        cpx #MSG_TOP
+        beq !next_row+
+        cpx #(MSG_TOP + 1)
+        beq !next_row+
+        cpx #(MSG_TOP + 2)
+        beq !next_row+
 
-        // Open-bar raster colour sweep over the 200 visible scanlines.
-        // $D020 + $D021 per scanline, indexed by Y = (zp_frame +
-        // line_count) mod 200 so the pattern flows downward as frames
-        // advance. No $D016 write (the per-frame sine wobble handles
-        // horizontal scroll). Synced via $D012 polling between lines.
-        // Loop wraps Y at 200 because col_tab/bg_tab are 200 entries.
-        lda #$33
-!w_top: cmp $d012
-        bne !w_top-
-        ldy zp_frame
-        cpy #200
-        bcc !y_ok+
-        ldy #0
-!y_ok:  ldx #0
-!barloop:
-        // No $D016 write here — the per-frame sine wobble upstairs
-        // already handles horizontal scroll. Writing $D016 per scanline
-        // would override it, killing the visible sine movement.
-        lda col_tab,y
-        sta VIC_BORDER          // $D020 border bar — fire-colour mapped at table-gen time
-        lda bg_tab,y
-        sta VIC_BG              // $D021 bg bar — fire-colour mapped at table-gen time
-        iny
-        cpy #200
-        bne !no_wrap+
-        ldy #0
-!no_wrap:
+        // Destination is always row X
+        lda row_col_lo,x
+        sta zp_ptr
+        lda row_col_hi,x
+        sta zp_ptr + 1
+
+        // Source row: normally X+1, but for X = MSG_TOP-1 it's
+        // MSG_TOP+MSG_ROWS (skip the msg box).
+        cpx #(MSG_TOP - 1)
+        bne !normal_src+
+        ldx #(MSG_TOP + MSG_ROWS)
+        lda row_col_lo,x
+        sta zp_dst_lo
+        lda row_col_hi,x
+        sta zp_dst_hi
+        ldx #(MSG_TOP - 1)
+        jmp !src_done+
+!normal_src:
         inx
-        cpx #200
-        beq !ack+
-        lda $d012
-!w_line:
-        cmp $d012
-        beq !w_line-
-        jmp !barloop-
+        lda row_col_lo,x
+        sta zp_dst_lo
+        lda row_col_hi,x
+        sta zp_dst_hi
+        dex
+!src_done:
+        txa
+        pha
+
+        ldy #39
+!pcol:
+        lda $d41b                  // SID random
+        and #$03                   // 4 outcomes (0..3)
+        sta zp_line                // save dice
+        lda (zp_dst_lo),y          // load heat
+        and #$0f
+        ldx zp_line
+        bne !no_cool+              // 3/4 chance: keep current heat
+        tax                        // 1/4 chance: cool via sbctab
+        lda sbctab,x
+!no_cool:
+        sta (zp_ptr),y
+        dey
+        bpl !pcol-
+
+        pla
+        tax
+!next_row:
+        inx
+        inx                        // skip the other-parity row
+        cpx #FIRE_BOT
+        bcc !prow-                 // bcc not bne — loop while < 24
+
+        // ---- Seed row 24 with a SLOWLY DRIFTING SMOOTH WAVE ----
+        // wave_palette has a smooth gradient (each step = 1 palette
+        // entry). Indexed by (col + zp_frame>>2) → drift 1 col per 4
+        // frames. NO SID jitter at the source — the wave provides all
+        // variation, cohesive flame shapes emerge.
+        lda zp_frame
+        lsr
+        lsr
+        sta zp_line                // wave phase
+        ldx #39
+!seed:
+        txa
+        clc
+        adc zp_line
+        and #$0f
+        tay
+        lda wave_palette,y
+        sta COL_RAM + FIRE_BOT * 40,x
+        dex
+        bpl !seed-
+
 
 !ack:
         lda #$ff
@@ -348,71 +321,77 @@ musichook:
 // Tables
 //==================================================================
 
-.align 256
-sine_tab:
+// Pseudo-random noise — 256 bytes used for per-row source shift.
+noise_tab:
 .for (var i = 0; i < 256; i++) {
-        .byte floor(3.5 + 3.5 * sin(i * 2 * PI / 256))
+        .byte ((i * 73 + 113) ^ (i << 3) ^ (i >> 1)) & $ff
 }
 
-.align 256
-col_tab:
-.for (var i = 0; i < 200; i++) {
-    .byte floor(3.5 + 3.5 * sin(i * 4 * PI / 200))
+// Colour-RAM row base addresses for rows 0..25 (25 + sentinel).
+row_col_lo:
+.for (var r = 0; r < 26; r++) {
+        .byte <(COL_RAM + r * 40)
+}
+row_col_hi:
+.for (var r = 0; r < 26; r++) {
+        .byte >(COL_RAM + r * 40)
 }
 
-bg_tab:
-.for (var i = 0; i < 200; i++) {
-    .byte floor(4.5 + 3.5 * sin(i * 3 * PI / 200 + 0.5))
+// Wave palette: 16-entry SMOOTH gradient (one palette step per entry,
+// up then down then up). Adjacent cells differ by exactly one heat
+// level → cohesive flame shapes when the wave drifts sideways.
+wave_palette:
+        .byte $00, $0B, $09, $02, $0A, $08, $07, $01
+        .byte $01, $07, $08, $0A, $02, $09, $0B, $00
+
+// sbctab — decrement a colour through the fire palette chain.
+// Hottest → coldest: $01 → $07 → $08 → $0A → $02 → $09 → $0B → $00.
+// Anything off-palette goes straight to $00 (heat dies).
+sbctab:
+.for (var v = 0; v < 256; v++) {
+        .var c = $00
+        .if (v == $01) { .eval c = $07 }
+        .if (v == $07) { .eval c = $08 }
+        .if (v == $08) { .eval c = $0a }
+        .if (v == $0a) { .eval c = $02 }
+        .if (v == $02) { .eval c = $09 }
+        .if (v == $09) { .eval c = $0b }
+        .if (v == $0b) { .eval c = $00 }
+        .byte c
 }
 
-fire_pal:
-    .byte $00, $02, $08, $07, $01, $07, $08, $02
-
+// msg_phase{1,2} — 3-row banner: solid blue top band + carved text
+// middle row + solid blue bottom band. $A0 is inverse space (full
+// 8×8 colour block); inverted letters ($80 + screencode) are solid
+// blocks with the glyph cut out so light fire can shine through.
+//
+// Phase 1 (frames 0-119):
+//   row 10: ████████████████████████████████████████   (top band)
+//   row 11:        THE MACHINE WAS NOT EMPTY           (carved text)
+//   row 12: ████████████████████████████████████████   (bottom band)
 msg_phase1:
-        .byte $54, $48, $45, $20, $4D, $41, $43, $48, $49, $4E
-        .byte $45, $20, $57, $41, $53, $20, $4E, $4F, $54, $20
-        .byte $45, $4D, $50, $54, $59, $20, $20, $20, $20, $20
-        .byte $20, $20, $20, $20, $20, $20, $20, $20, $20, $20
-        .byte $57, $45, $20, $53, $54, $49, $4C, $4C, $20, $46
-        .byte $45, $4C, $54, $20, $53, $4F, $4D, $45, $54, $48
-        .byte $49, $4E, $47, $20, $20, $20, $20, $20, $20, $20
-        .byte $20, $20, $20, $20, $20, $20, $20, $20, $20, $20
+        .fill 40, $A0
+        .byte $A0, $A0, $A0, $A0, $A0, $A0, $A0
+        .byte $D4, $C8, $C5, $A0
+        .byte $CD, $C1, $C3, $C8, $C9, $CE, $C5, $A0
+        .byte $D7, $C1, $D3, $A0
+        .byte $CE, $CF, $D4, $A0
+        .byte $C5, $CD, $D0, $D4, $D9
+        .byte $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0
+        .fill 40, $A0
 
+// Phase 2 (frames 120-249):
+//   row 10: ████████████████████████████████████████   (top band)
+//   row 11:           THE SPARK CAME BACK              (carved text)
+//   row 12: ████████████████████████████████████████   (bottom band)
 msg_phase2:
-        .byte $54, $48, $45, $20, $53, $50, $41, $52, $4B, $20
-        .byte $43, $41, $4D, $45, $20, $42, $41, $43, $4B, $20
-        .byte $20, $20, $20, $20, $20, $20, $20, $20, $20, $20
-        .byte $20, $20, $20, $20, $20, $20, $20, $20, $20, $20
-        .byte $4E, $4F, $54, $20, $41, $20, $54, $48, $52, $45
-        .byte $41, $54, $20, $2F, $20, $41, $20, $54, $4F, $4F
-        .byte $4C, $20, $20, $20, $20, $20, $20, $20, $20, $20
-        .byte $20, $20, $20, $20, $20, $20, $20, $20, $20, $20
+        .fill 40, $A0
+        .byte $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0
+        .byte $D4, $C8, $C5, $A0
+        .byte $D3, $D0, $C1, $D2, $CB, $A0
+        .byte $C3, $C1, $CD, $C5, $A0
+        .byte $C2, $C1, $C3, $CB
+        .byte $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0
+        .fill 40, $A0
 
 swap_flag:      .byte 0
-
-pal_phase1:
-        .byte $00, $00, $00, $00, $00
-        .byte $02, $02, $02, $02, $02
-        .byte $07, $08
-        .byte $02
-        .byte $02, $02, $02, $02, $02
-        .byte $00, $00, $00, $00, $00
-        .byte $00
-
-pal_phase2:
-        .byte $00, $00, $00, $00, $00
-        .byte $02, $02, $02, $02, $02
-        .byte $01, $07
-        .byte $00
-        .byte $02, $02, $02, $02, $02
-        .byte $00, $00, $00, $00, $00
-        .byte $00
-
-// Wallpaper row: "deFEEST" — lowercase d/e, uppercase FEEST.
-defeest_row:
-        .byte $44, $45, $06, $05, $05, $13, $14
-        .byte $44, $45, $06, $05, $05, $13, $14
-        .byte $44, $45, $06, $05, $05, $13, $14
-        .byte $44, $45, $06, $05, $05, $13, $14
-        .byte $44, $45, $06, $05, $05, $13, $14
-        .byte $44, $45, $06, $05, $05
