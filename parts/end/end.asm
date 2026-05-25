@@ -1410,6 +1410,18 @@ friet_copier:
         inc $fe
         dex
         bne !cp-
+        // Reset VIC to C64 defaults — end's $D018 pointed to custom
+        // font at $3000 which is now overwritten by friet's code.
+        lda #$1b
+        sta $d011              // standard text mode
+        lda #$15
+        sta $d018              // screen $0400 + chargen ROM uppercase
+        lda #$c8
+        sta $d016              // 40-col, no MC
+        lda #$00
+        sta $d020              // black border
+        sta $d021              // black bg
+        sta $d015              // sprites off
         // Bank in BASIC + KERNAL
         lda #$37
         sta $01
