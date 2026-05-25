@@ -60,6 +60,10 @@
 
 .const NOTE_REST     = $FF
 
+// Friet easter egg: payload size (needed for the copy loop).
+.var friet_bin = LoadBinary("../../parts/friet/friet_payload.bin")
+.const FRIET_PAGES = (friet_bin.getSize() + 255) / 256
+
 // Music data lives in intro.asm's $1000-$125D segment which is still
 // resident in RAM when end loads (end's chunk is $3000+). Pefchain
 // inherits intro's music pages via 'I',$10,$12 in interlude's EFO
@@ -838,7 +842,11 @@ interrupt:
         }
 !rasterbars_done:
 
-        // Hidden easter egg: space key loads and runs friet.prg.
+        // Hidden easter egg: space key copies friet from the stash
+        // at $4E00+ to $0801 and JMPs to $0810. No KERNAL LOAD —
+        // Spindle's fast-loader protocol is still active so serial
+        // I/O would fail. The .d64 also carries "friet" as a file
+        // for standalone LOAD "FRIET",8,1 from BASIC.
         lda #$7f
         sta $dc00
         lda $dc01
@@ -847,38 +855,26 @@ interrupt:
         sei
         lda #$00
         sta VIC_IRQEN
-        // Bank in both ROMs so KERNAL LOAD works (pefchain leaves $01=$35
-        // with HIRAM=0, meaning RAM at $E000-$FFFF instead of KERNAL ROM).
-        lda #$37
-        sta $01
-        lda #$31
-        sta $fffe
-        lda #$ea
-        sta $ffff
-        // Clean the stack of IRQ-saved registers before calling KERNAL.
+        // Silence SID
+        ldx #$18
+!sid0:  sta $d400,x
+        dex
+        bpl !sid0-
+        // Clean the stack of IRQ-saved registers BEFORE we trash
+        // end's code (the copy overwrites $3000+ = our own code).
         pla
         pla
         pla
-        // SETLFS: logical 1, device 8, secondary 0
-        lda #1
-        ldx #8
-        ldy #0
-        jsr $ffba
-        // SETNAM: filename "friet", length 5
-        lda #5
-        ldx #<fname
-        ldy #>fname
-        jsr $ffbd
-        // LOAD: mode=0, X=0 Y=0 = PRG-specified address
-        lda #0
+        // Relocate the copy loop to $0200 (cassette buffer, unused).
+        // The copy from $4E00→$0801 will overwrite end's code at $3000+,
+        // so we can't run the loop from here — it'd self-destruct.
         ldx #0
-        ldy #0
-        jsr $ffd5
-        // CLRCHN — close I/O
-        jsr $ffcc
-        // Jump directly to friet player entry point (SYS 2064 = $0810)
-        cli
-        jmp $0810
+!reloc: lda friet_copier,x
+        sta $0200,x
+        inx
+        cpx #(friet_copier_end - friet_copier)
+        bne !reloc-
+        jmp $0200
 !no_space:
 
         // Re-arm raster IRQ for line $00 of next frame (we are the only IRQ).
@@ -1390,3 +1386,43 @@ row_ptr_hi:
 .for (var r = 0; r < N_CREDIT_ROWS; r++) {
         .byte >(credit_text + r * 40)
 }
+
+// friet_copier — tiny position-independent loop copied to $0200
+// before execution. Does the actual $4E00→$0801 memcopy then banks
+// in KERNAL + BASIC and JMPs to the friet entry at $0810.
+// MUST be position-independent (no absolute JMP/JSR to self).
+friet_copier:
+        lda #<friet_stash
+        sta $fb
+        lda #>friet_stash
+        sta $fc
+        lda #$01
+        sta $fd
+        lda #$08
+        sta $fe
+        ldx #FRIET_PAGES
+        ldy #0
+!cp:    lda ($fb),y
+        sta ($fd),y
+        iny
+        bne !cp-
+        inc $fc
+        inc $fe
+        dex
+        bne !cp-
+        // Bank in BASIC + KERNAL
+        lda #$37
+        sta $01
+        cli
+        jmp $0810
+friet_copier_end:
+
+//==================================================================
+// Friet easter egg stash — the standalone player binary (sans 2-byte
+// PRG header) parked above end's code. The copier relocates this to
+// $0801 then JMPs $0810. At $4E00 to avoid overlapping end's code
+// ($3000-$4C31).
+//==================================================================
+* = $4E00 "FrietStash"
+friet_stash:
+.import binary "../../parts/friet/friet_payload.bin"

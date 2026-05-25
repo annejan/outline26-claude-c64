@@ -43,3 +43,4 @@ parts/greets/font.png
 # Spritemate KickAss-assembly export (intermediate). Round-trip via
 # tools/font_txt.py to refresh font.bin from it; not source-of-truth.
 parts/greets/font.txt
+parts/friet/
