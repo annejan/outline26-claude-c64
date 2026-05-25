@@ -1414,8 +1414,8 @@ friet_copier:
         // font at $3000 which is now overwritten by friet's code.
         lda #$1b
         sta $d011              // standard text mode
-        lda #$15
-        sta $d018              // screen $0400 + chargen ROM uppercase
+        lda #$17
+        sta $d018              // screen $0400 + chargen ROM lowercase (set B)
         lda #$c8
         sta $d016              // 40-col, no MC
         lda #$00
