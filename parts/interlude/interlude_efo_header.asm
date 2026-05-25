@@ -23,8 +23,8 @@
                                   // SID music keeps ticking during the
                                   // load gaps at transitions.
 
-        // Memory: code + tables at $80-$84 (5 pages: plasma wave, raster bars, etc.)
-        .byte 'P', $80, $84
+        // Memory: code + tables at $80-$8B (12 pages: plasma wave, raster bars, fire tables, etc.)
+        .byte 'P', $80, $8B
         // Sprite shape data at $2000-$21FF (8 sprite-letters × 64 bytes
         // for the AI WROTE drop). Must live in VIC bank 0 so VIC sees
         // it via the $80..$87 sprite block pointers.

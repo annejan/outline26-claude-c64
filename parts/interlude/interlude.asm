@@ -39,6 +39,9 @@
 
 .const INTRO_MUSIC_PLAY = $119e
 
+.const SCREEN    = $0400
+.const COL_RAM   = $d800
+
 .const BEAT_PERIOD   = 24         // frames per beat — was 20, loosened for breathing room
 .const BUILDUP_BEAT  = 6          // pad ends, bass+filter+bars in — was 4
 .const TRANSITION_BEAT = 16       // pefchain advances at zp_beat_count == this — was 10
@@ -80,6 +83,15 @@
 .const zp_yphase     = $fb        // global plasma Y phase (slower)
 .const zp_tmp        = $fc
 .const zp_y_contrib  = $fd        // per-row precomputed Y wave value
+
+// Fire phase — merged from hush. Runs after the SPARKED buildup.
+.const FIRE_TRIGGER_BEAT = 16     // plasma → fire switch at this beat
+.const FIRE_DURATION      = 250   // frames of fire before transition
+.const FIRE_SWAP_FRAME    = 120   // banner text swap (phase 1 → phase 2)
+.const FIRE_MSG_TOP       = 10    // banner sits on rows 10-12
+.const FIRE_MSG_ROWS      = 3
+.const FIRE_FADE_START    = 200   // volume fade begins
+.const zp_fire_frame      = $f3   // fire phase frame counter (outside EFO ZP claim $f4-$fd) 
 
 * = $8000 "Interlude"
 
@@ -330,6 +342,13 @@ musichook:
         dec flash_cnt
 !no_flash:
 
+        // Phase check: plasma (beats < 16) or fire (beats >= 16).
+        lda zp_beat_count
+        cmp #FIRE_TRIGGER_BEAT
+        bcc !fire_check_done+      // beat < 16 → continue plasma
+        jmp fire_irq               // beat >= 16 → jump to fire
+!fire_check_done:
+
         // V1 mute / build-up
         lda zp_beat_count
         cmp #BUILDUP_BEAT
@@ -347,8 +366,6 @@ musichook:
         sta $d417
         lda zp_filt_cut
         sta $d416
-        // Line B reveal is now the SPARKED sprite-letter drop — see
-        // update_sprites for the fly-in / bounce / fly-out state machine.
 !beat:
         inc zp_beat_phase
         lda zp_beat_phase
@@ -368,8 +385,6 @@ musichook:
         bne !ramp+
         lda #FILT_CUT_LO
         sta zp_filt_cut
-        // (Lead jump to phrase 2 moved to interlude setup so the
-        // pad phase also plays active 8ths under the typewriter.)
         jmp !no_beat+
 !ramp:  lda zp_filt_cut
         clc
@@ -386,8 +401,6 @@ musichook:
 
         // plasma — advance both phases at different rates so the
         // interference pattern morphs rather than just scrolls.
-        // xphase = +2 per frame (faster horizontal flow)
-        // yphase = +1 per frame (slower vertical drift)
         inc zp_xphase
         inc zp_xphase
         inc zp_yphase
@@ -407,10 +420,6 @@ musichook:
 !go:
         ldx row_base
 !row_lp:
-        // write_plasma_row clobbers X (uses it as the per-cell counter
-        // inside the inner loop). Stash + restore so the outer loop's
-        // row index survives the call. Was a bug: only first row of
-        // each half-frame got animated.
         txa
         pha
         jsr write_plasma_row
@@ -423,10 +432,7 @@ musichook:
 
         inc zp_plasma_tgl
 
-        // Bars only render during the buildup phase — pad phase stays
-        // calm (just plasma + line A in the dark border). The bars
-        // arriving WITH the filter sweep + bass makes them a payoff
-        // signal, not constant decoration.
+        // Bars only render during the buildup phase.
         lda zp_beat_count
         cmp #BUILDUP_BEAT
         bcs !bars_on+
@@ -447,6 +453,8 @@ musichook:
         sta IRQ_VEC
         lda #>bar_chain_0
         sta IRQ_VEC + 1
+        jmp !done+
+
 !done:
         pla
         tay
@@ -806,8 +814,291 @@ bar_chain_end:
 //==================================================================
 // fadeout
 //==================================================================
+
 fadeout:
         sec
+        rts
+
+//==================================================================
+// fire_irq — called every frame during the fire phase (beats >= 16).
+// Merged from hush.asm: colour-RAM fire engine with banner text.
+// ZP reuse during fire (plasma variables are dormant):
+//   $f9 = zp_fire_dst_lo, $fa = zp_fire_dst_hi
+//   $fb = zp_fire_src_lo, $fc = zp_fire_src_hi
+//   $fd = zp_fire_tmp
+//==================================================================
+
+.var zp_fire_dst_lo = $f9
+.var zp_fire_dst_hi = $fa
+.var zp_fire_src_lo = $fb
+.var zp_fire_src_hi = $fc
+.var zp_fire_tmp    = $fd
+
+fire_irq:
+        // V3 gate stays open; musichook was called before we got here.
+        lda #$1f
+        sta $d418
+
+        // First frame of fire? Run one-shot init.
+        lda fire_did_init
+        bne !running+
+        jsr fire_init
+        inc fire_did_init
+        jmp !done+
+
+!running:
+        inc zp_fire_frame
+
+        // Transition to greets when fire runs its course.
+        lda zp_fire_frame
+        cmp #FIRE_DURATION
+        bcc !run+
+        lda #$30
+        sta zp_beat_count          // $F6 = $30 triggers pefchain
+        jmp !done+
+
+!run:
+        // Banner swap at FIRE_SWAP_FRAME.
+        lda zp_fire_frame
+        cmp #FIRE_SWAP_FRAME
+        bne !no_swap+
+        lda fire_swap_flag
+        bne !no_swap+
+        inc fire_swap_flag
+        lda #$01
+        sta VIC_BORDER
+        ldx #0
+!copy:  lda msg_phase2,x
+        sta SCREEN + FIRE_MSG_TOP * 40,x
+        inx
+        cpx #(FIRE_MSG_ROWS * 40)
+        bne !copy-
+        ldx #0
+!c2:    lda #$0e
+        sta COL_RAM + FIRE_MSG_TOP * 40,x
+        inx
+        cpx #(FIRE_MSG_ROWS * 40)
+        bne !c2-
+!no_swap:
+        lda #$00
+        sta VIC_BORDER
+
+        // LP filter close sweep: $70 → $08 over FIRE_DURATION frames.
+        lda zp_fire_frame
+        eor #$ff
+        lsr
+        lsr
+        clc
+        adc #$08
+        sta $d416
+
+        // Volume fade from FIRE_FADE_START.
+        lda zp_fire_frame
+        cmp #FIRE_FADE_START
+        bcc !propagate+
+        sec
+        sbc #FIRE_FADE_START
+        lsr
+        sta zp_fire_tmp
+        lda #$0f
+        sec
+        sbc zp_fire_tmp
+        bpl !vol+
+        lda #0
+!vol:   ora #$10
+        sta $d418
+
+!propagate:
+        jsr fire_propagate
+        jsr fire_seed
+
+!done:
+        lda #$ff
+        sta VIC_IRQ
+        lda #$ff
+        sta VIC_RASTER
+        lda #<interrupt
+        sta IRQ_VEC
+        lda #>interrupt
+        sta IRQ_VEC + 1
+        pla
+        tay
+        pla
+        tax
+        pla
+        rti
+
+
+//==================================================================
+// fire_init — one-shot setup when transitioning from plasma to fire.
+//==================================================================
+fire_init:
+        // Fill screen with $A0 (solid block).
+        ldx #0
+        lda #$a0
+!fa:    sta SCREEN + $000,x
+        sta SCREEN + $100,x
+        sta SCREEN + $200,x
+        sta SCREEN + $300,x
+        inx
+        bne !fa-
+
+        // Write phase 1 banner message.
+        ldx #0
+!fb:    lda msg_phase1,x
+        sta SCREEN + FIRE_MSG_TOP * 40,x
+        inx
+        cpx #(FIRE_MSG_ROWS * 40)
+        bne !fb-
+
+        // Clear colour RAM to $00 (cold).
+        ldx #0
+        lda #$00
+!cf:    sta COL_RAM + $000,x
+        sta COL_RAM + $100,x
+        sta COL_RAM + $200,x
+        sta COL_RAM + $300,x
+        inx
+        bne !cf-
+
+        // Banner rows: dark blue background.
+        ldx #0
+        lda #$06
+!ct:    sta COL_RAM + FIRE_MSG_TOP * 40,x
+        inx
+        cpx #(FIRE_MSG_ROWS * 40)
+        bne !ct-
+
+        // Reset fire state.
+        lda #0
+        sta zp_fire_frame
+        sta fire_swap_flag
+
+        // Init SID filter for the close sweep.
+        lda #$23
+        sta $d417
+        lda #$70
+        sta $d416
+        lda #$00
+        sta $d415
+        lda #$1f
+        sta $d418
+
+        // Disable sprites — turn off the SPARKED letters.
+        lda #$00
+        sta SPR_EN
+
+        // VIC: standard hires text, screen $0400, chargen ROM at $1000.
+        lda #$1b
+        sta VIC_CTRL1
+        lda #$16
+        sta VIC_MEM
+        lda #$08
+        sta VIC_CTRL2
+        lda #$00
+        sta VIC_BG
+        sta VIC_BORDER
+
+        // Init SID noise generator for random seeding.
+        lda #$ff
+        sta $d40e
+        sta $d40f
+        lda #$80
+        sta $d412
+
+        rts
+
+
+//==================================================================
+// fire_propagate — heat propagation: each row copies from the row
+// below, with 1-in-4 stochastic cooling through sbctab. Row
+// alternation (even/odd frames) halves per-frame cost.
+//==================================================================
+fire_propagate:
+        lda zp_fire_frame
+        and #$01
+        tax
+
+!prow:
+        cpx #FIRE_MSG_TOP
+        beq !next_row+
+        cpx #(FIRE_MSG_TOP + 1)
+        beq !next_row+
+        cpx #(FIRE_MSG_TOP + 2)
+        beq !next_row+
+
+        // Destination = colour-RAM row X
+        lda fire_row_col_lo,x
+        sta zp_fire_dst_lo
+        lda fire_row_col_hi,x
+        sta zp_fire_dst_hi
+
+        // Source = row X+1, or skip banner for row just below it
+        cpx #(FIRE_MSG_TOP - 1)
+        bne !normal_src+
+        ldx #(FIRE_MSG_TOP + FIRE_MSG_ROWS)
+        lda fire_row_col_lo,x
+        sta zp_fire_src_lo
+        lda fire_row_col_hi,x
+        sta zp_fire_src_hi
+        ldx #(FIRE_MSG_TOP - 1)
+        jmp !src_done+
+!normal_src:
+        inx
+        lda fire_row_col_lo,x
+        sta zp_fire_src_lo
+        lda fire_row_col_hi,x
+        sta zp_fire_src_hi
+        dex
+!src_done:
+        txa
+        pha
+
+        ldy #39
+!pcol:
+        lda $d41b
+        and #$03
+        sta zp_fire_tmp
+        lda (zp_fire_src_lo),y
+        and #$0f
+        ldx zp_fire_tmp
+        bne !no_cool+
+        tax
+        lda fire_sbctab,x
+!no_cool:
+        sta (zp_fire_dst_lo),y
+        dey
+        bpl !pcol-
+
+        pla
+        tax
+!next_row:
+        inx
+        inx
+        cpx #25
+        bcc !prow-
+
+        rts
+
+
+//==================================================================
+// fire_seed — seed row 24 with a slowly drifting wave palette.
+//==================================================================
+fire_seed:
+        lda zp_fire_frame
+        lsr
+        lsr
+        sta zp_fire_tmp
+        ldx #39
+!seed:  txa
+        clc
+        adc zp_fire_tmp
+        and #$0f
+        tay
+        lda fire_wave_palette,y
+        sta COL_RAM + 24 * 40,x
+        dex
+        bpl !seed-
         rts
 
 
@@ -944,6 +1235,73 @@ fly_out_dy:
         .var t = i / 19.0
         .byte floor(SPR_TARGET_Y * t * t)
 }
+
+
+//==================================================================
+// Fire data tables — colour-RAM heat propagation
+//==================================================================
+fire_row_col_lo:
+.for (var r = 0; r < 25; r++) {
+        .byte <(COL_RAM + r * 40)
+}
+fire_row_col_hi:
+.for (var r = 0; r < 25; r++) {
+        .byte >(COL_RAM + r * 40)
+}
+
+// sbctab — colour-index cooling through the fire palette chain.
+// Hottest → coldest: $01 → $07 → $08 → $0A → $02 → $09 → $0B → $00.
+// Any colour not in the palette falls straight to $00.
+fire_sbctab:
+        .byte $00  // 00 black → black (coldest)
+        .byte $07  // 01 white → yellow
+        .byte $09  // 02 red → brown
+        .byte $00  // 03 cyan → black
+        .byte $00  // 04 purple → black
+        .byte $00  // 05 green → black
+        .byte $00  // 06 blue → black
+        .byte $08  // 07 yellow → orange
+        .byte $0A  // 08 orange → lt red
+        .byte $0B  // 09 brown → dk grey
+        .byte $02  // 0A lt red → red
+        .byte $00  // 0B dk grey → black
+        .byte $00  // 0C md grey → black
+        .byte $00  // 0D lt green → black
+        .byte $00  // 0E lt blue → black
+        .byte $00  // 0F lt grey → black
+
+// Wave palette: smooth 16-step gradient for seeding row 24.
+fire_wave_palette:
+        .byte $00, $0B, $09, $02, $0A, $08, $07, $01
+        .byte $01, $07, $08, $0A, $02, $09, $0B, $00
+
+// Phase 1 banner (frames 0-119): "THE MACHINE WAS NOT EMPTY"
+// Three rows: solid top band, carved text, solid bottom band.
+// $A0 = inverse space (solid block). Inverted PETSCII = $80 + screencode.
+msg_phase1:
+        .fill 40, $A0
+        .byte $A0, $A0, $A0, $A0, $A0, $A0, $A0
+        .byte $94, $88, $85, $A0          // T H E
+        .byte $8D, $81, $83, $88, $89, $8E, $85, $A0  // M A C H I N E
+        .byte $97, $81, $93, $A0          // W A S
+        .byte $8E, $8F, $94, $A0          // N O T
+        .byte $85, $8D, $90, $94, $99     // E M P T Y
+        .byte $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0
+        .fill 40, $A0
+
+// Phase 2 banner (frames 120+): "THE SPARK CAME BACK"
+msg_phase2:
+        .fill 40, $A0
+        .byte $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0
+        .byte $94, $88, $85, $A0          // T H E
+        .byte $93, $90, $81, $92, $8B, $A0// S P A R K
+        .byte $83, $81, $8D, $85, $A0     // C A M E
+        .byte $82, $81, $83, $8B          // B A C K
+        .byte $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0
+        .fill 40, $A0
+
+fire_did_init:  .byte 0
+fire_swap_flag: .byte 0
 
 
 //==================================================================
