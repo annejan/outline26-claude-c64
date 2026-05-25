@@ -1410,18 +1410,29 @@ friet_copier:
         inc $fe
         dex
         bne !cp-
-        // Reset VIC to C64 defaults — end's $D018 pointed to custom
-        // font at $3000 which is now overwritten by friet's code.
+        // Reset C64 to stock state. End's custom font at $3000 is
+        // overwritten; colour RAM has end's gradient (not the default
+        // light-blue); screen RAM has end's credit text. Friet relies
+        // on all of these being clean.
         lda #$1b
         sta $d011              // standard text mode
-        lda #$17
-        sta $d018              // screen $0400 + chargen ROM lowercase (set B)
+        lda #$15
+        sta $d018              // screen $0400 + chargen ROM set A (default)
         lda #$c8
         sta $d016              // 40-col, no MC
         lda #$00
         sta $d020              // black border
         sta $d021              // black bg
         sta $d015              // sprites off
+        // Clear colour RAM to light blue ($0E = C64 default)
+        lda #$0e
+        ldx #0
+!clrcol:sta $d800,x
+        sta $d900,x
+        sta $da00,x
+        sta $db00,x
+        inx
+        bne !clrcol-
         // Bank in BASIC + KERNAL
         lda #$37
         sta $01
