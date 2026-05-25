@@ -838,6 +838,49 @@ interrupt:
         }
 !rasterbars_done:
 
+        // Hidden easter egg: space key loads and runs friet.prg.
+        lda #$7f
+        sta $dc00
+        lda $dc01
+        and #$10
+        bne !no_space+
+        sei
+        lda #$00
+        sta VIC_IRQEN
+        // Bank in both ROMs so KERNAL LOAD works (pefchain leaves $01=$35
+        // with HIRAM=0, meaning RAM at $E000-$FFFF instead of KERNAL ROM).
+        lda #$37
+        sta $01
+        lda #$31
+        sta $fffe
+        lda #$ea
+        sta $ffff
+        // Clean the stack of IRQ-saved registers before calling KERNAL.
+        pla
+        pla
+        pla
+        // SETLFS: logical 1, device 8, secondary 0
+        lda #1
+        ldx #8
+        ldy #0
+        jsr $ffba
+        // SETNAM: filename "f", length 1
+        lda #1
+        ldx #<fname
+        ldy #>fname
+        jsr $ffbd
+        // LOAD: mode=0, X=0 Y=0 = PRG-specified address
+        lda #0
+        ldx #0
+        ldy #0
+        jsr $ffd5
+        // CLRCHN — close I/O
+        jsr $ffcc
+        // Jump directly to friet player entry point (SYS 2064 = $0810)
+        cli
+        jmp $0810
+!no_space:
+
         // Re-arm raster IRQ for line $00 of next frame (we are the only IRQ).
         lda #$00
         sta VIC_RASTER
@@ -1333,6 +1376,9 @@ credit_text:
         row("                                        ")
         row("                                        ")
         row("                                        ")
+
+fname:
+        .byte $66        // PETSCII 'f'
 
 // Per-row pointer tables — KA evaluates these at assembly time so we
 // avoid a runtime row×40 multiply.
