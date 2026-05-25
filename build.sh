@@ -93,7 +93,7 @@ echo ">>> done — outline-64.d64"
 if [[ -f "$ROOT/tools/update-friet.sh" ]]; then
     "$ROOT/tools/update-friet.sh" 2>&1 || echo "  (friet rebuild skipped)"
 fi
-# Single-letter filename blends into the dirart directory chaos.
-c1541 "$ROOT/outline-64.d64" -write "$ROOT/parts/friet/friet.prg" f >/dev/null 2>&1
+# File "friet" blends into the dirart directory chaos (among DEL entries).
+c1541 "$ROOT/outline-64.d64" -write "$ROOT/parts/friet/friet.prg" friet >/dev/null 2>&1
 
 ls -la "$ROOT/outline-64.d64"

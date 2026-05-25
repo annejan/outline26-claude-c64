@@ -864,8 +864,8 @@ interrupt:
         ldx #8
         ldy #0
         jsr $ffba
-        // SETNAM: filename "f", length 1
-        lda #1
+        // SETNAM: filename "friet", length 5
+        lda #5
         ldx #<fname
         ldy #>fname
         jsr $ffbd
@@ -1378,7 +1378,7 @@ credit_text:
         row("                                        ")
 
 fname:
-        .byte $66        // PETSCII 'f'
+        .byte $66, $72, $69, $65, $74    // PETSCII "friet"
 
 // Per-row pointer tables — KA evaluates these at assembly time so we
 // avoid a runtime row×40 multiply.
