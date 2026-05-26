@@ -22,20 +22,20 @@ than the part's own duration. With ~8 KB of koala bitmap to stream
 into greets, the biggest blank gap sits before greets.
 
 ```
-screenfill ─5s─→ intro ─57s─→ interlude ─~4s─→ [blank 18s] ─→ hush ─~4s─→ greets ─50s─→ coda ─30s─→ end (loops)
+screenfill ─5s─→ intro ─57s─→ interlude (plasma+SPARKED+fire) ─~13s─→ greets ─50s─→ coda ─30s─→ end (loops, space→friet)
 ```
 
 | Part | Duration | Sets `$D018` | Transition trigger |
 |------|----------|--------------|---------------------|
 | screenfill | ~5 s | `$17` (lo-case ROM) | `$06 == $00` (HOLDCNT) |
 | intro | ~57 s | `$19` (bitmap mode) | `$F6 == $F0` (zp_outro saturated) |
-| interlude | ~4 s + ~11 s blank-filler before hush | `$15` (chargen $1000) | `$F6 == $10` (16 beats) |
-| hush | ~4 s | `$17` (lo-case ROM) | `$F6 == $30` (timer) |
+| interlude | ~13 s (16 beats plasma+SPARKED + 250 frames fire) | `$15` → `$16` (fire phase switches chargen) | `$F6 == $30` (fire timer) |
 | greets | ~50 s (scroll-driven KLOTEN landing) | `$19` (bitmap mode, koala) | `$F6 == $82` |
 | coda | ~30 s | `$15` (chargen $1000) | `$F6 == $30` (timer) |
-| end | loops | `$1D` (chargen $3000) | (none — `stay`) |
+| end | loops | `$1D` (chargen $3000) | (none — `stay`; space triggers friet easter egg) |
 
-**Measured one-pass runtime: ~2:55** from boot to end-credits-loop.
+**Measured one-pass runtime: ~2:35** from boot to end-credits-loop
+(shorter than before — hush merged into interlude, no separate blank-filler gap).
 
 Music stays continuous across every part-to-part blank-filler because
 intro installs `my_music_play` via the EFO `'M', $9e, $11` tag — see
@@ -107,9 +107,15 @@ characters; end-of-text = `$FF` triggers outro.
 
 ---
 
-## Part 3 — interlude (`parts/interlude/`)
+## Part 3 — interlude (`parts/interlude/`) (includes merged fire phase)
 
-16 beats × 24 frames = 384 frames = **7.68 s** (loosened from 10 beats × 20).
+Two phases inside one pefchain part:
+- **Plasma phase** (beats 0–15, ~7.7 s): typewriter text + SPARKED drop
+- **Fire phase** (250 frames after beat 16, ~5 s): colour-RAM fire + manifesto banner
+
+Total: ~12.7 s.
+
+### Plasma phase (beats 0–15)
 
 | Beat | Time | Event |
 |------|------|-------|
@@ -117,36 +123,26 @@ characters; end-of-text = `$FF` triggers outro.
 | 0–5 | 0–2.9 s | Pad-only: solo V2 lead with PWM phaser + plasma + line A typewriter "FOR YEARS NO TIME FOR BREADBIN CODE" reveals over 2.8 s. Music-box feel under the confession. |
 | 5 | 2.9 s | Line A fully revealed. ~0.1 s reading time before buildup. |
 | 6 (BUILDUP_BEAT) | 2.9 s | `$D418` bit 7 clears = V3 on (K-S-K-S kit + arp slam back in). V1 bass re-enabled. LP filter sweep starts at cutoff=$70. Raster bars appear. SPARKED sprite letters begin fly-in. |
-| 7–15 | 3.4–7.2 s | Filter cutoff += $16 per beat: $70 → $86 → $9C → … → $FF (saturates). SPARKED settles at beat ~7, bounces, white border flash on landing. PHASE_DONE freezes the sprite state once FLY_OUT completes (no second fly). |
+| 7–15 | 3.4–7.2 s | Filter cutoff += $16 per beat: $70 → $86 → $9C → … → $FF (saturates). SPARKED settles at beat ~7, bounces, white border flash on landing. |
 | 15 | 7.2 s | SPARKED letters fly out. |
-| **16 (= $10)** | **7.7 s** | pefchain loads hush. |
+| **16** | **7.7 s** | `fire_irq` takes over — fire phase begins inside the same interlude part. |
 
-Per-frame: plasma (half rows updated), music, beat phase, raster bars, border flash on SPARKED landing.
+### Fire phase (frames 0–249 after beat 16)
 
----
+Merged from the former standalone `parts/hush/` part (commit `0d8dca5`).
 
-## Part 4 — hush (`parts/hush/`)
-
-250 frames = **5.0 s**.
-
-| Frame | Time | Event |
-|-------|------|-------|
-| 0 | 0 s | Setup: hires text mode, chargen ROM at $1800, screen $0400, border + bg black. Screen filled with $A0 (inverse-space solid block) everywhere; banner rows 10-12 overlaid with msg_phase1; banner colour RAM set to $06 dark blue. Drum gate `$F6 = $01` so K-S-K-S keeps firing. |
-| 0→249 | 0→5.0 s | Colour-RAM fire engine: row-alternating propagation through 7-step `sbctab` palette chain, drifting wave_palette seed at row 24, banner rows skipped (locked colour), row 9 sources from row 13 to keep fire climbing past the banner. |
-| 0→249 | 0→5.0 s | LP filter sweep on V1+V2: cutoff $70→$08 over 250 frames. `$D418` re-asserted each frame after `my_music_play` so vol writes don't kill the LP bit. |
+| Frame | Time (from fire start) | Event |
+|-------|----------------------|-------|
+| 0 | 0 s | `fire_init`: screen filled with $A0 (solid block), banner rows 10-12 overlaid with msg_phase1, colour RAM set to $06 dark blue. Sprites disabled. VIC switches to hires text mode ($D018=$16). LP filter init ($D417=$23, cutoff=$70). |
+| 0→249 | 0→5.0 s | Colour-RAM fire engine: row-alternating propagation through 7-step `sbctab` palette chain, drifting wave_palette seed at row 24, banner rows skipped (locked colour). |
+| 0→249 | 0→5.0 s | LP filter cutoff close: $70→$08 over 250 frames. |
 | 120 | 2.4 s | Phase swap: msg_phase2 written to banner; colour RAM flipped to $0E light blue; 1-frame white-border flash. |
 | 200→249 | 4.0→5.0 s | Volume fade: SID vol $0F→$00 over last 50 frames. |
-| **250** | **5.0 s** | IRQ sets zp_timer = `$30`; pefchain's `f6 = 30` condition fires. |
+| **250** | **5.0 s** | `$F6 = $30`; pefchain transitions to greets. |
 
-Per-frame: `my_music_play` (drums KEEP firing — `$F6 = $01` gate ON),
-fire propagation (~11 k cy thanks to row alternation, fits the
-50 Hz budget), LP filter re-assertion. Text banner ("THE MACHINE WAS
-NOT EMPTY" → "THE SPARK CAME BACK") punches through the flames as
-inverted glyphs cut out of a solid blue band.
-
-**EFO ownership**: `'P', $08, $0B` claims 4 pages of code + sbctab +
-wave_palette + msg tables. Much smaller than the old wobble version
-(no sine_tab / col_tab / bg_tab); see `docs/pefchain-notes.md`.
+Per-frame: `my_music_play` (drums keep firing via inherited `$F6` gate),
+fire propagation (~11 k cy with row alternation, fits 50 Hz budget),
+LP filter re-assertion.
 
 ---
 
@@ -161,8 +157,8 @@ relocated to `$0800-$0FFF` so `$2000-$3FFF` is free for the bitmap.
 
 | Phase | Event |
 |-------|-------|
-| 0 s | 8 X-expanded sprites show 8-char window of greetings text over the koala. DYCP wobble ±3 px Y / ±2 px X. Sprite-7 carousel: sprite 7 doubles as the rightmost entering buffer while it's off-screen-left, so chars slide smoothly in from the right edge. |
-| Each beat (every 0.48 s) | Beat counter ticks. Bar IRQ chain runs colour bars. V2 lead "wah" via cutoff modulation. |
+| 0 s | 8 X-expanded sprites show 8-char window of greetings text over the koala. DYCP wobble ±3 px Y / ±2 px X. Sprite-7 carousel: sprite 7 doubles as the rightmost entering buffer while it's off-screen-left, so chars slide smoothly in from the right edge. SID filter: res $2 (low — clean, not muddy), V2 through LP ($D417=$22), cutoff floor $70 (gentle shimmer, never muffles the lead). |
+| Each beat (every 0.48 s) | Beat counter ticks. Bar IRQ chain runs colour bars. V2 lead shimmer via cutoff sweep ($70..$FF). |
 | Scroll | Smooth 9 px/frame motion (`SCROLL_SPEED_TABLE[0]`). The whole row shifts left every frame; at each 40-px wrap, `scroll_pos` advances one char and the sprite ptr table shifts. |
 | When `scroll_pos` reaches `settle_text - message` (= the position of " KLOTEN " in the message): | IRQ forces `zp_beat_count = SETTLE_BEAT` (=$7E). Settle path snaps the row to centred " KLOTEN ", flat X / Y. |
 | +4 beats (~1.9 s) | `zp_beat_count` ticks naturally to `TRANSITION_BEAT` (= $82). |
@@ -193,7 +189,7 @@ sprite-pointer bases `$80/$98/$B0/$C8`, 24 frames each).
 
 | Frame | Time | Event |
 |-------|------|-------|
-| 0 | 0 s | Setup: text mode, ROM uppercase chargen at `$1000`, screen `$0400`. Title text painted on rows 11, 13, 15 (KLOTEN MET DE BROODTROMMEL / A DIGITAL LUNCH EXPERIENCE / RELEASED AT X2026). `$F6 = $01` enables drum gate so intro's K-S-K-S kit fires through the whole part. `$F8 = $80` restores zp_intro between T_BARS and T_SCROLLER so V1+V2 freq writes fire but V3 stays as triangle (drum_tick's last waveform). All 8 sprites enabled (`$D015=$FF`) with twin-star orbit math driving X/Y every frame. Parallax PETSCII starfield seeded (32 stars across 4 speed tiers). |
+| 0 | 0 s | Setup: text mode, ROM uppercase chargen at `$1000`, screen `$0400`. Title text painted on rows 11, 13, 15 (KLOTEN MET DE COMMODORE / LEARN EXPLORE DISCOVER / RELEASED AT X2026). `$F6 = $01` enables drum gate so intro's K-S-K-S kit fires through the whole part. `$F8 = $80` restores zp_intro between T_BARS and T_SCROLLER so V1+V2 freq writes fire but V3 stays as triangle (drum_tick's last waveform). All 8 sprites enabled (`$D015=$FF`) with twin-star orbit math driving X/Y every frame. Parallax PETSCII starfield seeded (32 stars across 4 speed tiers). |
 | 0 → 799 | 0 → 32.0 s | **Stage F ping-pong zoom breath**: star 1 starts at shape=0 dir=forward → opens with zoom-in; star 2 starts at shape=23 dir=backward → opens with zoom-out. `kloot_shape_N` walks 0→23→0 via shared `kloot_advance` subroutine; rotation reverse-loop is invisible (12-fold symmetry). |
 | each zp_frame tick | 25 Hz | Independent shape dividers (`SHAPE_DIV_1=3`, `SHAPE_DIV_2=2`) → fundamentally different rotation rates so lobes drift apart. Independent orbital phases (`ORBIT_SPEED_1=2`, `ORBIT_SPEED_2=3`) for the sine-path orbits at `ORBIT_RADIUS=56`. |
 | each frame | 50 Hz | Priority swap fires on bit-6 transition of `(star2_phase - star1_phase)` — happens at max separation so invisible. Swaps sprite slot assignments + colour registers (brown stays brown) and toggles `$D01B` so the in-front star alternates ~every 1.3 s. |
@@ -237,6 +233,22 @@ Loops forever (`stay`). One credit cycle:
 
 Music: 128-step chord/lead cycle × 24 frames/step = 61.4 s per
 cycle. LP filter on (re-asserted every frame).
+
+**Friet easter egg**: pressing space during the credit roll copies
+an embedded "Friet met Desire" SID player from a stash at `$4E00` to
+`$0801` via a relocatable copier at `$0200`, resets VIC + colour RAM +
+BASIC to stock C64 state, then `JMP $0810`. The player runs
+standalone with synchronised lyrics. Also on the `.d64` as
+`LOAD "FRIET",8,1` for standalone use.
+
+## Colocate hook — `lyric_vec` at `$12B9`
+
+`my_music_play` at `$119E` ends with `JMP (lyric_vec)` instead of
+`RTS`. The vector at `$12B9` defaults to an `RTS` stub at `$12BB` —
+11-cycle no-op. Any part can write its own handler address into
+`$12B9`/`$12BA` during setup to get music-synced callbacks. The
+handler fires inside `my_music_play` at the same clock as `mu_step`
+— zero drift by construction.
 
 ---
 
