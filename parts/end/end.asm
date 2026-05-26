@@ -1462,12 +1462,10 @@ friet_copier:
 !clrzp: sta $90,x
         dex
         bpl !clrzp-
-        // Let BASIC execute friet's "10 SYS 2064" stub naturally —
-        // identical code path + timing to typing RUN after LOAD.
-        // CLR resets variables; RUN parses + executes line 10.
-        cli
-        jsr $a659              // BASIC CLR
-        jmp $a7ae              // BASIC RUN
+        // Direct JMP to friet entry. Lyrics timing may drift slightly
+        // vs clean LOAD/RUN but at least it plays. BASIC RUN approach
+        // crashed because the IRQ context was wrong for BASIC dispatch.
+        jmp $0810
 friet_copier_end:
 
 //==================================================================
