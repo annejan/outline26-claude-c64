@@ -32,5 +32,5 @@ echo "Building player in $FRIET_DIR..."
 (cd "$FRIET_DIR" && make player 2>&1)
 
 # Copy result
-cp "$FRIET_DIR/out/friet.prg" "$ROOT/parts/friet/friet.prg"
-echo "Copied friet.prg ($(wc -c < "$ROOT/parts/friet/friet.prg") bytes)"
+cp "$FRIET_DIR/out/friet.prg" "$ROOT/parts/friet-met-desire/friet.prg"
+echo "Copied friet.prg ($(wc -c < "$ROOT/parts/friet-met-desire/friet.prg") bytes)"

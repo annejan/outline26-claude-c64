@@ -69,7 +69,7 @@ build_part parts/coda       coda \
     kloot_star_bl.bin,2c00 \
     kloot_star_br.bin,3200
 # Strip PRG header (2 bytes load address) so end.asm can .import binary it.
-tail -c +3 "$ROOT/parts/friet/friet.prg" > "$ROOT/parts/friet/friet_payload.bin"
+tail -c +3 "$ROOT/parts/friet-met-desire/friet.prg" > "$ROOT/parts/friet-met-desire/friet_payload.bin"
 build_part parts/end        end
 
 echo ">>> linking with pefchain"
@@ -89,12 +89,12 @@ echo ">>> linking with pefchain"
 
 echo ">>> done — outline-64.d64"
 
-# Secret easter egg: friet.prg loads when pressing space during end credits.
+# Secret easter egg: friet-met-desire.prg loads when pressing space during end credits.
 # Rebuild from source if the friet-van-desire repo is available.
 if [[ -f "$ROOT/tools/update-friet.sh" ]]; then
     "$ROOT/tools/update-friet.sh" 2>&1 || echo "  (friet rebuild skipped)"
 fi
-# File "friet" blends into the dirart directory chaos (among DEL entries).
-c1541 "$ROOT/outline-64.d64" -write "$ROOT/parts/friet/friet.prg" friet >/dev/null 2>&1
+# File "friet-met-desire" blends into the dirart directory chaos (among DEL entries).
+c1541 "$ROOT/outline-64.d64" -write "$ROOT/parts/friet-met-desire/friet.prg" friet-met-desire >/dev/null 2>&1
 
 ls -la "$ROOT/outline-64.d64"

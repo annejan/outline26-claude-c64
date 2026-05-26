@@ -44,3 +44,4 @@ parts/greets/font.png
 # tools/font_txt.py to refresh font.bin from it; not source-of-truth.
 parts/greets/font.txt
 parts/friet/
+parts/friet-met-desire/

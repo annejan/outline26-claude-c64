@@ -61,7 +61,7 @@
 .const NOTE_REST     = $FF
 
 // Friet easter egg: payload size (needed for the copy loop).
-.var friet_bin = LoadBinary("../../parts/friet/friet_payload.bin")
+.var friet_bin = LoadBinary("../../parts/friet-met-desire/friet_payload.bin")
 .const FRIET_PAGES = (friet_bin.getSize() + 255) / 256
 
 // Music data lives in intro.asm's $1000-$125D segment which is still
@@ -1448,4 +1448,4 @@ friet_copier_end:
 //==================================================================
 * = $4E00 "FrietStash"
 friet_stash:
-.import binary "../../parts/friet/friet_payload.bin"
+.import binary "../../parts/friet-met-desire/friet_payload.bin"

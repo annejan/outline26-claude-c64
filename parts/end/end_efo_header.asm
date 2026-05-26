@@ -18,7 +18,7 @@
         .word $0000              // cleanup
         .word $0000              // callmusic (end has its own player)
 
-        // memory pages: font $30-$37, code+data $38-$4C, friet stash $4E-$86
+        // memory pages: font $30-$37, code+data $38-$4C, friet-met-desire stash $4E-$86
         .byte 'P', $30, $86
         // zero-page: $f3..$fc (mu_frame, mu_step, yscroll, text_row,
         // frame, tmp, fade, wrap_pending)
