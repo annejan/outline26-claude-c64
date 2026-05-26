@@ -1462,8 +1462,12 @@ friet_copier:
 !clrzp: sta $90,x
         dex
         bpl !clrzp-
-        // NO CLI — friet's SEI at $0810 handles it.
-        jmp $0810
+        // Let BASIC execute friet's "10 SYS 2064" stub naturally —
+        // identical code path + timing to typing RUN after LOAD.
+        // CLR resets variables; RUN parses + executes line 10.
+        cli
+        jsr $a659              // BASIC CLR
+        jmp $a7ae              // BASIC RUN
 friet_copier_end:
 
 //==================================================================
