@@ -1442,6 +1442,14 @@ friet_copier:
         sta $0700,x
         inx
         bne !clrscr-
+        // Zero friet's ZP state area ($90-$9F). Clean BASIC boot has
+        // these at $00; the demo leaves residue that confuses friet's
+        // lyric ticker (e.g. $98 non-zero = "lyrics already init'd").
+        lda #$00
+        ldx #$0f
+!clrzp: sta $90,x
+        dex
+        bpl !clrzp-
         // Bank in BASIC + KERNAL
         lda #$37
         sta $01
