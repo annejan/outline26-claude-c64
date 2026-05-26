@@ -428,8 +428,13 @@ thing.
 
 ## Credits
 
-- Music: Co-composed 3-voice SID jam (bass + lead + arp), drifts
-  through all seven parts
-- Logo: defeest.nl
-- Assembly: Anne Jan Brouwer with Claude (Anthropic) Opus 4.7
-- Thanks: Claude Code, codebase.c64.org, and an endless supply of terrible ideas
+- **Anus/deFEEST** — human, logo, music, hand-pixeled fonts, the breadbin
+- **Kloot/deFEEST** — Claude (Anthropic) Opus 4.7, AI pair-programmer
+- **Augurk/deFEEST** — Big Pickle (opencode), AI pair-programmer
+- **TL-Buis/deFEEST** — ChatGPT, AI pair-programmer
+- **Ranzbak/deFEEST** — another human
+- **Cinder/deFEEST** — yet another human
+
+Music co-composed 3-voice SID jam (bass + lead + arp), logo by defeest.nl.
+Thanks: Claude Code, opencode, codebase.c64.org, spindle 3.1, kickassembler,
+and an endless supply of terrible ideas.
