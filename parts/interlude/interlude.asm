@@ -147,6 +147,9 @@ setup:
         sta sp_frame
         sta line_a_pos
         sta line_a_tick
+        sta line_a_state
+        sta line_a_typo_idx
+        sta line_a_pause_cnt
 
         // Fill screen with solid block ($A0 reverse-space in screencode_mixed)
         // so the per-cell colour-RAM plasma is actually visible. Plain
@@ -310,6 +313,15 @@ musichook:
                                    // between effects also call music
                                    // (= no SID dropout during load
                                    // gaps at transitions).
+        // One-frame silence on SPARKED landing: if silence_cnt > 0,
+        // mute SID for this frame then resume. Lightning before thunder.
+        lda silence_cnt
+        beq !no_silence+
+        lda #$00
+        sta $d418
+        dec silence_cnt
+        jmp !vol_done+
+!no_silence:
         // Master vol + V3 gate: $9F during pad (bit 7 mutes V3 = no
         // arp, no resident-kit drums), $1F during buildup (V3 on).
         lda zp_beat_count
@@ -319,6 +331,7 @@ musichook:
         .byte $2c                  // skip next 2 bytes
 !v3_on: lda #$1f
         sta $d418
+!vol_done:
 
         // V2 lead PWM — slowly sweep V2 pulse-width via zp_xphase so
         // the lead line has a "breathing phaser" feel through the
@@ -465,39 +478,140 @@ musichook:
 
 
 //==================================================================
-// update_line_a — typewriter reveal of "FOR YEARS NO TIME FOR BREADBIN
-// CODE" into row 11. 1 char every LINE_A_PERIOD frames. Cursor is a
-// $A0 block at the next-to-reveal position; once all 35 chars are out,
-// the cursor disappears and we no-op. Screen is pre-filled with $A0 in
-// setup so unrevealed cells already match the plasma backdrop.
+// update_line_a — typewriter with typo: types "FOR YEARS NO TIME
+// FOR BREADBIN LOVE", pauses (the machine catches itself), backspaces
+// 4 chars, then types "CODE". The hesitation is the confession.
 //==================================================================
-.const LINE_A_PERIOD = 4          // frames per char — 35 chars × 4 = 140 frames (~2.8 s) of typing
+.const LINE_A_PERIOD  = 4        // frames per char
+.const TYPO_TRIGGER   = 31       // position where typo starts (after "BREADBIN ")
+.const TYPO_LEN       = 4        // "LOVE" = 4 chars
+.const TYPO_PAUSE     = 60       // ~1.2 sec — uncomfortable hesitation
+.const LA_TYPING      = 0
+.const LA_TYPO        = 1
+.const LA_PAUSE       = 2
+.const LA_BACKSPACE   = 3
+.const LA_RETYPE      = 4
+.const LA_DONE        = 5
 
 update_line_a:
-        lda line_a_pos
-        cmp #35
-        bcs !done+                // line fully revealed → nothing to do
+        lda line_a_state
+        cmp #LA_DONE
+        bne !not_done+
+        rts
+!not_done:
+        cmp #LA_PAUSE
+        bne !not_pause+
+        jmp la_pause
+!not_pause:
+        cmp #LA_BACKSPACE
+        bne !not_bs+
+        jmp la_backspace
+!not_bs:
+
+        // LA_TYPING / LA_TYPO / LA_RETYPE — all advance one char per tick
         inc line_a_tick
         lda line_a_tick
         cmp #LINE_A_PERIOD
-        bcc !no_advance+
+        bcc !cursor+
         lda #0
         sta line_a_tick
+
+        lda line_a_state
+        cmp #LA_TYPO
+        beq !typo_char+
+
+        // Normal typing (LA_TYPING or LA_RETYPE)
         ldx line_a_pos
         lda story_line_a,x
-        sta $05BA,x               // $05B8 + 2 = column-2 start of row 11
+        sta $05BA,x
         inc line_a_pos
-!no_advance:
-        // Blinking cursor at the next-to-reveal cell (block $A0) — already
-        // sitting there from the screen-fill, but rewriting each frame
-        // makes it survive any later clobber and keeps the "the typewriter
-        // hasn't reached here yet" surface visually solid.
+        // Check if we hit the typo trigger
+        lda line_a_state
+        cmp #LA_TYPING
+        bne !check_end+
+        lda line_a_pos
+        cmp #TYPO_TRIGGER
+        bcc !cursor+
+        lda #LA_TYPO
+        sta line_a_state
+        lda #0
+        sta line_a_typo_idx
+        jmp !cursor+
+
+!check_end:
+        // LA_RETYPE — check if fully done
+        lda line_a_pos
+        cmp #35
+        bcc !cursor+
+        lda #LA_DONE
+        sta line_a_state
+        rts
+
+!typo_char:
+        // Type wrong chars from typo_text
         ldx line_a_pos
-        cpx #35
-        bcs !done+
+        ldy line_a_typo_idx
+        lda typo_text,y
+        sta $05BA,x
+        inc line_a_pos
+        inc line_a_typo_idx
+        lda line_a_typo_idx
+        cmp #TYPO_LEN
+        bcc !cursor+
+        // Typed all wrong chars → pause
+        lda #LA_PAUSE
+        sta line_a_state
+        lda #TYPO_PAUSE
+        sta line_a_pause_cnt
+        jmp !cursor+
+
+!cursor:
+        ldx line_a_pos
+        cpx #39
+        bcs !no_cur+
         lda #$a0
         sta $05BA,x
-!done:  rts
+!no_cur:
+        rts
+
+la_pause:
+        // Blinking cursor during the hesitation — the machine is thinking.
+        ldx line_a_pos
+        lda line_a_pause_cnt
+        and #$08
+        beq !cur_off+
+        lda #$a0
+        sta $05BA,x
+        jmp !cur_done+
+!cur_off:
+        lda #$20
+        sta $05BA,x
+!cur_done:
+        dec line_a_pause_cnt
+        bne !wait+
+        lda #LA_BACKSPACE
+        sta line_a_state
+        lda #TYPO_LEN
+        sta line_a_typo_idx
+!wait:  rts
+
+la_backspace:
+        inc line_a_tick
+        lda line_a_tick
+        cmp #5                    // deliberate backspace: 5 frames per delete
+        bcc !bwait+
+        lda #0
+        sta line_a_tick
+        dec line_a_pos
+        ldx line_a_pos
+        lda #$a0
+        sta $05BA,x              // erase char
+        dec line_a_typo_idx
+        bne !bwait+
+        // All wrong chars erased → retype correctly
+        lda #LA_RETYPE
+        sta line_a_state
+!bwait: rts
 
 
 //==================================================================
@@ -596,6 +710,8 @@ sp_in:
         sta sp_phase
         lda #5
         sta flash_cnt             // 5 frames of white border flash
+        lda #1
+        sta silence_cnt           // 1 frame of SID silence on impact
         lda #0
         sta sp_frame
 !rts:   // also check: are we close to transition? then go straight to FLY_OUT.
@@ -883,6 +999,14 @@ fire_irq:
         lda #$00
         sta VIC_BORDER
 
+        // Expose banner to fire at frame 160 — text burns away.
+        lda zp_fire_frame
+        cmp #160
+        bcc !no_expose+
+        lda #1
+        sta banner_exposed
+!no_expose:
+
         // LP filter close sweep: $70 → $08 over FIRE_DURATION frames.
         lda zp_fire_frame
         eor #$ff
@@ -973,6 +1097,7 @@ fire_init:
         lda #0
         sta zp_fire_frame
         sta fire_swap_flag
+        sta banner_exposed
 
         // Init SID filter for the close sweep.
         lda #$23
@@ -1020,12 +1145,15 @@ fire_propagate:
         tax
 
 !prow:
+        lda banner_exposed
+        bne !no_guard+
         cpx #FIRE_MSG_TOP
         beq !next_row+
         cpx #(FIRE_MSG_TOP + 1)
         beq !next_row+
         cpx #(FIRE_MSG_TOP + 2)
         beq !next_row+
+!no_guard:
 
         // Destination = colour-RAM row X
         lda fire_row_col_lo,x
@@ -1034,6 +1162,9 @@ fire_propagate:
         sta zp_fire_dst_hi
 
         // Source = row X+1, or skip banner for row just below it
+        // (only skip when banner is still protected)
+        lda banner_exposed
+        bne !normal_src+
         cpx #(FIRE_MSG_TOP - 1)
         bne !normal_src+
         ldx #(FIRE_MSG_TOP + FIRE_MSG_ROWS)
@@ -1151,6 +1282,7 @@ bar_base_colors:
 row_base: .byte 0
 row_cnt:  .byte 0
 flash_cnt: .byte 0
+silence_cnt: .byte 0
 
 // Story overlay text — uppercase chargen at $1000, codes $01..$1A
 // for letters, $20 for space. 35 chars to fit centered in a 40-col
@@ -1180,8 +1312,14 @@ sp_phase: .byte 0
 sp_frame: .byte 0
 
 // Typewriter state for line A.
-line_a_pos:  .byte 0    // chars revealed so far (0..35)
-line_a_tick: .byte 0    // frame counter, advances pos every LINE_A_PERIOD
+line_a_pos:      .byte 0    // chars revealed so far
+line_a_tick:     .byte 0    // frame sub-counter
+line_a_state:    .byte 0    // LA_TYPING / LA_TYPO / LA_PAUSE / LA_BACKSPACE / LA_RETYPE / LA_DONE
+line_a_typo_idx: .byte 0    // index into typo_text / backspace counter
+line_a_pause_cnt:.byte 0    // pause countdown
+
+typo_text:
+        .byte $0c, $0f, $16, $05   // LOVE (screencodes)
 
 // Horizontal positions for the 8 sprite-letters of "SPARKED ". With
 // 8-px spacing the phrase reads centered (trailing blank sprite #7
@@ -1302,6 +1440,7 @@ msg_phase2:
 
 fire_did_init:  .byte 0
 fire_swap_flag: .byte 0
+banner_exposed: .byte 0
 
 
 //==================================================================

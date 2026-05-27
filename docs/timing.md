@@ -120,10 +120,10 @@ Total: ~12.7 s.
 | Beat | Time | Event |
 |------|------|-------|
 | 0 | 0 s | Setup: V3 muted via `$D418` bit 7 (no drums, no arp), V1 muted via `$D404 = 0` (no bass) → ONLY V2 lead audible. `mu_step` forced to 32 (phrase 2 = active 8ths) so the lead is moving under the typewriter. V2 PWM modulated via `zp_xphase` for a phaser feel. |
-| 0–5 | 0–2.9 s | Pad-only: solo V2 lead with PWM phaser + plasma + line A typewriter "FOR YEARS NO TIME FOR BREADBIN CODE" reveals over 2.8 s. Music-box feel under the confession. |
-| 5 | 2.9 s | Line A fully revealed. ~0.1 s reading time before buildup. |
+| 0–5 | 0–2.9 s | Pad-only: solo V2 lead with PWM phaser + plasma + **typewriter with typo**. Types "FOR YEARS NO TIME FOR BREADBIN **LOVE**", hesitates 60 frames (~1.2 s, cursor blinks rapidly), backspaces 4 chars (5 frames each), then types "**CODE**" correctly. The machine confesses but stumbles on the last word — the hesitation IS the narrative. State machine: LA_TYPING → LA_TYPO → LA_PAUSE → LA_BACKSPACE → LA_RETYPE → LA_DONE. |
+| ~5 | ~2.9 s | Line A fully revealed (with correction). ~0.1 s reading time before buildup. |
 | 6 (BUILDUP_BEAT) | 2.9 s | `$D418` bit 7 clears = V3 on (K-S-K-S kit + arp slam back in). V1 bass re-enabled. LP filter sweep starts at cutoff=$70. Raster bars appear. SPARKED sprite letters begin fly-in. |
-| 7–15 | 3.4–7.2 s | Filter cutoff += $16 per beat: $70 → $86 → $9C → … → $FF (saturates). SPARKED settles at beat ~7, bounces, white border flash on landing. |
+| 7–15 | 3.4–7.2 s | Filter cutoff += $16 per beat: $70 → $86 → $9C → … → $FF (saturates). SPARKED settles at beat ~7, bounces. **On the exact landing frame: 1-frame SID silence** (`$D418 = $00` for one frame, then full volume slams back) + 5-frame white border flash. Lightning before thunder. |
 | 15 | 7.2 s | SPARKED letters fly out. |
 | **16** | **7.7 s** | `fire_irq` takes over — fire phase begins inside the same interlude part. |
 
@@ -134,9 +134,10 @@ Merged from the former standalone `parts/hush/` part (commit `0d8dca5`).
 | Frame | Time (from fire start) | Event |
 |-------|----------------------|-------|
 | 0 | 0 s | `fire_init`: screen filled with $A0 (solid block), banner rows 10-12 overlaid with msg_phase1, colour RAM set to $06 dark blue. Sprites disabled. VIC switches to hires text mode ($D018=$16). LP filter init ($D417=$23, cutoff=$70). |
-| 0→249 | 0→5.0 s | Colour-RAM fire engine: row-alternating propagation through 7-step `sbctab` palette chain, drifting wave_palette seed at row 24, banner rows skipped (locked colour). |
+| 0→249 | 0→5.0 s | Colour-RAM fire engine: row-alternating propagation through 7-step `sbctab` palette chain, drifting wave_palette seed at row 24, banner rows skipped (locked colour) until frame 160. |
 | 0→249 | 0→5.0 s | LP filter cutoff close: $70→$08 over 250 frames. |
 | 120 | 2.4 s | Phase swap: msg_phase2 written to banner; colour RAM flipped to $0E light blue; 1-frame white-border flash. |
+| **160** | **3.2 s** | **Fire eats the banner**: `banner_exposed` flag set → fire propagation no longer skips rows 10-12. Heat crawls up from row 13 into the text cells, overwriting their colour RAM. The message is literally consumed by its own fire. |
 | 200→249 | 4.0→5.0 s | Volume fade: SID vol $0F→$00 over last 50 frames. |
 | **250** | **5.0 s** | `$F6 = $30`; pefchain transitions to greets. |
 
@@ -238,8 +239,11 @@ cycle. LP filter on (re-asserted every frame).
 an embedded "Friet met Desire" SID player from a stash at `$4E00` to
 `$0801` via a relocatable copier at `$0200`, resets VIC + colour RAM +
 BASIC to stock C64 state, then `JMP $0810`. The player runs
-standalone with synchronised lyrics. Also on the `.d64` as
-`LOAD "FRIET",8,1` for standalone use.
+standalone with synchronised lyrics and beat-reactive text:
+no sprites — lyrics on row 12 flash white→yellow→orange→light-red on
+every V3 gate edge (5-frame decay), border pulses brown for 2 frames.
+Text is the show. Also on the `.d64` as `LOAD "FRIET",8,1` for
+standalone use.
 
 ## Colocate hook — `lyric_vec` at `$12B9`
 
