@@ -909,12 +909,13 @@ drum_table:
         .byte $11, $04   //  1 — slam down to ~60 Hz
         .byte $11, $02   //  2 — sub-bass body (~30 Hz)
         .byte $11, $02   //  3 — hold sub (V1 layer reinforces ~33 Hz)
-        // SNARE — low-noise transient + triangle body, mid-band rattle.
+        // SNARE — flam: silent frame 0 so the kick hits alone for 20 ms,
+        // then noise attack on frame 1 for a wider, more human backbeat.
         // ctrl  fhi        phase  notes
-        .byte $81, $20   //  0 — low noise (~500 Hz) — the rattle attack
-        .byte $11, $10   //  1 — triangle body (~250 Hz)
-        .byte $11, $05   //  2 — drop (~80 Hz)
-        .byte $11, $03   //  3 — settle (~50 Hz)
+        .byte $00, $00   //  0 — SILENT — kick hits alone (flam offset)
+        .byte $81, $20   //  1 — low noise (~500 Hz) — rattle attack
+        .byte $11, $10   //  2 — triangle body (~250 Hz)
+        .byte $11, $05   //  3 — drop (~80 Hz)
 
 // Compact logo bitmap rows 8-16 — extracted from defeest.kla at build
 // time. Stored at $1300 to avoid the runtime-cleared $2000-$3FFF bitmap
