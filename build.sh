@@ -72,6 +72,9 @@ build_part parts/coda       coda \
 tail -c +3 "$ROOT/parts/friet-met-desire/friet.prg" > "$ROOT/parts/friet-met-desire/friet_payload.bin"
 build_part parts/end        end
 
+echo ">>> verifying EFO page claims"
+python3 "$ROOT/tools/verify_efo_claims.py" --all || exit 1
+
 echo ">>> linking with pefchain"
 # --title       16-char disk name, lowercase by demoscene convention
 # --disk-id     2-char ID; arbitrary identity beyond Spindle's default `2a`

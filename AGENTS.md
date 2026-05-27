@@ -119,7 +119,11 @@ outline-64/
 │   ├── png_to_koala.py          ← PNG → multicolour C64 bitmap
 │   ├── koala_to_logo_png.py     ← export logo rows 8-16 as paletted PNG
 │   ├── logo_png_to_asm.py       ← import edited PNG back to logo_rows.asm
-│   └── render_kloot_star.py     ← pre-render Kloot star rotation frames (quadrants, lobes)
+│   ├── render_kloot_star.py     ← pre-render Kloot star rotation frames (quadrants, lobes)
+│   ├── verify_efo_claims.py     ← build-time EFO 'P' page-claim + ZP collision check
+│   ├── verify_demo.py           ← MCP-based full-demo smoke test (part transitions, SID health)
+│   ├── mcp_screenshot.py        ← CLI helper: take VICE-MCP screenshot
+│   └── sid_health_check.py      ← MCP poll: $D417/$D418 filter/volume regression alert
 ├── docs/
 │   ├── timing.md         ← frame-by-frame event timeline for all 7 parts
 │   ├── pefchain-notes.md
@@ -171,6 +175,31 @@ memory pages + zero-page bytes. `build.sh` assembles the code first
 it can `.import source "<part>.sym"`), concatenates the two, runs
 `mkpef`, and finally calls `pefchain` to link all `.pef` files into
 the `.d64`.
+
+### Build-time safety nets
+
+Three tools run during `build.sh` to catch regressions early:
+
+1. **`tools/verify_efo_claims.py --all`** — runs after all parts are
+   assembled, before pefchain. Reads each part's `.prg` and its EFO
+   header's `'P'` tags, and reports any memory page where the PRG has
+   non-zero bytes that aren't covered by a claim. This catches the
+   hush-class bug where code grows past the claimed pages and pefchain
+   silently overwrites it during the next part's background load. Also
+   checks ZP byte collisions between parts (known-shared bytes like
+   `$F6-$FA` are exempted).
+
+2. **`tools/verify_demo.py`** — connects to VICE-MCP, runs the full
+   demo in warp mode, logs each part transition with frame count,
+   PC, `$D418` (SID volume), and `$D015` (sprite enable). Warns on
+   zero SID volume or LP filter mode without voice routing. Exits
+   with failure if a part doesn't transition or the machine hangs.
+
+3. **`tools/mcp_screenshot.py`** — convenience wrapper for
+   `vice.display.screenshot` from the command line.
+
+If `build.sh` fails during the verify step, the EFO header's `'P'`
+tags need updating to match the part's actual memory footprint.
 
 ---
 

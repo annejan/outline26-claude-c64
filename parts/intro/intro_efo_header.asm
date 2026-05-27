@@ -18,16 +18,18 @@
         .word $0000              // callmusic (music driven from IRQ chain)
 
         // Memory pages used by intro:
-        //   $04-$09 BitmapScreenRAM ($0400-$09f1)
+        //   $04-$0A BitmapScreenRAM + spillover from $0810 code tail
         //   $0B     Sprite shape
         //   $10-$12 Music
+        //   $13-$1D LogoRows (bitmap art data)
         //   $20-$3F Bitmap
         //   $40-$48 Tables (bounce_total is page-aligned at $4800)
         //   $4C-$53 Chargen-ROM copy (built at runtime in copy_chargen)
         //   $54-$5D BmpScroll (scroll_text at $5C00, sprite_shape at $5D62)
-        .byte 'P', $04, $09
+        .byte 'P', $04, $0A
         .byte 'P', $0B, $0B
         .byte 'P', $10, $12
+        .byte 'P', $13, $1D
         .byte 'P', $20, $3F
         .byte 'P', $40, $48
         .byte 'P', $4C, $53
