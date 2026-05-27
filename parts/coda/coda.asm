@@ -285,6 +285,14 @@ setup:
         // (AD=$00, SR=$F0 — sustain pinned at peak, what the K-S-K-S
         // kit + arp both rely on). Earlier coda overrode them for its
         // own kick state machine; we no longer use that.
+        //
+        // Ensure V3 oscillates: gate + triangle at a mid frequency so
+        // the sync source (V3 zero-crossings) is always active, even
+        // between drum hits. The next drum tick overwrites these bytes.
+        lda #$11                        // triangle + gate
+        sta $d412                       // V3 ctrl
+        lda #$10                        // ~250 Hz
+        sta $d40f                       // V3 freq hi
 
         // V1 + V2 ADSRs left at intro's defaults ($04/$61 punchy bass,
         // $02/$81 sharp lead) — coda IS the triumphant full intro mix
@@ -801,6 +809,17 @@ musichook:
         // greets use.
         lda #$1f
         sta SID_VOL
+
+        // V1 sync from V3: my_music_play writes $D404 with $41
+        // (pulse+gate, sync=0) on each V1 note, clearing the sync
+        // bit. Re-assert it here so V1's pulse wave restarts on V3's
+        // zero-crossings — a harder, buzz-saw edge for the triumphant
+        // title. Safe to OR every frame: $D404 always has gate set
+        // between notes (sustain holds) so adding sync never
+        // accidentally re-gates a released voice.
+        lda $d404
+        ora #$02
+        sta $d404
 
         // ---- Filter routing: V2+V3 through LP, V1 bass clean ----
         // Greets ends with $D417 = $42 (V2 only). Coda adds V3 (triangle
