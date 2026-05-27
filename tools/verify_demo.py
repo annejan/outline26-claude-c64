@@ -123,7 +123,7 @@ def get_pc():
 
 
 def set_warp(enabled):
-    """Enable/disable warp mode."""
+    """Enable/disable warp mode (best-effort, some MCP builds lack set_warp)."""
     mcp_call("vice.execution.set_warp", {"enabled": enabled})
 
 
@@ -147,9 +147,6 @@ def run_test():
         print()
 
     # Warm reset via MCP (set PC to reset vector)
-    print("Starting autostart...")
-    mcp_call("vice.autostart", {"autostart": 1})
-
     # Wait for screenfill to appear
     print("  Waiting for demo to boot...")
     for attempt in range(50):
@@ -246,39 +243,43 @@ def run_test():
 
 
 def main():
-    if "--connect" not in sys.argv:
-        # Launch VICE via run-mcp.sh
-        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        run_mcp = os.path.join(script_dir, "run-mcp.sh")
-        if not os.path.exists(run_mcp):
-            print(f"run-mcp.sh not found at {run_mcp}")
-            sys.exit(1)
+    if "--connect" in sys.argv:
+        ok = run_test()
+        sys.exit(0 if ok else 1)
 
-        print("Launching VICE via run-mcp.sh...")
-        vice_proc = subprocess.Popen(
-            [run_mcp],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+    # Launch VICE via run-mcp.sh
+    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    run_mcp = os.path.join(script_dir, "run-mcp.sh")
+    if not os.path.exists(run_mcp):
+        print(f"run-mcp.sh not found at {run_mcp}")
+        sys.exit(1)
 
-        # Wait for MCP to be available
-        for attempt in range(30):
-            result = mcp_call("vice.ping")
-            if result is not None:
-                print(f"  VICE-MCP ready after {attempt + 1}s")
+    print("Launching VICE via run-mcp.sh...")
+    vice_proc = subprocess.Popen(
+        [run_mcp],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    # Wait for MCP to be available and demo to autostart
+    for attempt in range(60):
+        result = mcp_call("vice.ping")
+        if result is not None:
+            pc = get_pc()
+            if pc is not None and pc > 0x0800:
+                print(f"  Demo running (PC=${pc:04X}) after {attempt + 1}s")
                 break
-            time.sleep(1)
-        else:
-            print("❌ VICE-MCP didn't start within 30 s")
-            vice_proc.terminate()
-            sys.exit(1)
-
-        ok = run_test()
-        vice_proc.terminate()
-        sys.exit(0 if ok else 1)
+            elif pc is not None:
+                print(f"  VICE alive, waiting for load (PC=${pc:04X})")
+        time.sleep(1)
     else:
-        ok = run_test()
-        sys.exit(0 if ok else 1)
+        print("❌ Demo didn't autostart within 60 s")
+        vice_proc.terminate()
+        sys.exit(1)
+
+    ok = run_test()
+    vice_proc.terminate()
+    sys.exit(0 if ok else 1)
 
 
 if __name__ == "__main__":
