@@ -1246,7 +1246,7 @@ is_header:
         .byte 1             //  3     you were watching
         .byte 0             //  4     blank
         .byte 1             //  5     Kloten met de Commodore
-        .byte 0             //  6     learn explore discover
+        .byte 1             //  6     leren ontdekken klooien (flash: was weak as plain body)
         .byte 0             //  7     blank
         .byte 0             //  8     by deFEEST
         .byte 0             //  9     for X2026
@@ -1299,7 +1299,7 @@ credit_text:
         row("              you were watching         ")
         row("                                        ")
         row("         Kloten met de Commodore        ")
-        row("          learn explore discover        ")
+        row("         leren ontdekken klooien        ")
         row("                                        ")
         row("              by deFEEST                ")
         row("               for X2026                ")

@@ -9,7 +9,7 @@
 //
 // Visuals:
 //   row 11   KLOTEN MET DE COMMODORE        (chargen ROM uppercase)
-//   row 13   LEARN EXPLORE DISCOVER
+//   row 13   LEREN ONTDEKKEN KLOOIEN
 //   border  slow sine colour cycle through col_tab
 //   bg      stays black
 //   parallax PETSCII starfield: 32 stars across 4 speed tiers, each
@@ -523,7 +523,7 @@ setup:
         // ---- paint the title text ----
         // Row 11 starts at $0400 + 11*40 = $05B8.
         // " KLOTEN MET DE COMMODORE  " = 26 chars, center at col 7.
-        // Row 13 ($0608): "  LEARN EXPLORE DISCOVER  " = 26 chars, col 7.
+        // Row 13 ($0608): "  LEREN ONTDEKKEN KLOOIEN " = 26 chars, col 7.
         ldx #0
 !t1:    lda title_main,x
         sta $05B8 + 7,x
@@ -1212,18 +1212,18 @@ title_main:
         .byte $03, $0F, $0D, $0D, $0F, $04, $0F, $12, $05           // COMMODORE
         .byte $20, $20                                              // __
 
-// "  LEARN EXPLORE DISCOVER  "  (22 chars + lead/trail pad = 26)
+// "  LEREN ONTDEKKEN KLOOIEN "  (23 chars + 2 lead / 1 trail pad = 26)
 //   _=20 _=20
-//   L=0C E=05 A=01 R=12 N=0E _=20
-//   E=05 X=18 P=10 L=0C O=0F R=12 E=05 _=20
-//   D=04 I=09 S=13 C=03 O=0F V=16 E=05 R=12
-//   _=20 _=20
+//   L=0C E=05 R=12 E=05 N=0E _=20
+//   O=0F N=0E T=14 D=04 E=05 K=0B K=0B E=05 N=0E _=20
+//   K=0B L=0C O=0F O=0F I=09 E=05 N=0E
+//   _=20
 title_sub:
         .byte $20, $20                                              // __
-        .byte $0C, $05, $01, $12, $0E, $20                          // LEARN_
-        .byte $05, $18, $10, $0C, $0F, $12, $05, $20                // EXPLORE_
-        .byte $04, $09, $13, $03, $0F, $16, $05, $12                // DISCOVER
-        .byte $20, $20                                              // __
+        .byte $0C, $05, $12, $05, $0E, $20                          // LEREN_
+        .byte $0F, $0E, $14, $04, $05, $0B, $0B, $05, $0E, $20      // ONTDEKKEN_
+        .byte $0B, $0C, $0F, $0F, $09, $05, $0E                     // KLOOIEN
+        .byte $20                                                  // _
 
 // " RELEASED AT X2026  "  (20 chars; col 10..29 of row 15)
 //   _=20

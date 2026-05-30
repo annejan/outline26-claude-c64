@@ -6,8 +6,8 @@ b              b
 b  KLOTEN MET  b
 b DE COMMODORE b
 b              b
-b    LEARN     b
-b   EXPLORE    b
-b  DISCOVER    b
+b    LEREN     b
+b  ONTDEKKEN   b
+b   KLOOIEN    b
 b              b
 jcccccccccccccck
