@@ -869,32 +869,36 @@ message:
 // multi-word names ("SILICON LTD"), three between groups reads as
 // a clear gap to the eye.
 .text "        "
+// X2026-targeted: dropped 8 greets with nobody attending (Channel Four,
+// Lotek, Sidmasters, Success, Finnish Gold, Nurds, Poo-Brain, Hokuto
+// Force) and added well-represented crews from the visitor list
+// (Quantum 7, Illusion 5, Mayday 5, TREX 4, Desire 3, MSL 3, Obsessed
+// Maniacs ~4, plus SLAY RADIO). F4CG (5 attending) is rendered FFCG —
+// the font has no '4' glyph, so "Fantastic FOUR Cracking Group" → FFCG.
 .text "XENON   SILICON LTD   SCS TRC   "
 .text "FOCUS   FAIRLIGHT   REFLEX   "
 .text "BONZAI   GENESIS PROJECT   EXTEND   "
 .text "TRSI   OXYRON   BYTERAPERS   "
-.text "CENSOR DESIGN   CHANNEL FOUR   "
+.text "CENSOR DESIGN   QUANTUM   "
 .text "PADUA   ATLANTIS   ELYSIUM   "
 .text "EXCESS   TRIAD   NEOPLASIA   "
 .text "THE DREAMS   RADWAR   PERFORMERS   "
-.text "VANDALISM NEWS   NAH-KOLOR   LOTEK   "
+.text "VANDALISM NEWS   NAH-KOLOR   DESIRE   "
 .text "PRETZEL LOGIC   CHOCOTROPHY   PHOBOS TEAM   "
-.text "SIDMASTERS   THE WEEKENDERS   "
+.text "ILLUSION   THE WEEKENDERS   "
 .text "LETHARGY   ONSLAUGHT   SLACKERS   WGI2015   "
-.text "SUCCESS   ARTLINE   RESOURCE   "
-.text "PLUSH   FINNISH GOLD   NURDS   "
-.text "OFFENCE   POO-BRAIN   RABENAUGE   "
-.text "HOKUTO FORCE   ABYSS CONNECTION   "
+.text "FFCG   ARTLINE   RESOURCE   "
+.text "PLUSH   MSL   MAYDAY   "
+.text "OFFENCE   TREX   RABENAUGE   "
+.text "OBSESSED MANIACS   ABYSS CONNECTION   "
+.text "SLAY RADIO   "
 // label fill the on-screen 8-sprite window once settle kicks in;
 // pad with trailing spaces so even if the scroller drifts past it
-// for any reason, the visible window stays clean. " KLOTEN " is
-// centred symmetrically in the 8-sprite row (1 leading + 6-char
-// name + 1 trailing) and ties this punchline to the demo's coda
-// title "KLOTEN MET DE COMMODORE" — the breadbin/lunch refs got
-// dropped; the demo is about learning, exploring, discovering the
-// machine instead of about lunch.
+// for any reason, the visible window stays clean. " DEFEEST" fills
+// the 8-sprite row (1 leading + 7-char group name) and lands the
+// greetings on the home crew — the demo signs off as deFEEST.
 settle_text:
-.text " KLOTEN                                    "
+.text " DEFEEST                                   "
 .byte $00
 
 
