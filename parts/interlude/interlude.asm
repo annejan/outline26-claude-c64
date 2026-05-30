@@ -1413,29 +1413,30 @@ fire_wave_palette:
         .byte $00, $0B, $09, $02, $0A, $08, $07, $01
         .byte $01, $07, $08, $0A, $02, $09, $0B, $00
 
-// Phase 1 banner (frames 0-119): "THE MACHINE WAS NOT EMPTY"
+// Phase 1 banner (frames 0-119): "THE MACHINE NEVER DIED"
 // Three rows: solid top band, carved text, solid bottom band.
 // $A0 = inverse space (solid block). Inverted PETSCII = $80 + screencode.
+// Text = 22 cells, centred with 9 $A0 each side.
 msg_phase1:
         .fill 40, $A0
-        .byte $A0, $A0, $A0, $A0, $A0, $A0, $A0
-        .byte $94, $88, $85, $A0          // T H E
+        .fill 9, $A0
+        .byte $94, $88, $85, $A0                      // T H E
         .byte $8D, $81, $83, $88, $89, $8E, $85, $A0  // M A C H I N E
-        .byte $97, $81, $93, $A0          // W A S
-        .byte $8E, $8F, $94, $A0          // N O T
-        .byte $85, $8D, $90, $94, $99     // E M P T Y
-        .byte $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0
+        .byte $8E, $85, $96, $85, $92, $A0            // N E V E R
+        .byte $84, $89, $85, $84                      // D I E D
+        .fill 9, $A0
         .fill 40, $A0
 
-// Phase 2 banner (frames 120+): "THE SPARK CAME BACK"
+// Phase 2 banner (frames 120+): "NOW IT BURNS AGAIN"
+// Text = 18 cells, centred with 11 $A0 each side.
 msg_phase2:
         .fill 40, $A0
-        .byte $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0
-        .byte $94, $88, $85, $A0          // T H E
-        .byte $93, $90, $81, $92, $8B, $A0// S P A R K
-        .byte $83, $81, $8D, $85, $A0     // C A M E
-        .byte $82, $81, $83, $8B          // B A C K
-        .byte $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0, $A0
+        .fill 11, $A0
+        .byte $8E, $8F, $97, $A0          // N O W
+        .byte $89, $94, $A0               // I T
+        .byte $82, $95, $92, $8E, $93, $A0// B U R N S
+        .byte $81, $87, $81, $89, $8E     // A G A I N
+        .fill 11, $A0
         .fill 40, $A0
 
 fire_did_init:  .byte 0
